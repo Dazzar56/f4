@@ -17,6 +17,7 @@ package ttyx
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -265,12 +266,16 @@ func (s *Session) atom(name string) xproto.Atom {
 		return a
 	}
 	a := xproto.Atom(0)
+	if len(name) > math.MaxUint16 {
+		return a
+	}
 	// The atom is created if it is not there. Refusing to create one was
 	// the first version and it was wrong: CLIPBOARD does not exist on a
 	// server nobody has copied anything on yet, and a selection cannot be
 	// taken by a name that has no atom. Interning a name that is never used
 	// costs one entry in a table; the alternative was a clipboard that
 	// worked everywhere except on a fresh session.
+	// #nosec G115 -- atom names longer than the uint16 wire limit are rejected above.
 	if reply, err := xproto.InternAtom(s.conn, false, uint16(len(name)), name).Reply(); err == nil && reply != nil {
 		a = reply.Atom
 	}
@@ -462,7 +467,11 @@ func ancestorPIDs(pid int, parent func(int) (int, bool)) []uint32 {
 	var out []uint32
 	seen := make(map[int]bool)
 	for i := 0; i < 32 && pid > 0 && !seen[pid]; i++ {
+		if uint64(pid) > math.MaxUint32 {
+			break
+		}
 		seen[pid] = true
+		// #nosec G115 -- positive pid was checked against MaxUint32 immediately above.
 		out = append(out, uint32(pid))
 		next, ok := parent(pid)
 		if !ok {

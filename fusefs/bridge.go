@@ -791,7 +791,7 @@ func (h *handle) release() error {
 // among live objects.
 func inodeOf(itemPath string) uint64 {
 	sum := fnv.New64a()
-	sum.Write([]byte(itemPath))
+	_, _ = sum.Write([]byte(itemPath)) // hash.Hash writes the complete slice and returns no error.
 	ino := sum.Sum64()
 	switch ino {
 	case 0, 1, ^uint64(0):

@@ -305,6 +305,7 @@ type tableBrowse struct {
 // SQLite names the column that refused; that message is worth showing rather
 // than guessing at values on the user's behalf.
 func (s *databaseSession) insertRow(ctx context.Context, table string) (int64, error) {
+	// #nosec G202 -- SQLite cannot bind identifiers; quoteIdentifier escapes every embedded quote.
 	result, err := s.db.ExecContext(ctx, "INSERT INTO "+quoteIdentifier(table)+" DEFAULT VALUES")
 	if err != nil {
 		return 0, err
@@ -315,6 +316,7 @@ func (s *databaseSession) insertRow(ctx context.Context, table string) (int64, e
 func (s *databaseSession) browseWithRowIDs(ctx context.Context, table string, offset int64) (queryResult, []int64, error) {
 	// Ordered by rowid so that paging is stable: without an order, two pages
 	// of the same table are not guaranteed to be two different halves of it.
+	// #nosec G202 -- the table name is identifier-quoted and both numeric clauses are generated from typed integers.
 	statement := "SELECT rowid AS " + quoteIdentifier(rowIDColumn) + ", * FROM " + quoteIdentifier(table) +
 		" ORDER BY rowid LIMIT " + strconv.Itoa(browsePageSize) + " OFFSET " + strconv.FormatInt(offset, 10)
 	rows, err := s.db.QueryContext(ctx, statement)
@@ -374,6 +376,7 @@ func (s *databaseSession) cellValue(ctx context.Context, table, column string, r
 // user types is ever parsed as SQL, and column affinity turns "42" back into a
 // number in a column that stores numbers.
 func (s *databaseSession) updateCell(ctx context.Context, table, column string, rowID int64, value string) (int64, error) {
+	// #nosec G202 -- SQLite cannot bind identifiers; both identifiers are escaped, while values remain bound parameters.
 	statement := "UPDATE " + quoteIdentifier(table) + " SET " + quoteIdentifier(column) + " = ? WHERE rowid = ?"
 	result, err := s.db.ExecContext(ctx, statement, value, rowID)
 	if err != nil {
@@ -384,6 +387,7 @@ func (s *databaseSession) updateCell(ctx context.Context, table, column string, 
 
 // deleteRow removes one row by rowid.
 func (s *databaseSession) deleteRow(ctx context.Context, table string, rowID int64) (int64, error) {
+	// #nosec G202 -- SQLite cannot bind identifiers; quoteIdentifier escapes the table name and rowID is a bound parameter.
 	statement := "DELETE FROM " + quoteIdentifier(table) + " WHERE rowid = ?"
 	result, err := s.db.ExecContext(ctx, statement, rowID)
 	if err != nil {

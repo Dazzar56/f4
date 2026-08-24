@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -18,12 +19,19 @@ func RunSudoAskpass() {
 	parentStr := os.Getenv("F4_ASKPASS_PARENT")
 	fmt.Fprintf(os.Stderr, "F4_ASKPASS: Helper started for parent PID %s\n", parentStr)
 
-	// Log environment to a file for debugging
+	// The dispatcher's stderr is not visible to the f4 process, so this file is
+	// how a failed elevation gets diagnosed: SudoClient reads it back when the
+	// socket never appears.
+	//
+	// It deliberately does not record the environment. The path is predictable
+	// and lives in a directory every local user can write, so anything written
+	// here is within reach of another user who created the file first, and the
+	// environment is where tokens and passwords live. O_NOFOLLOW stops the
+	// other half of that: a symlink planted here would redirect the write.
 	debugLogPath := filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-debug-%d.txt", os.Getuid()))
-	debugLog, _ := os.OpenFile(debugLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	debugLog, _ := os.OpenFile(debugLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	if debugLog != nil {
 		_, _ = fmt.Fprintf(debugLog, "[%s] ASKPASS: PID=%d, ParentPID=%s, Args=%v\n", time.Now().Format("15:04:05"), os.Getpid(), parentStr, os.Args) // Debug logging is best-effort.
-		_, _ = fmt.Fprintf(debugLog, "[%s] ASKPASS: Environ=%v\n", time.Now().Format("15:04:05"), os.Environ())                                       // Debug logging is best-effort.
 		_ = debugLog.Close()                                                                                                                          // Debug log persistence is best-effort.
 	}
 	parentPID, _ := strconv.Atoi(parentStr)

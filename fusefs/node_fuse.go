@@ -5,6 +5,7 @@ package fusefs
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"syscall"
 	"time"
@@ -127,10 +128,22 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 
 func (f *writeFileHandle) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
 	written, err := f.wh.writeAt(ctx, f.b, data, off)
-	if err != nil {
-		return uint32(written), errnoOf(err)
+	count, ok := fuseWriteCount(written)
+	if !ok {
+		return 0, syscall.EOVERFLOW
 	}
-	return uint32(written), 0
+	if err != nil {
+		return count, errnoOf(err)
+	}
+	return count, 0
+}
+
+func fuseWriteCount(written int) (uint32, bool) {
+	if written < 0 || uint64(written) > math.MaxUint32 {
+		return 0, false
+	}
+	// #nosec G115 -- written was checked against the uint32 FUSE result range above.
+	return uint32(written), true
 }
 
 // Fsync is a no-op on purpose. Committing per fsync would turn a tool that
@@ -341,7 +354,9 @@ func fillAttr(out *fuse.Attr, item vfs.VFSItem, itemPath string) {
 		// and cp -a cannot copy.
 		out.Mode = fuse.S_IFLNK | perm
 		out.Nlink = 1
-		out.Size = uint64(item.Size)
+		if item.Size > 0 {
+			out.Size = uint64(item.Size)
+		}
 	} else {
 		out.Mode = fuse.S_IFREG | perm
 		out.Nlink = 1
@@ -364,17 +379,25 @@ func fillAttr(out *fuse.Attr, item vfs.VFSItem, itemPath string) {
 	}
 	out.SetTimes(&atime, &mtime, &ctime)
 
-	if item.Uid > 0 {
-		out.Uid = uint32(item.Uid)
-	} else {
-		out.Uid = uint32(os.Getuid())
+	if uid, ok := fuseID(item.Uid); ok && uid > 0 {
+		out.Uid = uid
+	} else if uid, ok := fuseID(os.Getuid()); ok {
+		out.Uid = uid
 	}
-	if item.Gid > 0 {
-		out.Gid = uint32(item.Gid)
-	} else {
-		out.Gid = uint32(os.Getgid())
+	if gid, ok := fuseID(item.Gid); ok && gid > 0 {
+		out.Gid = gid
+	} else if gid, ok := fuseID(os.Getgid()); ok {
+		out.Gid = gid
 	}
 	out.Blksize = 4096
+}
+
+func fuseID(value int) (uint32, bool) {
+	if value < 0 || uint64(value) > math.MaxUint32 {
+		return 0, false
+	}
+	// #nosec G115 -- value was checked against the uint32 uid/gid range above.
+	return uint32(value), true
 }
 
 // errnoOf maps VFS errors onto errno values. Backends return plain errors,
@@ -514,6 +537,10 @@ func (n *node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 		wanted = true
 	}
 	if size, ok := in.GetSize(); ok {
+		if size > math.MaxInt64 {
+			return syscall.EFBIG
+		}
+		// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
 		if errno := n.truncate(ctx, int64(size)); errno != 0 {
 			return errno
 		}

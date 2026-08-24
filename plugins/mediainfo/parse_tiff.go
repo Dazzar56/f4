@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 )
@@ -157,6 +158,10 @@ func (s *tiffImageScanner) walkIFD(off uint32, depth int) error {
 				if value, ok, err := s.firstValue(entry); err != nil {
 					return err
 				} else if ok {
+					if value > math.MaxUint16 {
+						return &ParseError{Format: "TIFF", Offset: int64(pos), Err: fmt.Errorf("compression value %d exceeds uint16", value)}
+					}
+					// #nosec G115 -- the explicit MaxUint16 check above makes this conversion lossless.
 					s.compression = uint16(value)
 				}
 			case 0x014a: // SubIFDs

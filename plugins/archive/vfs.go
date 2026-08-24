@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -1609,9 +1610,14 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		if err := ensureArchiveExtractionDir(ctx, dstVfs, dstVfs.Dir(targetPath)); err != nil {
 			return err
 		}
+		if file.UncompressedSize64 > math.MaxInt64 {
+			return fmt.Errorf("archive entry %q is too large: %d bytes exceeds the supported size", file.Name, file.UncompressedSize64)
+		}
+		// #nosec G115 -- the explicit MaxInt64 check above makes the archive size conversion lossless.
+		fileSize := int64(file.UncompressedSize64)
 
 		if fp, ok := reporter.(vfs.FileProgress); ok {
-			fp.StartFile(file.Name, int64(file.UncompressedSize64))
+			fp.StartFile(file.Name, fileSize)
 		}
 		if reporter != nil {
 			mu.Lock()
@@ -1648,8 +1654,8 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 					fp.UpdateBytes(n)
 				}
 				copied += int64(n)
-				if reporter != nil && file.UncompressedSize64 > 0 {
-					pct := int((copied * 100) / int64(file.UncompressedSize64))
+				if reporter != nil && fileSize > 0 {
+					pct := archiveProgressPercent(copied, fileSize)
 					mu.Lock()
 					lastAction = "Extracting"
 					lastFile = file.Name
@@ -1680,7 +1686,7 @@ func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, select
 		}
 		item := vfs.VFSItem{
 			Name:     file.Name,
-			Size:     int64(file.UncompressedSize64),
+			Size:     fileSize,
 			IsDir:    false,
 			MTime:    file.Modified,
 			ATime:    file.Modified,
@@ -1792,7 +1798,7 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 				}
 				copied += int64(n)
 				if reporter != nil && hdr.Size > 0 {
-					pct := int((copied * 100) / hdr.Size)
+					pct := archiveProgressPercent(copied, hdr.Size)
 					mu.Lock()
 					lastAction = "Extracting"
 					lastFile = cleanName
@@ -1815,7 +1821,11 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 			fp.FileDone()
 		}
 
-		mode := uint32(hdr.Mode)
+		// Only POSIX permission and special bits are meaningful to the destination.
+		// Mask before narrowing so a hostile tar header cannot smuggle high bits
+		// into the uint32 VFS metadata field.
+		// #nosec G115 -- masking to 0o7777 proves the result is in the uint32 range.
+		mode := uint32(hdr.Mode & 0o7777)
 		if mode == 0 {
 			mode = 0644
 		}
@@ -1832,6 +1842,18 @@ func (v *ArchiveVFS) copyBulkTar(ctx context.Context, f vfs.ReadAtCloser, select
 		_ = dstVfs.SetAttributes(ctx, targetPath, item) // Metadata support is optional across destination VFSes.
 	}
 	return nil
+}
+
+func archiveProgressPercent(copied, total int64) int {
+	if copied <= 0 || total <= 0 {
+		return 0
+	}
+	if copied >= total {
+		return 100
+	}
+	// Progress is approximate UI data. Floating-point division avoids an
+	// intermediate copied*100 overflow for very large archive members.
+	return int(float64(copied) * 100 / float64(total))
 }
 
 func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
@@ -1968,7 +1990,7 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 				}
 				copied += int64(n)
 				if reporter != nil && size > 0 {
-					pct := int((copied * 100) / size)
+					pct := archiveProgressPercent(copied, size)
 					mu.Lock()
 					lastAction = "Extracting"
 					lastFile = cleanName

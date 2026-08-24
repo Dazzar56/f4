@@ -820,5 +820,13 @@ func boolValue(condition bool) float64 {
 }
 
 func toUint32(value float64) uint32 {
-	return uint32(int64(math.Round(value)))
+	rounded := math.Round(value)
+	if math.IsNaN(rounded) || math.IsInf(rounded, 0) {
+		return 0
+	}
+	wrapped := math.Mod(rounded, 1<<32)
+	if wrapped < 0 {
+		wrapped += 1 << 32
+	}
+	return uint32(wrapped)
 }

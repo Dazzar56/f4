@@ -105,7 +105,8 @@ type yandexDiskBackend struct {
 // do applies one redirect policy to every request issued by a backend,
 // including backends constructed directly in tests. Authenticated API/status
 // calls and write methods never follow redirects. Unauthenticated temporary
-// downloads may follow redirects, but never downgrade HTTPS.
+// downloads may follow redirects only within the API or Yandex.Disk transfer
+// origins.
 func (b *yandexDiskBackend) do(req *http.Request) (*http.Response, error) {
 	client := b.client
 	if client == nil {
@@ -125,7 +126,7 @@ func (b *yandexDiskBackend) do(req *http.Request) (*http.Response, error) {
 		if initial.Header.Get("Authorization") != "" || (initial.Method != http.MethodGet && initial.Method != http.MethodHead) || next.Method != previous.Method {
 			return http.ErrUseLastResponse
 		}
-		if strings.EqualFold(initial.URL.Scheme, "https") && !strings.EqualFold(next.URL.Scheme, "https") {
+		if _, err := b.validateTemporaryURL(next.URL.String()); err != nil {
 			return http.ErrUseLastResponse
 		}
 		if previousRedirectPolicy != nil {
@@ -145,10 +146,20 @@ func (b *yandexDiskBackend) validateTemporaryURL(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if strings.EqualFold(base.Scheme, "https") && !strings.EqualFold(target.Scheme, "https") {
-		return "", errors.New("cloudfox: Yandex.Disk temporary URL downgraded HTTPS")
+	if sameWebDAVOrigin(target, base) {
+		return target.String(), nil
+	}
+	if !strings.EqualFold(target.Scheme, "https") || (target.Port() != "" && target.Port() != "443") || !isYandexDiskTransferHost(target.Hostname()) {
+		return "", errors.New("cloudfox: Yandex.Disk returned a temporary URL outside its transfer service")
 	}
 	return target.String(), nil
+}
+
+func isYandexDiskTransferHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	return host == "disk.yandex.net" || strings.HasSuffix(host, ".disk.yandex.net") ||
+		host == "disk.yandex.ru" || strings.HasSuffix(host, ".disk.yandex.ru") ||
+		strings.HasSuffix(host, ".storage.yandex.net")
 }
 
 func sanitizeYandexTransferError(err error) error {

@@ -2,6 +2,7 @@ package ttyx
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/shape"
@@ -161,6 +162,10 @@ func (o *Overlay) Place(r Rect) error {
 	// lives in is the terminal's, so the server wants that same place
 	// measured from the terminal's corner.
 	local := Rect{X: r.X - o.s.geom.X, Y: r.Y - o.s.geom.Y, W: r.W, H: r.H}
+	if local.X < math.MinInt32 || local.X > math.MaxInt32 || local.Y < math.MinInt32 || local.Y > math.MaxInt32 ||
+		local.W > math.MaxUint16 || local.H > math.MaxUint16 {
+		return fmt.Errorf("the overlay rectangle is outside the X11 coordinate range")
+	}
 
 	if local != o.local {
 		// The value list follows the order of the mask bits: x, y, width,
@@ -170,8 +175,9 @@ func (o *Overlay) Place(r Rect) error {
 				xproto.ConfigWindowWidth|xproto.ConfigWindowHeight|
 				xproto.ConfigWindowStackMode,
 			[]uint32{
+				// #nosec G115 -- local coordinates and dimensions were checked against their X11 wire ranges above.
 				uint32(int32(local.X)), uint32(int32(local.Y)),
-				uint32(local.W), uint32(local.H),
+				uint32(local.W), uint32(local.H), // #nosec G115 -- dimensions were checked against MaxUint16 above.
 				xproto.StackModeAbove,
 			}).Check()
 		if err != nil {
@@ -245,7 +251,12 @@ func (o *Overlay) SetBounds(rects []Rect) bool {
 		if r.W <= 0 || r.H <= 0 {
 			continue
 		}
+		if r.X < math.MinInt16 || r.X > math.MaxInt16 || r.Y < math.MinInt16 || r.Y > math.MaxInt16 ||
+			r.W > math.MaxUint16 || r.H > math.MaxUint16 {
+			return false
+		}
 		list = append(list, xproto.Rectangle{
+			// #nosec G115 -- each rectangle component was checked against its X11 wire range above.
 			X: int16(r.X), Y: int16(r.Y),
 			Width: uint16(r.W), Height: uint16(r.H),
 		})
@@ -281,11 +292,14 @@ func (o *Overlay) Draw(pix []byte, w, h, stride int) error {
 	if o.s.conn == nil {
 		return ErrNoDisplay
 	}
-	if w <= 0 || h <= 0 || stride < w*4 || len(pix) < (h-1)*stride+w*4 {
+	if w <= 0 || h <= 0 || w > math.MaxUint16 || h > math.MaxInt16 {
+		return fmt.Errorf("the pixel dimensions %dx%d are outside the X11 coordinate range", w, h)
+	}
+	lineBytes := w * 4
+	if stride < lineBytes || len(pix) < lineBytes || (h > 1 && (len(pix)-lineBytes)/stride < h-1) {
 		return fmt.Errorf("the pixel buffer does not match %dx%d", w, h)
 	}
 
-	lineBytes := w * 4
 	// A request carries a length in four byte units; leave room for the
 	// PutImage header, which is twenty four bytes plus padding.
 	maxReq := int(xproto.Setup(o.s.conn).MaximumRequestLength) * 4
@@ -311,12 +325,15 @@ func (o *Overlay) Draw(pix []byte, w, h, stride int) error {
 		for row := 0; row < n; row++ {
 			src := pix[(y+row)*stride : (y+row)*stride+lineBytes]
 			dst := o.buf[row*lineBytes : (row+1)*lineBytes]
-			for i := 0; i < lineBytes; i += 4 {
-				dst[i], dst[i+1], dst[i+2], dst[i+3] = src[i+2], src[i+1], src[i], 0xFF
+			for len(src) >= 4 && len(dst) >= 4 {
+				dst[0], dst[1], dst[2], dst[3] = src[2], src[1], src[0], 0xFF
+				src = src[4:]
+				dst = dst[4:]
 			}
 		}
 		err := xproto.PutImageChecked(o.s.conn, xproto.ImageFormatZPixmap,
 			xproto.Drawable(o.win), o.gc,
+			// #nosec G115 -- Draw rejected dimensions outside the X11 uint16/int16 wire ranges above.
 			uint16(w), uint16(n), 0, int16(y), 0, o.s.depth,
 			o.buf[:n*lineBytes]).Check()
 		if err != nil {

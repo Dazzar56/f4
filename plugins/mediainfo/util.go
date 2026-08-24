@@ -66,6 +66,27 @@ func durationFromUnits(value uint64, scale uint64) time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
 
+func metadataInt(value uint64) (int, bool) {
+	if value > uint64(^uint(0)>>1) {
+		return 0, false
+	}
+	// #nosec G115 -- the architecture-sized MaxInt check above makes this conversion lossless.
+	return int(value), true
+}
+
+func metadataDuration(value uint64) (time.Duration, bool) {
+	if value > math.MaxInt64 {
+		return 0, false
+	}
+	// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
+	return time.Duration(value), true
+}
+
+func signedInt32Bits(value uint32) int32 {
+	// #nosec G115 -- binary formats encode signed int32 values as these exact two's-complement bits.
+	return int32(value)
+}
+
 func parseISO639(v uint16) string {
 	if v == 0 {
 		return ""

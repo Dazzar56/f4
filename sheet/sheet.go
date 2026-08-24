@@ -236,7 +236,7 @@ func (s *Sheet) Recalc() {
 		if cell.Kind != KindFormula {
 			continue
 		}
-		state.evaluate(point)
+		_, _ = state.evaluate(point) // evaluate records formula errors on the cell for the UI below.
 		if cell.Err != "" && !s.hasError {
 			s.hasError = true
 			s.lastError = point

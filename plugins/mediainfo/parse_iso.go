@@ -282,8 +282,8 @@ func parseTKHD(p *probe, b isoBox, s *Stream) {
 		}
 	}
 	if len(d) >= matrixOff+20 {
-		a := int32(binary.BigEndian.Uint32(d[matrixOff : matrixOff+4]))
-		bb := int32(binary.BigEndian.Uint32(d[matrixOff+4 : matrixOff+8]))
+		a := signedInt32Bits(binary.BigEndian.Uint32(d[matrixOff : matrixOff+4]))
+		bb := signedInt32Bits(binary.BigEndian.Uint32(d[matrixOff+4 : matrixOff+8]))
 		rotation := 0.0
 		switch {
 		case a == 0 && bb == 0x10000:

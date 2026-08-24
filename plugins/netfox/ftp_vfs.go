@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"path"
@@ -169,9 +170,14 @@ func (v *FTPVFS) ReadDir(ctx context.Context, p string, onChunk func([]vfs.VFSIt
 				name = string(decoded)
 			}
 		}
+		if e.Size > math.MaxInt64 {
+			return fmt.Errorf("FTP entry %q is too large: %d bytes exceeds the supported size", name, e.Size)
+		}
 
+		// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
+		size := int64(e.Size)
 		items = append(items, vfs.VFSItem{
-			Name: name, Size: int64(e.Size),
+			Name: name, Size: size,
 			IsDir: e.Type == ftp.EntryTypeFolder, MTime: e.Time,
 			IsHidden: strings.HasPrefix(name, "."),
 		})
@@ -194,8 +200,13 @@ func (v *FTPVFS) Stat(ctx context.Context, p string) (vfs.VFSItem, error) {
 	}
 	for _, e := range entries {
 		if e.Name == base {
+			if e.Size > math.MaxInt64 {
+				return vfs.VFSItem{}, fmt.Errorf("FTP entry %q is too large: %d bytes exceeds the supported size", e.Name, e.Size)
+			}
+			// #nosec G115 -- the explicit MaxInt64 check above makes this conversion lossless.
+			size := int64(e.Size)
 			return vfs.VFSItem{
-				Name: e.Name, Size: int64(e.Size),
+				Name: e.Name, Size: size,
 				IsDir: e.Type == ftp.EntryTypeFolder, MTime: e.Time,
 				IsHidden: strings.HasPrefix(e.Name, "."),
 			}, nil
@@ -294,7 +305,7 @@ func (v *FTPVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
 	pr, pw := io.Pipe()
 	go func() {
 		err := v.conn.Stor(v.encodePath(p), pr)
-		pr.CloseWithError(err)
+		_ = pr.CloseWithError(err) // io.PipeReader.CloseWithError always returns nil.
 	}()
 	return pw, nil
 }
