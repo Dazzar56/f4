@@ -67,15 +67,16 @@ type EditorView struct {
 	CursorPos          int // Позиция в байтах (для плагинов)
 	DesiredVisualCol   int // Колонка, в которую мы хотим попасть при навигации Up/Down
 
-	ShowWhitespaces  bool
-	selActive        bool
-	selAnchorOffset  int // Абсолютное смещение начала выделения
-	rectSelActive    bool
-	rectSelStartLine int
-	rectSelStartCol  int
-	hoverURL         string
-	hoverURLStart    int
-	editSession      int // Unique ID to fence background tasks
+	ShowWhitespaces    bool
+	selActive          bool
+	selAnchorOffset    int // Абсолютное смещение начала выделения
+	rectSelActive      bool
+	rectSelStartLine   int
+	rectSelStartCol    int
+	mouseRectSelecting bool
+	hoverURL           string
+	hoverURLStart      int
+	editSession        int // Unique ID to fence background tasks
 
 	pasting     bool
 	saving      bool
@@ -2883,6 +2884,33 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	// A rectangular mouse drag keeps ownership of the gesture even when a
+	// backend reports motion without the button bit. On release, copy the
+	// block and leave it highlighted so it remains useful for follow-up edit
+	// operations.
+	if ev.mouseRectSelecting {
+		if e.MouseEventFlags&vtinput.MouseMoved != 0 {
+			if ev.updateCursorFromMouse(int(e.MouseX), int(e.MouseY)) {
+				vtui.FrameManager.Redraw()
+			}
+			return true
+		}
+		if e.ButtonState == 0 || !e.KeyDown {
+			ev.mouseRectSelecting = false
+			if ev.rectSelActive {
+				atStart := ev.rectSelStartLine == ev.CursorLine &&
+					ev.rectSelStartCol == ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
+				if atStart {
+					ev.rectSelActive = false
+				} else {
+					ev.CopySelection()
+				}
+			}
+			vtui.FrameManager.Redraw()
+			return true
+		}
+	}
+
 	if ev.scrollBar != nil && ev.scrollBar.ProcessMouse(e) {
 		return true
 	}
@@ -2912,6 +2940,19 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 				ev.CursorLine = ev.li.GetLineAtOffset(offset)
 				ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
 				ev.selectWordUnderCursor()
+			} else if editorBlockMouseSelection(e) {
+				ev.selActive = false
+				ev.rectSelActive = false
+				ev.CursorLine = ev.li.GetLineAtOffset(offset)
+				ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+				ev.updateDesiredVisualCol()
+
+				if e.MouseEventFlags&vtinput.MouseMoved == 0 {
+					ev.rectSelActive = true
+					ev.rectSelStartLine = ev.CursorLine
+					ev.rectSelStartCol = visualCol
+					ev.mouseRectSelecting = true
+				}
 			} else {
 				if !ev.selActive || e.MouseEventFlags&vtinput.MouseMoved == 0 {
 					ev.selActive = false
@@ -2952,6 +2993,7 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 					ev.rectSelActive = true
 					ev.rectSelStartLine = ev.CursorLine
 					ev.rectSelStartCol = visualCol
+					ev.mouseRectSelecting = true
 				}
 			} else if ev.rectSelActive && e.MouseEventFlags&vtinput.MouseMoved != 0 {
 				ev.CursorLine = ev.li.GetLineAtOffset(offset)
@@ -2974,6 +3016,26 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	return false
+}
+
+func editorBlockMouseSelection(e *vtinput.InputEvent) bool {
+	mods := e.ControlKeyState
+	return mods&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 &&
+		mods&vtinput.ShiftPressed != 0
+}
+
+func (ev *EditorView) updateCursorFromMouse(mx, my int) bool {
+	if mx < ev.X1 || mx > ev.X2 || my < ev.Y1+1 || my > ev.Y2 {
+		return false
+	}
+	visualCol := mx - ev.X1 + ev.ScrollLeft
+	visualRow := my - (ev.Y1 + 1) + ev.ScrollTopRow
+	offset := ev.snapMouseOffsetToClusterBoundary(ev.engine.VisualToLogical(visualRow, visualCol))
+	ev.CursorLine = ev.li.GetLineAtOffset(offset)
+	ev.CursorPos = offset - ev.li.GetLineOffset(ev.CursorLine)
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+	return true
 }
 
 func (ev *EditorView) urlLinkAtMouse(mx, my int) (urlLink, bool) {

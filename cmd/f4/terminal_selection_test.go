@@ -267,6 +267,49 @@ func TestPanelsFrame_TerminalMouseSelect_Drag(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_TerminalMouseSelect_AltShiftBlockCopies(t *testing.T) {
+	pf, _ := panelsFrameWithMouseSelect(t)
+	tv := pf.termView
+	seedRow(tv, 0, "abcdefghij")
+	seedRow(tv, 1, "0123456789")
+	seedRow(tv, 2, "ABCDEFGHIJ")
+
+	copied := make(chan string, 1)
+	tv.clipboardWriter = func(text string) { copied <- text }
+	mods := vtinput.LeftAltPressed | vtinput.ShiftPressed
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+		MouseX:      2, MouseY: 0, ControlKeyState: mods,
+	})
+	if !tv.selBlock {
+		t.Fatal("Alt+Shift+LMB should start a rectangular terminal selection")
+	}
+
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.MouseMoved,
+		MouseX:          4, MouseY: 2, ControlKeyState: mods,
+	})
+	pf.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		MouseX: 4, MouseY: 2,
+	})
+
+	select {
+	case got := <-copied:
+		if want := "cde\n234\nCDE"; got != want {
+			t.Errorf("terminal Alt+Shift block copy = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("terminal rectangular selection was not copied on release")
+	}
+	if !tv.HasSelection() {
+		t.Fatal("terminal selection should remain highlighted after release")
+	}
+}
+
 func TestPanelsFrame_TerminalMouseSelect_ShiftDoubleClickCopiesWord(t *testing.T) {
 	pf, _ := panelsFrameWithMouseSelect(t)
 	tv := pf.termView
