@@ -345,6 +345,7 @@ func (s *overlayState) isClosed() bool {
 	defer s.mu.Unlock()
 	return s.closed
 }
+
 // New creates the overlay over the console window.
 func New() (*Overlay, error) {
 	parent, src := ConsoleWindow()
