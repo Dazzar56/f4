@@ -58,9 +58,6 @@ func hotkeyDialogSizeForScreen(screenWidth, screenHeight int) (int, int) {
 	if height < 10 {
 		height = 10
 	}
-	if height > 48 {
-		height = 48
-	}
 	return width, height
 }
 

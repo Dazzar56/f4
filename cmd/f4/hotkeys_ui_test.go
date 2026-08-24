@@ -84,8 +84,8 @@ func TestHotkeyAssignFramePreservesRightCtrl(t *testing.T) {
 }
 
 func TestHotkeyDialogSizeForScreen(t *testing.T) {
-	if gotW, gotH := hotkeyDialogSizeForScreen(200, 60); gotW != 196 || gotH != 48 {
-		t.Fatalf("large screen size = %dx%d, want 196x48", gotW, gotH)
+	if gotW, gotH := hotkeyDialogSizeForScreen(200, 60); gotW != 196 || gotH != 58 {
+		t.Fatalf("large screen size = %dx%d, want 196x58", gotW, gotH)
 	}
 	if gotW, gotH := hotkeyDialogSizeForScreen(80, 25); gotW != 76 || gotH != 23 {
 		t.Fatalf("small screen size = %dx%d, want 76x23", gotW, gotH)
@@ -245,6 +245,10 @@ func TestActionHotkeyConfigBuildsNativeRowsAndFitsScreen(t *testing.T) {
 	x1, _, x2, _ := dlg.GetPosition()
 	if got, want := x2-x1+1, 156; got != want {
 		t.Errorf("dialog width = %d, want %d", got, want)
+	}
+	_, y1, _, y2 := dlg.GetPosition()
+	if got, want := y2-y1+1, 38; got != want {
+		t.Errorf("dialog height = %d, want %d", got, want)
 	}
 }
 
