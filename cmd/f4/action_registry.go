@@ -367,6 +367,16 @@ func init() {
 		Handler:     actionActivateMainMenu,
 	})
 	RegisterAction(Action{
+		Name:        "App.LastMenuItem",
+		Area:        "Common",
+		Label:       "Last Menu Item",
+		LabelKey:    "Action.App.LastMenuItem",
+		Description: "Open the main menu at the last executed item",
+		DescKey:     "Action.App.LastMenuItem.Desc",
+		DefaultKeys: []string{"ShiftF10"},
+		Handler:     actionSelectLastMenuItem,
+	})
+	RegisterAction(Action{
 		Name:        "Workspace.New",
 		Area:        "Common",
 		Label:       "New Workspace",
