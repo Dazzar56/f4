@@ -39,8 +39,34 @@ flashes before a picture lands.
 different process, so parenting to it attaches the two threads' input queues.
 That is how every overlay onto a console works, and it is what makes the
 picture behave; the price is that a wedged conhost can wedge the thread that
-pumps the overlay. It is a thread of its own for exactly that reason, and
-nothing else in f4 waits on it.
+pumps the overlay.
+
+**So nothing else in f4 waits on that thread.** This is an invariant, not an
+observation, and issue #805 is what breaking it looked like: `Place`, `Hide`
+and `SetBounds` used to call `SetWindowPos`, `ShowWindow` and `SetWindowRgn`
+from whichever thread called them, and those three are *synchronous* on a
+window owned by another thread — they send messages to the owner and wait for
+it. The caller was `RenderExternal`, which runs with the vtui screen locked, so
+one frame of f4 ended up waiting on the pump thread, the pump thread shares an
+input queue with conhost, and conhost is what draws f4's own text and delivers
+its keys. From the outside: a black rectangle where the picture should be, the
+whole interface stopped, and `Esc` answered when Windows broke the wait a
+couple of minutes later.
+
+The invariant is kept by splitting the overlay in two. `overlay_state.go` is
+what the window *should* look like — position, region, whether the frame buffer
+has changed, and one flag that keeps at most one wake-up outstanding no matter
+how many changes arrive. Callers write there and post a single `WM_APP+2` with
+`PostMessageW`, which does not wait. The pump thread answers that message and
+makes every window call there is. The rule to keep: **`user32` and `gdi32`
+calls that touch the overlay window live in `wndProc`, `paint` and `apply`, and
+nowhere else.** `GetClientRect` on the parent is the one exception and is safe:
+it reads window data and sends nothing.
+
+`New` bounds its own wait too. Creating the window is the call that performs
+the attach, so it is the one place at startup a wedged conhost could hold f4
+up; after five seconds f4 goes on without an overlay, which is a perfectly good
+outcome.
 
 ## 3. The geometry is the easy part here
 
@@ -64,7 +90,20 @@ which window one frame goes into, and the copy into a device independent
 bitmap — which is bottom-up with its channels the other way round, and both
 mistakes look like a picture rather than an error.
 
-`overlay_windows.go` is the part that calls `user32` and `gdi32`. **It has not
-been run on Windows.** It compiles for `windows/amd64` and `windows/arm64` and
-the shape of it is the same as the X overlay, which has been run, but the first
-report from a real console is the first real test.
+`overlay_state.go` is the same kind of file as `geometry.go`: what was asked
+for, what is on the screen, and what the pump thread therefore has to do, with
+no system calls in it. It is tested everywhere — coalescing, a change arriving
+while the pump thread is busy, placing twice in the same spot, hiding, showing
+again, clearing the region, and refusing to record anything once closed.
+
+`overlay_windows.go` is the part that calls `user32` and `gdi32`. It compiles
+for `windows/amd64` and `windows/arm64`, the shape of it is the same as the X
+overlay, and the only report from a real console so far is issue #805.
+
+When a picture does not appear, `VTUI_DEBUG=1` gives one `WINCON:` line per
+frame that changed: the size and corner of the window and how many pictures
+went into it. No lines means the frame never reached the overlay; lines with a
+black rectangle on the screen means the request reached the pump thread and
+something below it went wrong. `[Images] X11Overlay=0` turns the overlay off
+altogether — the same setting serves both platforms — which is how to tell an
+overlay fault from anything else.

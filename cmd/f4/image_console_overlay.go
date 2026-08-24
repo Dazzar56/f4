@@ -180,12 +180,22 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 		c.hide()
 		return
 	}
+	// One line per frame that actually changed, which is what the guard on
+	// the key above buys: a still picture logs once. Anything that reaches
+	// here has asked the pump thread to show the window, so a black area
+	// with these lines behind it means the request never landed, and no
+	// lines at all means the frame never got this far.
+	vtui.DebugLog("WINCON: frame %dx%d at %d,%d, %d piece(s)",
+		frame.W, frame.H, frame.X, frame.Y, len(pieces))
 	c.key = key
 }
 
 func (c *consoleImageOverlay) hide() {
 	if c == nil {
 		return
+	}
+	if c.key != "" {
+		vtui.DebugLog("WINCON: nothing to show")
 	}
 	c.ov.Hide()
 	c.key = ""

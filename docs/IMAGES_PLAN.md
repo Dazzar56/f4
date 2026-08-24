@@ -186,6 +186,17 @@ the picture and the key bar, which would instead mean that
 placement gives it. The new `X11_GFX` line prints the rectangle drawn beside
 the rectangle asked for and settles it.
 
+**B2. Windows console: black rectangle and a frozen interface.** Issue #805,
+fixed. The console overlay had never been run on Windows, and the first report
+found the threading. `Place`, `Hide` and `SetBounds` made their window calls on
+the calling thread; on a window owned by another thread those calls wait for
+that thread, and the overlay's pump thread shares an input queue with conhost.
+`RenderExternal` runs with the screen locked, so f4 waited on conhost while
+conhost was what f4 needed to draw and to read keys. The window operations are
+now written into `wincon/overlay_state.go` and applied on the pump thread after
+one `PostMessageW`; see `WINCON.md` section 2 for the invariant and the rule
+that keeps it.
+
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
 see the entry in section 8.
