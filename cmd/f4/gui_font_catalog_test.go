@@ -108,6 +108,28 @@ func TestConfigureGuiFontComboFiltersWhileKeepingManualInput(t *testing.T) {
 	}
 }
 
+func TestGuiFontComboClosesMenuWhenTextIsEmpty(t *testing.T) {
+	tests := []struct {
+		name          string
+		text          string
+		filteredCount int
+		want          bool
+	}{
+		{name: "empty", text: "", filteredCount: 3, want: true},
+		{name: "whitespace", text: "   ", filteredCount: 3, want: true},
+		{name: "no matches", text: "missing", filteredCount: 0, want: true},
+		{name: "matching text", text: "brain", filteredCount: 1, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := guiFontComboShouldCloseMenu(tt.text, tt.filteredCount); got != tt.want {
+				t.Fatalf("guiFontComboShouldCloseMenu(%q, %d) = %v, want %v", tt.text, tt.filteredCount, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFontconfigPatternByLanguage(t *testing.T) {
 	for _, test := range []struct {
 		language string

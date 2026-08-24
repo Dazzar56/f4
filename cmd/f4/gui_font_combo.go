@@ -25,6 +25,10 @@ func filterGuiFontDisplayChoices(choices []string, query string) []string {
 	return filtered
 }
 
+func guiFontComboShouldCloseMenu(text string, filteredCount int) bool {
+	return strings.TrimSpace(text) == "" || filteredCount == 0
+}
+
 func configureGuiFontCombo(combo *vtui.ComboBox, choices []string) {
 	if combo == nil {
 		return
@@ -60,7 +64,7 @@ func configureGuiFontCombo(combo *vtui.ComboBox, choices []string) {
 			return
 		}
 		menuIsOpen := vtui.FrameManager.GetTopFrame() == combo.Menu
-		if len(filtered) == 0 {
+		if guiFontComboShouldCloseMenu(text, len(filtered)) {
 			if menuIsOpen {
 				combo.Menu.Close()
 			}
