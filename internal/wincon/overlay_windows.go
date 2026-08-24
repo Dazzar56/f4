@@ -340,6 +340,12 @@ func wndProc(hwnd uintptr, message uint32, wparam, lparam uintptr) uintptr {
 	return r
 }
 
+func (s *overlayState) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
+
 // New creates the overlay over the console window.
 func New() (*Overlay, error) {
 	parent, src := ConsoleWindow()

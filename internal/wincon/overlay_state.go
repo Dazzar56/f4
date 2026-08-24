@@ -142,12 +142,6 @@ func (s *overlayState) close() bool {
 	return true
 }
 
-func (s *overlayState) isClosed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.closed
-}
-
 // take is the pump thread's half: it clears the wake-up flag and returns the
 // work, having already recorded it as done. Recording it here rather than
 // after the calls is deliberate — a change that arrives while the calls are
