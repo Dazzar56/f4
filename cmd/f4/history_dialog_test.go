@@ -1,7 +1,9 @@
 package main
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -37,6 +39,72 @@ func TestHistorySearchFiltersAndTogglesPrefixMode(t *testing.T) {
 	search.processKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
 	if string(search.query) != "gi" {
 		t.Fatalf("Backspace left query %q, want gi", string(search.query))
+	}
+}
+
+func TestHistorySearchTimeAndDirectoryModes(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	menu := vtui.NewVMenu("History")
+	stamp := time.Date(2026, time.August, 24, 12, 34, 56, 0, time.UTC)
+	search := newHistorySearch(menu, []HistoryRecord{{Name: "echo hi", Dir: "/very/long/work/tree", Timestamp: stamp}}, "")
+	defer search.cleanup()
+	search.showTimes = true
+	search.timeMode = historyShowDateTime
+	search.showDirPrefix = true
+	search.dirPrefixLen = 12
+	search.applyFilter()
+
+	text := menu.Items[0].Text
+	if !strings.Contains(text, "2026-08-24 12:34:56") || !strings.Contains(text, "...") || !strings.Contains(text, "/tree/") || !strings.HasSuffix(text, "echo hi") {
+		t.Fatalf("date/time history row = %q", text)
+	}
+
+	if !search.processKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_T,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}) {
+		t.Fatal("Ctrl+T was not handled")
+	}
+	if search.timeMode != historyShowDate || !strings.Contains(menu.Items[0].Text, "2026-08-24") || strings.Contains(menu.Items[0].Text, "12:34:56") {
+		t.Fatalf("date-only history row = %q, mode=%d", menu.Items[0].Text, search.timeMode)
+	}
+
+	if !search.processKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_T,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	}) {
+		t.Fatal("second Ctrl+T was not handled")
+	}
+	if search.timeMode != historyShowNone || strings.Contains(menu.Items[0].Text, "2026-08-24") {
+		t.Fatalf("hidden-time history row = %q, mode=%d", menu.Items[0].Text, search.timeMode)
+	}
+}
+
+func TestHistorySearchCtrlDirectoryWidth(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	menu := vtui.NewVMenu("History")
+	search := newHistorySearch(menu, []HistoryRecord{{Name: "cmd", Dir: "/work"}}, "")
+	defer search.cleanup()
+	search.showDirPrefix = true
+	search.timeMode = historyShowDateTime
+	search.dirPrefixLen = 8
+	search.applyFilter()
+
+	if !search.processKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed}) {
+		t.Fatal("Ctrl+Left was not handled")
+	}
+	if search.dirPrefixLen != 7 {
+		t.Fatalf("directory width after Ctrl+Left = %d, want 7", search.dirPrefixLen)
+	}
+	if !search.processKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.LeftCtrlPressed}) {
+		t.Fatal("Ctrl+Right was not handled")
+	}
+	if search.dirPrefixLen != 8 {
+		t.Fatalf("directory width after Ctrl+Right = %d, want 8", search.dirPrefixLen)
 	}
 }
 

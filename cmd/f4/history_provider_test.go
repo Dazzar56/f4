@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -38,6 +40,40 @@ func TestF4HistoryProvider_Persistence(t *testing.T) {
 	loaded := hp2.LoadHistory("test")
 	if len(loaded) != 2 || loaded[0] != "cmd1" || loaded[1] != "cmd2" {
 		t.Errorf("Persistence failed. Expected %v, got %v", items, loaded)
+	}
+}
+
+func TestF4HistoryProvider_MigratesPlainBucketsAndKeepsRichMetadata(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "history.json")
+	plain := map[string][]string{
+		"cmdline": {"echo old", "git status"},
+		"folders": {"/old", "/new"},
+	}
+	data, err := json.Marshal(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dbPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	hp := &F4HistoryProvider{path: dbPath}
+	hp.load()
+	commands := hp.LoadRichHistory("cmdline")
+	if len(commands) != 2 || commands[0].Name != "echo old" {
+		t.Fatalf("migrated command history = %#v", commands)
+	}
+
+	stamp := time.Date(2026, time.August, 24, 12, 34, 56, 0, time.UTC)
+	hp.SaveRichHistory("cmdline", []HistoryRecord{{Name: "git status", Dir: "/work", Timestamp: stamp, Lock: true}})
+	if got := hp.LoadHistory("cmdline"); len(got) != 1 || got[0] != "git status" {
+		t.Fatalf("plain view after rich save = %#v", got)
+	}
+
+	hp.SaveHistory("cmdline", []string{"git status"})
+	commands = hp.LoadRichHistory("cmdline")
+	if len(commands) != 1 || commands[0].Dir != "/work" || !commands[0].Lock || !commands[0].Timestamp.Equal(stamp) {
+		t.Fatalf("plain save discarded rich metadata = %#v", commands)
 	}
 }
 

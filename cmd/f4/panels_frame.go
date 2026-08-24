@@ -103,6 +103,9 @@ func (pf *PanelsFrame) addCommandHistory(cmd string) {
 	}
 
 	rich := hp.LoadRichHistory("cmdline")
+	if len(rich) == 0 {
+		rich = recordsFromNames(pf.cmdLine.Edit.History)
+	}
 	var newRich []HistoryRecord
 	curDir := ""
 	if fsp := pf.getActivePanel(); fsp != nil {
@@ -111,7 +114,7 @@ func (pf *PanelsFrame) addCommandHistory(cmd string) {
 
 	newRich = append(newRich, HistoryRecord{
 		Name:      cmd,
-		Extra:     curDir,
+		Dir:       curDir,
 		Timestamp: time.Now(),
 	})
 
