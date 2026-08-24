@@ -65,6 +65,14 @@ var platformGuiFontDisplayChoices = func(language, current string) []string {
 
 var platformGuiFontDisplayName = defaultGuiFontDisplayName
 
+// platformGuiFontDisplayNameFromInstalled is the same mapping as
+// platformGuiFontDisplayName, but receives the catalog used for the current
+// call. Windows uses that catalog to keep tests and callers that provide a
+// custom discovery function isolated from the live registry.
+var platformGuiFontDisplayNameFromInstalled = func(value string, _ []string) string {
+	return platformGuiFontDisplayName(value)
+}
+
 // guiFontDisplayChoices returns the strings shown in the font picker. On
 // Windows these are font family names (e.g. "Cascadia Mono"); on other
 // platforms they are short names derived from the discovered font files.
@@ -92,7 +100,7 @@ func guiFontDisplayValue(language, value string) string {
 func guiFontDisplayValueFromInstalled(value string, installed []string) string {
 	for _, path := range installed {
 		if sameGuiFontValue(value, path) {
-			return guiFontDisplayName(value)
+			return platformGuiFontDisplayNameFromInstalled(value, installed)
 		}
 	}
 	return value
