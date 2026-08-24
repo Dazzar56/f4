@@ -12,10 +12,33 @@ import (
 import "time"
 
 type HistoryRecord struct {
-	Name      string    `json:"name"`
+	Name string `json:"name"`
+	Dir  string `json:"dir,omitempty"`
+	// Extra is the pre-rich-history spelling of Dir. Keep reading and
+	// writing it for imported/older records, but use Dir for new records.
 	Extra     string    `json:"extra,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
 	Lock      bool      `json:"lock,omitempty"`
+}
+
+const (
+	historyTypeCommands = iota
+	historyTypeFolders
+	historyTypeViewEdit
+	historyTypeCount
+)
+
+const (
+	historyShowDateTime = iota
+	historyShowDate
+	historyShowNone
+)
+
+func (r HistoryRecord) directory() string {
+	if r.Dir != "" {
+		return r.Dir
+	}
+	return r.Extra
 }
 
 func (r HistoryRecord) DisplayText() string {
@@ -23,8 +46,7 @@ func (r HistoryRecord) DisplayText() string {
 	if !r.Timestamp.IsZero() {
 		res += r.Timestamp.Format("15:04:05 ")
 	}
-	if r.Extra != "" {
-		extra := r.Extra
+	if extra := r.directory(); extra != "" {
 		if len(extra) > 15 {
 			extra = "..." + extra[len(extra)-12:]
 		}
@@ -76,14 +98,6 @@ func (hp *F4HistoryProvider) load() {
 			var oldData map[string][]string
 			if err := json.Unmarshal(file, &oldData); err == nil {
 				hp.data = oldData
-				if cmds, ok := hp.data["cmdline"]; ok {
-					var rich []HistoryRecord
-					for _, c := range cmds {
-						rich = append(rich, HistoryRecord{Name: c})
-					}
-					hp.rich["cmdline"] = rich
-					delete(hp.data, "cmdline")
-				}
 			}
 		}
 	}
@@ -92,6 +106,22 @@ func (hp *F4HistoryProvider) load() {
 	}
 	if hp.rich == nil {
 		hp.rich = make(map[string][]HistoryRecord)
+	}
+	// A wrapper written before rich history was introduced still has the
+	// command and folder buckets in Data. Promote those buckets lazily while
+	// retaining Data as the string-compatible view used by vtui.Edit.
+	for _, id := range []string{"cmdline", "folders"} {
+		if _, ok := hp.rich[id]; ok {
+			continue
+		}
+		if names, ok := hp.data[id]; ok {
+			hp.rich[id] = recordsFromNames(names)
+		}
+	}
+	for id, records := range hp.rich {
+		if _, ok := hp.data[id]; !ok && (id == "cmdline" || id == "folders") {
+			hp.data[id] = extractHistoryNames(records)
+		}
 	}
 }
 
@@ -135,7 +165,13 @@ func (hp *F4HistoryProvider) SaveHistory(id string, history []string) {
 	if hp.data == nil {
 		hp.data = make(map[string][]string)
 	}
-	hp.data[id] = history
+	hp.data[id] = append([]string(nil), history...)
+	if id == "cmdline" || id == "folders" {
+		if hp.rich == nil {
+			hp.rich = make(map[string][]HistoryRecord)
+		}
+		hp.rich[id] = mergeHistoryNames(hp.rich[id], history)
+	}
 	hp.mu.Unlock()
 	hp.save()
 }
@@ -155,9 +191,60 @@ func (hp *F4HistoryProvider) SaveRichHistory(id string, history []HistoryRecord)
 	if hp.rich == nil {
 		hp.rich = make(map[string][]HistoryRecord)
 	}
-	hp.rich[id] = history
+	hp.rich[id] = append([]HistoryRecord(nil), history...)
+	if hp.data == nil {
+		hp.data = make(map[string][]string)
+	}
+	if id == "cmdline" || id == "folders" {
+		hp.data[id] = extractHistoryNames(history)
+	}
 	hp.mu.Unlock()
 	hp.save()
+}
+
+func recordsFromNames(names []string) []HistoryRecord {
+	if len(names) == 0 {
+		return nil
+	}
+	records := make([]HistoryRecord, 0, len(names))
+	for _, name := range names {
+		records = append(records, HistoryRecord{Name: name})
+	}
+	return records
+}
+
+func extractHistoryNames(records []HistoryRecord) []string {
+	if len(records) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(records))
+	for _, record := range records {
+		names = append(names, record.Name)
+	}
+	return names
+}
+
+// mergeHistoryNames updates the string-compatible view without throwing away
+// metadata that belongs to an entry which is still present. This is needed
+// because vtui.Edit can save a plain []string history after rich history has
+// already been loaded.
+func mergeHistoryNames(old []HistoryRecord, names []string) []HistoryRecord {
+	if len(names) == 0 {
+		return nil
+	}
+	byName := make(map[string]HistoryRecord, len(old))
+	for _, record := range old {
+		if _, exists := byName[record.Name]; !exists {
+			byName[record.Name] = record
+		}
+	}
+	merged := make([]HistoryRecord, 0, len(names))
+	for _, name := range names {
+		record := byName[name]
+		record.Name = name
+		merged = append(merged, record)
+	}
+	return merged
 }
 
 func limitRichHistory(history []HistoryRecord, limit int) []HistoryRecord {
@@ -199,6 +286,9 @@ func loadFolderHistoryRecords(provider vtui.HistoryProvider) ([]HistoryRecord, *
 		return records, nil
 	}
 	rich := hp.LoadRichHistory("folders")
+	if len(rich) == 0 && len(plain) > 0 {
+		rich = recordsFromNames(plain)
+	}
 	records := make([]HistoryRecord, 0, len(plain))
 	for _, path := range plain {
 		var record HistoryRecord
@@ -207,6 +297,9 @@ func loadFolderHistoryRecords(provider vtui.HistoryProvider) ([]HistoryRecord, *
 				record = candidate
 				break
 			}
+		}
+		if record.Name == "" {
+			record.Name = path
 		}
 		record.Name = path
 		records = append(records, record)
@@ -227,7 +320,7 @@ func AddFolderHistory(path string) {
 		return
 	}
 	if records, hp := loadFolderHistoryRecords(vtui.GlobalHistoryProvider); hp != nil {
-		current := HistoryRecord{Name: path}
+		current := HistoryRecord{Name: path, Timestamp: time.Now()}
 		newHistory := []HistoryRecord{current}
 		for _, record := range records {
 			if sameFolderHistoryPath(record.Name, path) {

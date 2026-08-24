@@ -16,19 +16,26 @@ import "fmt"
 import "time"
 
 type historySearch struct {
-	menu          *vtui.VMenu
-	title         string
-	hint          string
-	all           []HistoryRecord
-	secondary     []string
-	query         []rune
-	prefixOnly    bool
-	showSecond    bool
-	secondWidth   int
-	supportsLocks bool
-	showDetails   bool
-	onLockToggled func()
-	onCtrlF10     func(HistoryRecord)
+	menu            *vtui.VMenu
+	title           string
+	hint            string
+	all             []HistoryRecord
+	secondary       []string
+	query           []rune
+	prefixOnly      bool
+	showSecond      bool
+	secondWidth     int
+	supportsLocks   bool
+	showDetails     bool
+	showTimes       bool
+	timeMode        int
+	showDirPrefix   bool
+	dirPrefixLen    int
+	onLockToggled   func()
+	onTimesChanged  func(int)
+	onPrefixChanged func(int)
+	onDetails       func(HistoryRecord)
+	onCtrlF10       func(HistoryRecord)
 }
 
 var (
@@ -66,7 +73,7 @@ func (s *historySearch) applyFilter() {
 	// History providers keep the newest entry first. Dialogs show chronological
 	// order instead: the oldest entry at the top and the newest at the bottom.
 	for i := len(s.all) - 1; i >= 0; i-- {
-		text := s.all[i].DisplayText()
+		text := s.displayText(s.all[i])
 		matched, _ := historySearchMatch(text, s.query, s.prefixOnly)
 		if matched {
 			items = append(items, vtui.MenuItem{
@@ -83,6 +90,60 @@ func (s *historySearch) applyFilter() {
 	// view, which places a long history at the bottom of the viewport.
 	s.menu.SetSelectPos(len(items) - 1)
 	vtui.FrameManager.Redraw()
+}
+
+func (s *historySearch) displayText(record HistoryRecord) string {
+	if !s.showTimes && !s.showDirPrefix {
+		return record.DisplayText()
+	}
+
+	var result strings.Builder
+	if s.showTimes && !record.Timestamp.IsZero() {
+		switch s.timeMode {
+		case historyShowDate:
+			result.WriteString(record.Timestamp.Format("2006-01-02 "))
+		case historyShowNone:
+			// Timestamp is intentionally hidden.
+		default:
+			result.WriteString(record.Timestamp.Format("2006-01-02 15:04:05 "))
+		}
+	}
+	if s.showDirPrefix {
+		result.WriteString(historyDirectoryPrefix(record.directory(), s.dirPrefixLen))
+	}
+	result.WriteString(record.Name)
+	return result.String()
+}
+
+func historyDirectoryPrefix(dir string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if dir == "" {
+		return strings.Repeat(" ", width) + " "
+	}
+	if runewidth.StringWidth(dir) > width {
+		budget := width - 3
+		if budget < 1 {
+			budget = 1
+		}
+		runes := []rune(dir)
+		start := len(runes)
+		used := 0
+		for start > 0 {
+			w := runewidth.RuneWidth(runes[start-1])
+			if used+w > budget {
+				break
+			}
+			start--
+			used += w
+		}
+		dir = "..." + string(runes[start:])
+	}
+	if missing := width - runewidth.StringWidth(dir); missing > 0 {
+		dir = strings.Repeat(" ", missing) + dir
+	}
+	return dir + "/ "
 }
 
 func (s *historySearch) resize() {
@@ -130,7 +191,7 @@ func (s *historySearch) selectedSecondary() string {
 	if idx >= 0 && idx < len(s.secondary) && s.secondary[idx] != "" {
 		return s.secondary[idx]
 	}
-	return rec.Extra
+	return rec.directory()
 }
 
 func (s *historySearch) setSecondaryWidth(items []string, visible bool, width int) {
@@ -148,7 +209,7 @@ func (s *historySearch) hasSecondary() bool {
 		}
 	}
 	for _, rec := range s.all {
-		if rec.Extra != "" {
+		if rec.directory() != "" {
 			return true
 		}
 	}
@@ -162,7 +223,7 @@ func (s *historySearch) secondaryAt(index int) string {
 	if index < len(s.secondary) && s.secondary[index] != "" {
 		return s.secondary[index]
 	}
-	return s.all[index].Extra
+	return s.all[index].directory()
 }
 
 func (s *historySearch) selectOriginalIndex(originalIndex int) bool {
@@ -207,13 +268,43 @@ func (s *historySearch) processKey(e *vtinput.InputEvent) bool {
 	if s.showDetails && e.VirtualKeyCode == vtinput.VK_F3 && !shift && !ctrl && !alt {
 		_, rec, ok := s.selected()
 		if ok {
-			tStr := "None"
-			if !rec.Timestamp.IsZero() {
-				tStr = rec.Timestamp.Format(time.RFC1123)
+			if s.onDetails != nil {
+				s.onDetails(rec)
+			} else {
+				tStr := "None"
+				if !rec.Timestamp.IsZero() {
+					tStr = rec.Timestamp.Format(time.RFC1123)
+				}
+				msg := fmt.Sprintf("Command: %s\nDirectory: %s\nTime: %s", rec.Name, rec.directory(), tStr)
+				vtui.ShowMessage(" Details ", msg, []string{"&Ok"})
 			}
-			msg := fmt.Sprintf("Command: %s\nDirectory: %s\nTime: %s", vtui.TruncateMiddle(rec.Name, 40), vtui.TruncateMiddle(rec.Extra, 40), tStr)
-			vtui.ShowMessage(" Details ", msg, []string{"&Ok"})
 		}
+		return true
+	}
+	if s.showTimes && e.VirtualKeyCode == vtinput.VK_T && ctrl && !shift && !alt {
+		s.timeMode = (s.timeMode + 1) % 3
+		if s.onTimesChanged != nil {
+			s.onTimesChanged(s.timeMode)
+		}
+		s.applyFilter()
+		return true
+	}
+	if s.showDirPrefix && e.VirtualKeyCode == vtinput.VK_LEFT && ctrl && !shift && !alt && s.timeMode == historyShowDateTime {
+		if s.dirPrefixLen > 4 {
+			s.dirPrefixLen--
+			if s.onPrefixChanged != nil {
+				s.onPrefixChanged(s.dirPrefixLen)
+			}
+			s.applyFilter()
+		}
+		return true
+	}
+	if s.showDirPrefix && e.VirtualKeyCode == vtinput.VK_RIGHT && ctrl && !shift && !alt && s.timeMode == historyShowDateTime {
+		s.dirPrefixLen++
+		if s.onPrefixChanged != nil {
+			s.onPrefixChanged(s.dirPrefixLen)
+		}
+		s.applyFilter()
 		return true
 	}
 	if s.supportsLocks && e.VirtualKeyCode == vtinput.VK_INSERT && !shift && !ctrl && !alt {
