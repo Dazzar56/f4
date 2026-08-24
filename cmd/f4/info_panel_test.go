@@ -176,7 +176,7 @@ func drainInfoPanelUITasks(t *testing.T) {
 //     target the source file panel underneath.
 func TestPanelsFrame_CtrlL_TogglesInfoPanel(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -1004,7 +1004,7 @@ func TestInfoPanel_MissingCachedCursorRowFallsBackNearby(t *testing.T) {
 // visible, and falls through to fast-find otherwise.
 func TestPanelsFrame_B_TogglesInfoPanelUnits(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -1164,6 +1164,8 @@ func TestInfoPanel_CopyCopiesValue(t *testing.T) {
 	if got := vtui.GetClipboard(); got != wantValue {
 		t.Errorf("SetClipboard got %q, want %q", got, wantValue)
 	}
+	pumpUntilToastActive(t)
+	waitForToastExpiry(t, 3*time.Second)
 }
 
 // TestInfoPanel_ProcessKey_UnfocusedIgnoresC verifies the C copy
@@ -1255,6 +1257,8 @@ func TestInfoPanel_ShiftUpDownSelectsAndCCopiesLabelValue(t *testing.T) {
 	if got := vtui.GetClipboard(); got != want {
 		t.Errorf("clipboard = %q, want %q", got, want)
 	}
+	pumpUntilToastActive(t)
+	waitForToastExpiry(t, 3*time.Second)
 
 	// Selection persists across a rebuild — the highlight must
 	// survive the next Show, which walks the row list from scratch.

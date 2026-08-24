@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -321,9 +322,15 @@ func TestAsyncBuffer_RedundantFetchPrevention(t *testing.T) {
 	buf.chunkSize = 100
 	defer buf.Close()
 
-	// Trigger 10 simultaneous reads for the same offset
+	// Trigger 10 simultaneous reads for the same offset. Read consults the
+	// global frame manager, so these have to be joined before the test returns
+	// or the next test's manager swap races them.
+	var reads sync.WaitGroup
+	reads.Add(10)
+	defer reads.Wait()
 	for i := 0; i < 10; i++ {
 		go func() {
+			defer reads.Done()
 			_, _ = buf.Read(0, 5)
 		}()
 	}

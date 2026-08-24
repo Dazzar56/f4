@@ -237,7 +237,7 @@ func TestPathHintProvider_BothPanels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.panels[1].(*FileSystemPanel).vfs = vfs.NewOSVFS(dirA) // activeIdx = 1
@@ -293,7 +293,7 @@ func TestPathHintProvider_DisabledWhenCommandLineAutoCompleteOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.panels[1].(*FileSystemPanel).vfs = vfs.NewOSVFS(dir)

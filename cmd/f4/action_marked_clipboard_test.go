@@ -35,7 +35,7 @@ func waitForMarkedClipboard(t *testing.T, want string) string {
 func seedMarkedPanel(t *testing.T, path string, names []string, markCount int) *PanelsFrame {
 	t.Helper()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	t.Cleanup(func() { pf.Close() })
 	pf.ResizeConsole(80, 25)
 

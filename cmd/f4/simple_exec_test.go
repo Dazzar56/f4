@@ -18,7 +18,7 @@ func TestSimpleInline_CommandExecution(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 	SetDefaultF4Palette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.shellMode = ShellModeSimpleInline
 	pf.ResizeConsole(80, 25)
@@ -182,6 +182,8 @@ func TestSimpleCaptured_ToggleShowsToast(t *testing.T) {
 	defer pf.Close()
 	pf.shellMode = ShellModeSimpleCaptured
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	vtui.FrameManager.Push(pf)
 
 	RunAction("Panel.Toggle")
@@ -206,6 +208,9 @@ Loop:
 			t.Fatalf("Timeout waiting for toast %q, last seen %q", want, toast)
 		}
 	}
+	waitForToastExpiry(t, 4*time.Second)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 }
 
 // TestSimpleInline_FarStyleKeepsConsoleAndTypes covers the Ctrl+O screen users

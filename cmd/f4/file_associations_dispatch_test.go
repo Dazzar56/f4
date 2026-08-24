@@ -56,7 +56,7 @@ func setupPanelWithFile(t *testing.T, name string) (*PanelsFrame, *mockPty) {
 		}
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	t.Cleanup(pf.Close)
 	pf.ResizeConsole(80, 25)
 

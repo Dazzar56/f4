@@ -4279,7 +4279,6 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 			t.Fatal("Timeout")
 		}
 	}
-
 	// 2. Verification
 	if !attrCalled {
 		t.Error("vfs.SetAttributes was not called after save")
@@ -4466,7 +4465,7 @@ func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("match"))
 	ev := NewEditorView(pt, nil, "")
-	defer ev.Close()
+	t.Cleanup(ev.Close)
 	ev.CursorPos = 0 // Start at beginning
 
 	// Reverse search from 0 should exit instantly, not hang

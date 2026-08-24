@@ -18,7 +18,7 @@ import (
 // and Ctrl+Q on the focused alt closes IT (not spawns a second one).
 func TestPanelsFrame_CtrlQ_TogglesQuickView(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -64,7 +64,7 @@ func TestPanelsFrame_CtrlQ_TogglesQuickView(t *testing.T) {
 // info on one side, quick view on the other — without collisions.
 func TestPanelsFrame_CtrlLQ_CoexistOnDifferentSides(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -239,7 +239,7 @@ func TestPanelsFrame_QuickViewWheel_ActivePanelScrolls(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 	vtui.SetDefaultPalette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -265,6 +265,7 @@ func TestPanelsFrame_QuickViewWheel_ActivePanelScrolls(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_Q, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 	q := pf.altPanels[0].(*QuickViewPanel)
+	pf.lastAutoRefresh = time.Now()
 	pf.Show(scr)
 
 	// Tab — active moves to left (alt slot). From now on wheel should
@@ -566,7 +567,7 @@ func TestQuickView_DirScan_CancelsOnSelectionChange(t *testing.T) {
 // this PR the B toggle only fired for `info` alts.
 func TestPanelsFrame_BToggle_WithQuickView(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 

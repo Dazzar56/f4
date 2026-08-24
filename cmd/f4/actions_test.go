@@ -244,6 +244,8 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// Создаем мок-VFS, который запретит удаление "fail.txt"
 	mv := &mockDeletionFailingVFS{
@@ -303,11 +305,16 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 
 	// 3. Прокручиваем очередь задач, ожидая появления диалога с итогами ошибок
 	timeout := time.After(2 * time.Second)
+	var progress *FileOpProgressDialog
+	summaryShown := false
 Loop:
 	for {
 		select {
 		case task := <-fm.TaskChan:
 			task()
+			if top, ok := fm.GetTopFrame().(*FileOpProgressDialog); ok {
+				progress = top
+			}
 
 			// Если выскочил диалог ошибки удаления (AskError), нажимаем Skip
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
@@ -323,6 +330,9 @@ Loop:
 
 			// Ждем, когда на вершине стека окажется диалог с заголовком " Deletion Errors "
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == Msg("FileOp.DeletionErrors") {
+				summaryShown = true
+			}
+			if summaryShown && progress != nil && progress.IsDone() {
 				break Loop
 			}
 
@@ -357,6 +367,8 @@ Loop:
 	if !foundF1 || !foundF2 {
 		t.Errorf("One of the deletable files was skipped: %v", mv.deletedFiles)
 	}
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 }
 
 type mockRetryDeleteVFS struct {
@@ -443,6 +455,8 @@ Loop:
 	if len(mv.deleted) != 1 || mv.deleted[0] != "retry.txt" {
 		t.Errorf("File was not deleted after Retry. Deleted: %v", mv.deleted)
 	}
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 }
 
 func TestActionDelete_Abort(t *testing.T) {
@@ -460,6 +474,8 @@ func TestActionDelete_Abort(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs = mv
 	fsp.entries = []*fileEntry{
@@ -495,7 +511,7 @@ Loop:
 				clickDialogButton(t, fm.GetTopFrame().(vtui.Container), "Abort")
 				abortClicked = true
 			}
-			if progress != nil && progress.IsDone() {
+			if abortClicked && progress != nil && progress.IsDone() {
 				break Loop
 			}
 			if fm.GetTopFrame() != nil && fm.GetTopFrame().IsDone() {
@@ -512,6 +528,8 @@ Loop:
 	if len(mv.deletedFiles) != 0 {
 		t.Errorf("Abort failed: some files were deleted: %v", mv.deletedFiles)
 	}
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 }
 func TestActionDelete_SkipAll(t *testing.T) {
 	fm := vtui.FrameManager
@@ -529,6 +547,8 @@ func TestActionDelete_SkipAll(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	fsp := pf.panels[0].(*FileSystemPanel)
 	fsp.vfs = mv
 	fsp.entries = []*fileEntry{
@@ -553,11 +573,16 @@ func TestActionDelete_SkipAll(t *testing.T) {
 	// 2. Ждем первую ошибку и жмем "Skip All"
 	timeout := time.After(2 * time.Second)
 	skipAllClicked := false
+	var progress *FileOpProgressDialog
+	summaryShown := false
 Loop:
 	for {
 		select {
 		case task := <-fm.TaskChan:
 			task()
+			if top, ok := fm.GetTopFrame().(*FileOpProgressDialog); ok {
+				progress = top
+			}
 
 			if !skipAllClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				if dlg, ok := fm.GetTopFrame().(vtui.Container); ok {
@@ -573,6 +598,9 @@ Loop:
 
 			// Ждем финальный диалог со списком ошибок
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == Msg("FileOp.DeletionErrors") {
+				summaryShown = true
+			}
+			if summaryShown && progress != nil && progress.IsDone() {
 				break Loop
 			}
 
@@ -602,11 +630,13 @@ Loop:
 	if foundErrors != 2 {
 		t.Errorf("Expected 2 errors in log, found %d", foundErrors)
 	}
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 }
 func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	// setupMockPanelsFrame и mockPty определены в других тестовых файлах того же пакета
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pty := pf.pty.(*mockPty)
 
@@ -657,7 +687,7 @@ func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 
 func TestActionExecute_HistoryQuoting(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 
 	tmp := t.TempDir()
@@ -1413,6 +1443,8 @@ func TestActionFindFile_Persistence(t *testing.T) {
 func TestSession_DiskPersistence(t *testing.T) {
 	// Создаем временную директорию для теста
 	tmpDir := t.TempDir()
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldConfig := AppConfig
 	oldEditorSearch, oldFindMask := LastEditorSearch, LastFindFileMask
 	oldLeftPath, oldRightPath := LastLeftPath, LastRightPath
@@ -1422,6 +1454,7 @@ func TestSession_DiskPersistence(t *testing.T) {
 	oldLeftSortMode, oldRightSortMode := LastLeftSortMode, LastRightSortMode
 	oldLeftSortRev, oldRightSortRev := LastLeftSortRev, LastRightSortRev
 	oldShowPanels, oldShowLeft, oldShowRight := LastShowPanels, LastShowLeft, LastShowRight
+	oldWorkspaces, oldActiveWorkspace := LastWorkspaceSessions, LastActiveWorkspace
 	t.Cleanup(func() {
 		AppConfig = oldConfig
 		LastEditorSearch, LastFindFileMask = oldEditorSearch, oldFindMask
@@ -1432,7 +1465,10 @@ func TestSession_DiskPersistence(t *testing.T) {
 		LastLeftSortMode, LastRightSortMode = oldLeftSortMode, oldRightSortMode
 		LastLeftSortRev, LastRightSortRev = oldLeftSortRev, oldRightSortRev
 		LastShowPanels, LastShowLeft, LastShowRight = oldShowPanels, oldShowLeft, oldShowRight
+		LastWorkspaceSessions, LastActiveWorkspace = oldWorkspaces, oldActiveWorkspace
 	})
+	LastWorkspaceSessions = nil
+	LastActiveWorkspace = 0
 	AppConfig.AutoSaveSettings = true
 	// SaveSession passes these through to saveSessionWithOptions, and the panel
 	// group is what writes ViewMode, SortMode, SortReverse and the Show* keys.
@@ -1671,6 +1707,8 @@ func TestActionPanelSettings_ConsoleModes(t *testing.T) {
 	chkOverlay.State = 1
 
 	clickDialogButton(t, dlg, "Ok")
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	if AppConfig.ConsoleMode != "host" {
 		t.Errorf("AppConfig.ConsoleMode = %q, want host", AppConfig.ConsoleMode)
@@ -1734,6 +1772,8 @@ func TestActionManagePlugins_Flow(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	oldPlugins := AppConfig.RegisteredPlugins
 	AppConfig.RegisteredPlugins = []string{"/old/path"}
@@ -2013,6 +2053,8 @@ func TestActionCommandHistory_Flow(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	pf.cmdLine.Edit.History = nil
 	actionCommandHistory(pf)
@@ -2043,6 +2085,8 @@ func TestActionCommandHistory_Deletion(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	pf.cmdLine.Edit.History = []string{"cmd1", "cmd2", "cmd3"}
 	actionCommandHistory(pf)
@@ -2081,6 +2125,8 @@ func TestActionAppearanceSettings_SaveCursor(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	oldCfg := AppConfig
 	defer func() { AppConfig = oldCfg }()
@@ -2139,6 +2185,8 @@ func TestActionAppearanceSettingsSavesSystemMonospace(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	actionAppearanceSettings(pf)
 	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
 
@@ -2179,6 +2227,8 @@ func TestActionAppearanceSettingsSavesWorkspaceTabRestoration(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	actionAppearanceSettings(pf)
 	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
 
@@ -2219,6 +2269,8 @@ func TestActionAppearanceSettingsSavesWorkspaceTabOverlay(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	actionAppearanceSettings(pf)
 	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
 
@@ -2238,6 +2290,8 @@ func TestActionAppearanceSettingsSavesWorkspaceTabOverlay(t *testing.T) {
 	}
 	overlayTabs.Toggle()
 	clickDialogButton(t, top, "Ok")
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	if AppConfig.WorkspaceTabsOverlay {
 		t.Fatal("disabled workspace tab overlay setting was not saved")
 	}
@@ -2259,6 +2313,8 @@ func TestActionAppearanceSettingsSavesWorkspaceTabNumbering(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	actionAppearanceSettings(pf)
 	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
 
@@ -2295,6 +2351,8 @@ func TestActionAppearanceSettings_CancelPreservesPalette(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// Simulate a farcolors.ini override: bump one palette slot to
 	// a sentinel value the base style would never produce. If Cancel
@@ -2348,6 +2406,8 @@ func TestActionAppearanceSettings_LivePreviewRecolorsExistingLabels(t *testing.T
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	actionAppearanceSettings(pf)
 	frame := vtui.FrameManager.GetTopFrame()
@@ -2400,8 +2460,11 @@ func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	done := make(chan struct{})
+	completed := make(chan struct{})
 	workerBlock := make(chan struct{})
 	var reporter vfs.TaskReporter
 
@@ -2410,7 +2473,7 @@ func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
 		close(done)
 		<-workerBlock
 		return nil
-	}, nil)
+	}, func(error) { close(completed) })
 
 	select {
 	case <-done:
@@ -2459,8 +2522,17 @@ func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
 
 	// Close dialog and unblock worker
 	close(workerBlock)
-	dlg.SetExitCode(-1)
-	vtui.FrameManager.Pop()
+	timeout = time.After(2 * time.Second)
+	for completed != nil {
+		select {
+		case <-completed:
+			completed = nil
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("progress task did not complete")
+		}
+	}
 }
 
 type mockExtractionVFS struct {

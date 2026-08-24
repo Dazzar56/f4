@@ -72,6 +72,27 @@ type processEnvironmentShellInFlight struct {
 var processEnvironmentAcknowledgementTimeout = 10 * time.Second
 var processEnvironmentPayloadPreparer = prepareProcessEnvironmentShellPayload
 
+var processEnvironmentFailureToastDuration = 5 * time.Second
+
+// processEnvironmentFailureToast protects the active window and completion
+// signal for the process-wide failure toast. Repeated failures can come from several frames;
+// coalescing them prevents overlapping vtui toast timers from redrawing the
+// same frame manager concurrently.
+var processEnvironmentFailureToast struct {
+	sync.Mutex
+	active bool
+	done   chan struct{}
+}
+
+func finishProcessEnvironmentFailureToast(done chan struct{}) {
+	processEnvironmentFailureToast.Lock()
+	if processEnvironmentFailureToast.done == done {
+		processEnvironmentFailureToast.active = false
+		close(done)
+	}
+	processEnvironmentFailureToast.Unlock()
+}
+
 var (
 	processEnvironmentRuntimeOnce sync.Once
 	processEnvironmentRuntimeDir  string
@@ -440,13 +461,36 @@ func (pf *PanelsFrame) setProcessEnvironmentDeliveryFailed(failed bool) {
 }
 
 func (pf *PanelsFrame) reportProcessEnvironmentShellFailure() {
-	if vtui.FrameManager == nil {
+	manager := vtui.FrameManager
+	if manager == nil {
 		return
 	}
-	vtui.FrameManager.PostTask(func() {
+
+	processEnvironmentFailureToast.Lock()
+	if processEnvironmentFailureToast.active {
+		processEnvironmentFailureToast.Unlock()
+		return
+	}
+	processEnvironmentFailureToast.active = true
+	done := make(chan struct{})
+	processEnvironmentFailureToast.done = done
+	processEnvironmentFailureToast.Unlock()
+
+	manager.PostTask(func() {
+		if vtui.FrameManager != manager {
+			finishProcessEnvironmentFailureToast(done)
+			return
+		}
 		// The localized title is intentionally value-free: neither environment
 		// names nor values may be copied to terminal or diagnostic output.
-		vtui.ShowToast(Msg("EnvMan.ShellSyncError"), 5*time.Second)
+		vtui.ShowToast(Msg("EnvMan.ShellSyncError"), processEnvironmentFailureToastDuration)
+		// ShowToast posts its setup. Queue our timer behind that setup so the
+		// coalescing window cannot end before vtui's own expiry timer.
+		manager.PostTask(func() {
+			time.AfterFunc(processEnvironmentFailureToastDuration, func() {
+				finishProcessEnvironmentFailureToast(done)
+			})
+		})
 	})
 }
 

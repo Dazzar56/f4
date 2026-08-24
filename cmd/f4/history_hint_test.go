@@ -56,7 +56,7 @@ func TestHistoryHint_MessagesResolved(t *testing.T) {
 // dialog actually paints on its bottom border.
 func TestActionCommandHistory_WiresHint(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
 	pf.cmdLine.Edit.History = []string{"ls -la", "grep -r foo ."}
@@ -89,7 +89,7 @@ func TestActionCommandHistoryInsertPersistsLock(t *testing.T) {
 	previous := vtui.GlobalHistoryProvider
 	vtui.GlobalHistoryProvider = hp
 	t.Cleanup(func() { vtui.GlobalHistoryProvider = previous })
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
 	pf.cmdLine.Edit.History = []string{"echo pinned"}
@@ -108,7 +108,7 @@ func TestActionCommandHistoryInsertPersistsLock(t *testing.T) {
 
 func TestActionFoldersHistory_WiresHint(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
 
@@ -149,7 +149,7 @@ func TestActionFoldersHistoryInsertPersistsLock(t *testing.T) {
 	previous := vtui.GlobalHistoryProvider
 	vtui.GlobalHistoryProvider = hp
 	t.Cleanup(func() { vtui.GlobalHistoryProvider = previous })
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
 
@@ -190,6 +190,8 @@ func TestActionCommandHistory_CtrlIns_CopiesToClipboard(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	pf.cmdLine.Edit.History = []string{"echo one", "echo two", "echo three"}
 	actionCommandHistory(pf)
@@ -220,6 +222,8 @@ func TestActionCommandHistory_Del_ClearsAllAfterConfirm(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	prev := vtui.GlobalHistoryProvider
 	saved := stubHistoryProvider{}
@@ -258,6 +262,8 @@ func TestActionCommandHistory_Del_CancelKeepsHistory(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	prev := vtui.GlobalHistoryProvider
 	saved := stubHistoryProvider{"cmdline": {"cmd1", "cmd2"}}
@@ -300,6 +306,8 @@ func TestActionCommandHistory_HelpTopic(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	pf.cmdLine.Edit.History = []string{"a", "b"}
 	actionCommandHistory(pf)
@@ -316,6 +324,8 @@ func TestActionFoldersHistory_HelpTopic(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	prev := vtui.GlobalHistoryProvider
 	vtui.GlobalHistoryProvider = &stubHistoryProvider{"folders": {"/tmp"}}
@@ -350,6 +360,8 @@ func TestActionCommandHistory_MouseClickPastesEntry(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// History convention: [0] is newest. historySearch shows oldest at the
 	// top and newest at the bottom, so bottom-row = "echo newest".
@@ -394,6 +406,8 @@ func TestActionCommandHistory_PathColumnAndInsertion(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	actionCommandHistory(pf)
 	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
 	search := activeHistorySearch
@@ -447,6 +461,8 @@ func TestActionCommandHistory_CtrlPgDnNavigatesToStoredPath(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	actionCommandHistory(pf)
 	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
 
@@ -462,6 +478,7 @@ func TestActionCommandHistory_CtrlPgDnNavigatesToStoredPath(t *testing.T) {
 	if !menu.IsDone() {
 		t.Fatal("history menu stayed open after Ctrl+PgDn")
 	}
+	waitForLoad(t, pf.getActivePanel())
 }
 
 // TestActionFoldersHistory_MouseClickNavigates guards the folder-history
@@ -471,6 +488,8 @@ func TestActionFoldersHistory_MouseClickNavigates(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	// Provider convention: [0] is newest. The bottom row of the dialog
 	// shows the newest entry, so clicking it should cd to `newest`.
@@ -502,6 +521,7 @@ func TestActionFoldersHistory_MouseClickNavigates(t *testing.T) {
 	if !menu.IsDone() {
 		t.Error("folder-history menu should be closed after click accept")
 	}
+	waitForLoad(t, pf.getActivePanel())
 }
 
 // TestHistorySearch_KeepsPainterAcrossModalOverlay guards issue #290
@@ -515,6 +535,8 @@ func TestHistorySearch_KeepsPainterAcrossModalOverlay(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	pf.cmdLine.Edit.History = []string{"cmd1", "cmd2"}
 	activeHistorySearch = nil
@@ -567,6 +589,8 @@ func TestActionFoldersHistory_CtrlR_DropsMissingPaths(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 
 	real1 := t.TempDir()
 	real2 := t.TempDir()

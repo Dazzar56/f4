@@ -78,7 +78,7 @@ func TestPanelsFrameCommandPrefixIsConsumedBeforePTY(t *testing.T) {
 	}
 	t.Cleanup(registration.Unregister)
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pty := pf.pty.(*mockPty)
 	pf.cmdLine.Edit.SetText("CorePrefix: selected.mkv")
