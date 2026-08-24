@@ -15,7 +15,7 @@ func TestAvailableColorStylesIncludesBuiltInsAndUserStyles(t *testing.T) {
 	defer func() { getUserStylesDir = oldDir }()
 
 	custom := []byte("[style]\nName = Solarized\n\n[farcolors]\nPanel.Text = foreground:#123456\n")
-	if err := os.WriteFile(filepath.Join(userDir, "solarized.ini"), custom, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(userDir, "solarized.ini"), custom, 0600); err != nil {
 		t.Fatal(err)
 	}
 

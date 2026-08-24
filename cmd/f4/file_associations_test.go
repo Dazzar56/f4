@@ -157,7 +157,7 @@ Description=Markdown
 Execute=less !.!
 State=1
 `
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out, err := LoadAssociations(path)
@@ -187,7 +187,7 @@ Edit=
 AltEdit=
 State=5
 `
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out, err := LoadAssociations(path)

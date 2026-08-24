@@ -86,7 +86,7 @@ func TestTerminalURLHoverUnderlinesVisibleLink(t *testing.T) {
 	tv.SetPosition(0, 0, 39, 2)
 	tv.SetVisible(true)
 	for i, r := range "https://example.org" {
-		tv.Lines[0][i] = vtui.CharInfo{Char: uint64(r), Attributes: DefaultTermAttr}
+		tv.Lines[0][i] = vtui.CharInfo{Char: testUint64Rune(r), Attributes: DefaultTermAttr}
 	}
 	if !tv.UpdateURLHover(4, 0) {
 		t.Fatal("hover state did not change")

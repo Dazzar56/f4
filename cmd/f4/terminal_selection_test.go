@@ -16,7 +16,7 @@ func seedRow(tv *TerminalView, row int, text string) {
 		if i >= tv.Width {
 			return
 		}
-		tv.Lines[row][i] = vtui.CharInfo{Char: uint64(r), Attributes: attr}
+		tv.Lines[row][i] = vtui.CharInfo{Char: testUint64Rune(r), Attributes: attr}
 	}
 }
 

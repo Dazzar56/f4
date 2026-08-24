@@ -70,7 +70,7 @@ func TestEditorView_IndexerRestoresTargetLineAfterLateDrain(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "restore.txt")
-	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(sb.String()), 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -145,7 +145,7 @@ func TestEditorView_IndexerAppliesTargetLineWhenFileShrank(t *testing.T) {
 	content := "one\ntwo\nthree\n"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "shrank.txt")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 

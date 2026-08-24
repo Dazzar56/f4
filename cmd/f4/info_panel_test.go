@@ -781,7 +781,7 @@ func TestInfoPanel_RendersUsageAsTwoLineMeter(t *testing.T) {
 				cell := scr.GetCell(ip.X1+1+percentStart+offset, first.y)
 				if cell.Attributes != wantAttr {
 					t.Fatalf("percentage cell %q at bar offset %d: attr=%#x, want %#x",
-						rune(cell.Char), insideOffset, cell.Attributes, wantAttr)
+						testRune(cell.Char), insideOffset, cell.Attributes, wantAttr)
 				}
 			}
 			unfilledCell := scr.GetCell(ip.X1+1+first.usageBarStart+first.usageBarWidth-1, first.y)

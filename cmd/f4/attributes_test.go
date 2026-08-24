@@ -960,7 +960,7 @@ func TestAttributesDialog_SymlinkToDirectoryIsIdentifiedAsLink(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	targetName := "target-dir"
-	if err := os.Mkdir(filepath.Join(tmpDir, targetName), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpDir, targetName), 0o700); err != nil {
 		t.Fatalf("create target directory: %v", err)
 	}
 	linkPath := filepath.Join(tmpDir, "link-dir")

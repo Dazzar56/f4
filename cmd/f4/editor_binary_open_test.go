@@ -62,7 +62,7 @@ func TestShowEditorBinaryOpensInHex(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sample.bin")
-	if err := os.WriteFile(path, []byte{0, 0, 0, 0x20, 'f', 't', 'y', 'p', 0x0A, 'x'}, 0644); err != nil {
+	if err := os.WriteFile(path, []byte{0, 0, 0, 0x20, 'f', 't', 'y', 'p', 0x0A, 'x'}, 0600); err != nil {
 		t.Fatal(err)
 	}
 

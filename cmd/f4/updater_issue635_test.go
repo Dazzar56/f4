@@ -18,7 +18,7 @@ func TestIssue635NetworkDropWhileProgressScreenIsBackground(t *testing.T) {
 	defer func() { updateDownloadIdleTimeout = oldTimeout }()
 	tmpDir := t.TempDir()
 	exePath := filepath.Join(tmpDir, "f4")
-	if err := os.WriteFile(exePath, []byte("old"), 0755); err != nil {
+	if err := os.WriteFile(exePath, []byte("old"), 0755); err != nil { // #nosec G306 -- the updater fixture represents an executable binary.
 		t.Fatal(err)
 	}
 	oldExe := osExecutable

@@ -50,7 +50,7 @@ func TestArchiveIndex_AutoOp(t *testing.T) {
 	oldIdx, _ := tar.GetStandardIndexPath(absOld)
 
 	// Ensure cache directory exists and create dummy index
-	if err := os.MkdirAll(filepath.Dir(oldIdx), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(oldIdx), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(oldIdx, []byte("fake index"), 0600); err != nil {
@@ -119,7 +119,7 @@ func TestArchiveIndex_AutoDelete(t *testing.T) {
 		}
 		abs, _ := v.Abs(name)
 		idx, _ := tar.GetStandardIndexPath(abs)
-		if err := os.MkdirAll(filepath.Dir(idx), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(idx), 0700); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(idx, []byte("idx"), 0600); err != nil {
@@ -134,7 +134,7 @@ func TestArchiveIndex_AutoDelete(t *testing.T) {
 	})
 
 	t.Run("Recursive delete index", func(t *testing.T) {
-		if err := os.MkdirAll(filepath.Join(tmp, "subdir"), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(tmp, "subdir"), 0700); err != nil {
 			t.Fatal(err)
 		}
 		name := "subdir/nested.tar.zst"
@@ -168,7 +168,7 @@ func TestExecuteFileOp_ArchiveIndexMigration(t *testing.T) {
 	}
 	absOld, _ := srcVfs.Abs(name)
 	oldIdx, _ := tar.GetStandardIndexPath(absOld)
-	if err := os.MkdirAll(filepath.Dir(oldIdx), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(oldIdx), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(oldIdx, []byte("index-data"), 0600); err != nil {

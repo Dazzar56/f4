@@ -48,7 +48,7 @@ func (h *luaTestHostAPI) RunAction(name string) bool {
 func writeLuaPlugin(t *testing.T, source string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "plugin.lua")
-	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatalf("writing plugin: %v", err)
 	}
 	return path

@@ -20,7 +20,7 @@ func syncEnv(t *testing.T) (*TerminalView, *AnsiParser, *mockPty) {
 func syncRow(tv *TerminalView, row int) string {
 	var sb strings.Builder
 	for _, c := range tv.Lines[row] {
-		sb.WriteRune(rune(c.Char))
+		sb.WriteRune(testRune(c.Char))
 	}
 	return strings.TrimRight(sb.String(), " ")
 }

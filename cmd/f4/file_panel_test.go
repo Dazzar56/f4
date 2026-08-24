@@ -606,7 +606,7 @@ func TestFileSystemPanel_NavigateUp_Selection(t *testing.T) {
 
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "target_folder")
-	if err := os.Mkdir(sub, 0755); err != nil {
+	if err := os.Mkdir(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "other.txt"), []byte(""), 0600); err != nil {
@@ -784,7 +784,7 @@ func TestFileSystemPanel_HiddenInfoShowsCursorFileSizeOnMulticolumnBorder(t *tes
 		runes := make([]rune, width)
 		for i := range runes {
 			cell := scr.GetCell(x+i, y)
-			runes[i] = rune(cell.Char)
+			runes[i] = testRune(cell.Char)
 			if runes[i] == 0 {
 				runes[i] = ' '
 			}
@@ -1401,10 +1401,10 @@ func TestFileSystemPanel_SelectionClearedOnDirChange(t *testing.T) {
 	parent := t.TempDir()
 	a := filepath.Join(parent, "a")
 	b := filepath.Join(parent, "b")
-	if err := os.MkdirAll(a, 0755); err != nil {
+	if err := os.MkdirAll(a, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(b, 0755); err != nil {
+	if err := os.MkdirAll(b, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(a, "same"), []byte("a"), 0600); err != nil {
@@ -1813,7 +1813,7 @@ func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 	scr.AllocBuf(40, 12)
 	fp.drawScrollBar(scr)
 	if got := scr.GetCell(fp.X2, fp.scrollBar.Y1); got.Char != vtui.ScrollUpArrow {
-		t.Fatalf("scrollbar top cell = %q, want %q", rune(got.Char), rune(vtui.ScrollUpArrow))
+		t.Fatalf("scrollbar top cell = %q, want %q", testRune(got.Char), testRune(vtui.ScrollUpArrow))
 	} else if got.Attributes != vtui.Palette[ColPanelScrollbar] {
 		t.Fatalf("scrollbar attr = %#x, want Panel.Scrollbar %#x", got.Attributes, vtui.Palette[ColPanelScrollbar])
 	}
@@ -1822,7 +1822,7 @@ func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 	// visual slot.
 	if !fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(fp.X2), MouseY: int16(fp.scrollBar.Y2),
+		MouseX: testInt16(fp.X2), MouseY: testInt16(fp.scrollBar.Y2),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	}) {
 		t.Fatal("scrollbar down arrow was not handled")
@@ -1837,7 +1837,7 @@ func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 	fp.setPanelScrollTop(0)
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(fp.X2), MouseY: int16(fp.scrollBar.Y2),
+		MouseX: testInt16(fp.X2), MouseY: testInt16(fp.scrollBar.Y2),
 		ButtonState:     vtinput.FromLeft1stButtonPressed,
 		MouseEventFlags: vtinput.MouseMoved,
 	})
@@ -1852,12 +1852,12 @@ func TestFileSystemPanel_ScrollBarDrawAndMouse(t *testing.T) {
 	thumbY := fp.scrollBar.Y1 + 1
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(fp.X2), MouseY: int16(thumbY),
+		MouseX: testInt16(fp.X2), MouseY: testInt16(thumbY),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: 0, MouseY: int16(fp.scrollBar.Y2 - 1),
+		MouseX: 0, MouseY: testInt16(fp.scrollBar.Y2 - 1),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 	fp.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType})
@@ -1889,7 +1889,7 @@ func TestFileSystemPanel_ScrollBarHiddenWhenGridFits(t *testing.T) {
 	fp.drawScrollBar(scr)
 	dataY := fp.table.Y1 + fp.table.MarginTop
 	if got := scr.GetCell(fp.X2, dataY).Char; got != 0 {
-		t.Fatalf("scrollbar drawn for fitting Brief grid: %q", rune(got))
+		t.Fatalf("scrollbar drawn for fitting Brief grid: %q", testRune(got))
 	}
 }
 
@@ -1907,11 +1907,11 @@ func TestFileSystemPanel_ScrollBarDisabled(t *testing.T) {
 	fp.drawScrollBar(scr)
 	y := fp.table.Y1 + fp.table.MarginTop
 	if got := scr.GetCell(fp.X2, y).Char; got != 0 {
-		t.Fatalf("disabled panel scrollbar drew %q", rune(got))
+		t.Fatalf("disabled panel scrollbar drew %q", testRune(got))
 	}
 	if fp.processScrollBarMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(fp.X2), MouseY: int16(y),
+		MouseX: testInt16(fp.X2), MouseY: testInt16(y),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	}) {
 		t.Fatal("disabled panel scrollbar handled mouse input")
@@ -1951,31 +1951,31 @@ func TestFileSystemPanel_MinimalScrollBarDrawAndMouse(t *testing.T) {
 		inHandle := offset >= caretPos && offset < caretPos+caretLength
 		if inHandle {
 			if cell.Char != '│' || cell.Attributes != vtui.Palette[ColPanelMinimalScrollbar] {
-				t.Fatalf("minimal handle cell %d = %q/%#x, want bright border", offset, rune(cell.Char), cell.Attributes)
+				t.Fatalf("minimal handle cell %d = %q/%#x, want bright border", offset, testRune(cell.Char), cell.Attributes)
 			}
 		} else if cell.Char != 0 {
-			t.Fatalf("minimal scrollbar drew track or arrow at offset %d: %q", offset, rune(cell.Char))
+			t.Fatalf("minimal scrollbar drew track or arrow at offset %d: %q", offset, testRune(cell.Char))
 		}
 	}
 
 	outsideHandleY := fp.scrollBar.Y1 + caretPos + caretLength
 	if outsideHandleY <= fp.scrollBar.Y2 && fp.processScrollBarMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(fp.scrollBar.X1), MouseY: int16(outsideHandleY),
+		MouseX: testInt16(fp.scrollBar.X1), MouseY: testInt16(outsideHandleY),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	}) {
 		t.Fatal("minimal scrollbar handled a click on the invisible track")
 	}
 	if !fp.processScrollBarMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(fp.scrollBar.X1), MouseY: int16(fp.scrollBar.Y1 + caretPos),
+		MouseX: testInt16(fp.scrollBar.X1), MouseY: testInt16(fp.scrollBar.Y1 + caretPos),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	}) {
 		t.Fatal("minimal scrollbar did not capture its handle")
 	}
 	if !fp.processScrollBarMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: 0, MouseY: int16(fp.scrollBar.Y2),
+		MouseX: 0, MouseY: testInt16(fp.scrollBar.Y2),
 		ButtonState: vtinput.FromLeft1stButtonPressed, MouseEventFlags: vtinput.MouseMoved,
 	}) {
 		t.Fatal("minimal scrollbar did not drag its captured handle")
@@ -2060,7 +2060,7 @@ func TestFileSystemPanel_CursorColorsColumnSeparators(t *testing.T) {
 				x += fp.table.Columns[column].Width
 				cell := scr.GetCell(x, y)
 				if cell.Char != '│' {
-					t.Fatalf("separator %d char = %q, want │", column, rune(cell.Char))
+					t.Fatalf("separator %d char = %q, want │", column, testRune(cell.Char))
 				}
 				boxAttr := vtui.Palette[ColPanelBox]
 				cursorAttr := vtui.Palette[ColPanelSelectedCursor]
@@ -2153,14 +2153,14 @@ func TestFileSystemPanel_RightDragAppliesToSkippedRows(t *testing.T) {
 	rightDown := func(idx int) {
 		fp.ProcessMouse(&vtinput.InputEvent{
 			Type: vtinput.MouseEventType, KeyDown: true,
-			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+			MouseX: testInt16(fp.table.X1), MouseY: testInt16(dataY + idx),
 			ButtonState: vtinput.RightmostButtonPressed,
 		})
 	}
 	release := func(idx int) {
 		fp.ProcessMouse(&vtinput.InputEvent{
 			Type:   vtinput.MouseEventType,
-			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+			MouseX: testInt16(fp.table.X1), MouseY: testInt16(dataY + idx),
 		})
 	}
 
@@ -2206,12 +2206,12 @@ func TestFileSystemPanel_RightDragTracksGridColumn(t *testing.T) {
 
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(leftX), MouseY: int16(dataY + height - 2),
+		MouseX: testInt16(leftX), MouseY: testInt16(dataY + height - 2),
 		ButtonState: vtinput.RightmostButtonPressed,
 	})
 	fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(rightX), MouseY: int16(dataY + 1),
+		MouseX: testInt16(rightX), MouseY: testInt16(dataY + 1),
 		ButtonState: vtinput.RightmostButtonPressed,
 	})
 
@@ -2241,14 +2241,14 @@ func TestFileSystemPanel_RightDoubleClickAppliesToWholePanel(t *testing.T) {
 	rightClick := func(idx int, flags uint32) {
 		fp.ProcessMouse(&vtinput.InputEvent{
 			Type: vtinput.MouseEventType, KeyDown: true,
-			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+			MouseX: testInt16(fp.table.X1), MouseY: testInt16(dataY + idx),
 			ButtonState: vtinput.RightmostButtonPressed, MouseEventFlags: flags,
 		})
 	}
 	release := func(idx int) {
 		fp.ProcessMouse(&vtinput.InputEvent{
 			Type:   vtinput.MouseEventType,
-			MouseX: int16(fp.table.X1), MouseY: int16(dataY + idx),
+			MouseX: testInt16(fp.table.X1), MouseY: testInt16(dataY + idx),
 		})
 	}
 
@@ -2480,7 +2480,7 @@ func TestFileSystemPanel_NavigateDown_CursorReset(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "subdir")
-	if err := os.Mkdir(sub, 0755); err != nil {
+	if err := os.Mkdir(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2719,10 +2719,10 @@ func TestFileSystemPanel_FastFind_Rendering(t *testing.T) {
 	fp.fastFindStr = "*test"
 	fp.Show(scr)
 	if got := scr.GetCell(inputX, inputY).Char; got != '*' {
-		t.Fatalf("anywhere-mode marker = %q, want '*'", rune(got))
+		t.Fatalf("anywhere-mode marker = %q, want '*'", testRune(got))
 	}
 	if got := scr.GetCell(inputX+1, inputY).Char; got != 't' {
-		t.Fatalf("query after anywhere-mode marker starts with %q, want 't'", rune(got))
+		t.Fatalf("query after anywhere-mode marker starts with %q, want 't'", testRune(got))
 	}
 
 	fp.fastFindStr = "missing"
@@ -3115,20 +3115,20 @@ func TestFileSystemPanel_TitleDoesNotContainSortIndicator(t *testing.T) {
 	fp.sortReverse = true
 	fp.Show(scr)
 
-	if got := rune(scr.GetCell(2, 0).Char); got != ' ' {
+	if got := testRune(scr.GetCell(2, 0).Char); got != ' ' {
 		t.Fatalf("title decoration starts with %q; want a space", got)
 	}
-	if got := rune(scr.GetCell(3, 0).Char); got != 'C' {
+	if got := testRune(scr.GetCell(3, 0).Char); got != 'C' {
 		t.Fatalf("first title character = %q; sort indicator still occupies the title", got)
 	}
-	if got := rune(scr.GetCell(10, 0).Char); got != ' ' {
+	if got := testRune(scr.GetCell(10, 0).Char); got != ' ' {
 		t.Fatalf("title decoration ends with %q; want a space", got)
 	}
 
 	fp.sortMode = SortSize
 	fp.sortReverse = false
 	fp.Show(scr)
-	if got := rune(scr.GetCell(3, 0).Char); got != 'C' {
+	if got := testRune(scr.GetCell(3, 0).Char); got != 'C' {
 		t.Fatalf("changing sort mode changed the path title prefix to %q", got)
 	}
 }
@@ -3352,7 +3352,7 @@ func TestFileSystemPanel_HeaderClickSortsAndToggles(t *testing.T) {
 	clickName := func(flags uint32) bool {
 		return fp.ProcessMouse(&vtinput.InputEvent{
 			Type: vtinput.MouseEventType, KeyDown: true,
-			MouseX: int16(fp.table.X1), MouseY: int16(fp.table.Y1),
+			MouseX: testInt16(fp.table.X1), MouseY: testInt16(fp.table.Y1),
 			ButtonState: vtinput.FromLeft1stButtonPressed, MouseEventFlags: flags,
 		})
 	}
@@ -3385,7 +3385,7 @@ func TestFileSystemPanel_HeaderClickSortsAndToggles(t *testing.T) {
 	hiddenX := fp.table.X1 + fp.table.Columns[0].Width - runewidth.StringWidth(hiddenTitle)
 	if !fp.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(hiddenX), MouseY: int16(fp.table.Y1),
+		MouseX: testInt16(hiddenX), MouseY: testInt16(fp.table.Y1),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	}) || fp.sortMode != SortExt || !fp.sortReverse {
 		t.Fatalf("hidden Extension header click: mode=%v reverse=%v title=%q", fp.sortMode, fp.sortReverse, fp.table.Columns[0].Title)
@@ -4821,7 +4821,7 @@ func TestFileSystemPanel_SelectionColorInMultiColumnViewMode(t *testing.T) {
 	}
 
 	tmp := t.TempDir()
-	if err := os.Mkdir(filepath.Join(tmp, "adir"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmp, "adir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 

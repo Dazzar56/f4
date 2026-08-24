@@ -68,7 +68,7 @@ func writeLangCoverageBaseline(path string, coverage map[string]int) error {
 			return err
 		}
 	}
-	return os.WriteFile(path, []byte(builder.String()), 0644)
+	return os.WriteFile(path, []byte(builder.String()), 0600)
 }
 
 func TestLangConsistency(t *testing.T) {

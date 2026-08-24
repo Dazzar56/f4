@@ -971,7 +971,7 @@ func TestActionCopy_ShiftF5_Prefill(t *testing.T) {
 	// Setup actual existing paths using t.TempDir()
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "src")
-	if err := os.MkdirAll(srcPath, 0755); err != nil {
+	if err := os.MkdirAll(srcPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1556,7 +1556,7 @@ func TestSession_OldFileDefaultsWideOff(t *testing.T) {
 	getSessionIniPath = func() string { return filepath.Join(tmpDir, "session.ini") }
 	defer func() { getSessionIniPath = origPathFunc }()
 
-	if err := os.WriteFile(getSessionIniPath(), []byte("[Session]\nActivePanel = 0\n"), 0644); err != nil {
+	if err := os.WriteFile(getSessionIniPath(), []byte("[Session]\nActivePanel = 0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	LastWidePanel = 1
@@ -2680,7 +2680,7 @@ func TestActionEditFile_DirectoryRedirectsToAttributes(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDirName := "sub_folder"
 	subDirPath := filepath.Join(tmpDir, subDirName)
-	if err := os.Mkdir(subDirPath, 0755); err != nil {
+	if err := os.Mkdir(subDirPath, 0700); err != nil {
 		t.Fatalf("Failed to create sub directory: %v", err)
 	}
 
@@ -2738,10 +2738,10 @@ func TestActionCreateLink_Flow(t *testing.T) {
 
 	srcDir := filepath.Join(tmpDir, "src")
 	dstDir := filepath.Join(tmpDir, "dst")
-	if err := os.MkdirAll(srcDir, 0755); err != nil {
+	if err := os.MkdirAll(srcDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 

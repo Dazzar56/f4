@@ -26,7 +26,7 @@ func TestUpdateFailureMessageRepro(t *testing.T) {
 		exeName = "f4.exe"
 	}
 	exePath := filepath.Join(tmpDir, exeName)
-	if err := os.WriteFile(exePath, []byte("original binary content"), 0755); err != nil {
+	if err := os.WriteFile(exePath, []byte("original binary content"), 0755); err != nil { // #nosec G306 -- the updater fixture represents an executable binary.
 		t.Fatal(err)
 	}
 
@@ -48,17 +48,17 @@ func TestUpdateFailureMessageRepro(t *testing.T) {
 		// We also make the file itself read-only, because if rename fails, writeFileSafe
 		// will fall back to truncating the existing file, which would otherwise succeed
 		// if the file itself is writable.
-		if err := os.Chmod(exePath, 0444); err != nil {
+		if err := os.Chmod(exePath, 0444); err != nil { // #nosec G302 -- the read-only executable is required to exercise update failure.
 			t.Fatal(err)
 		}
-		if err := os.Chmod(tmpDir, 0555); err != nil {
+		if err := os.Chmod(tmpDir, 0555); err != nil { // #nosec G302 -- the non-writable directory is required to exercise update failure.
 			t.Fatal(err)
 		}
 		t.Cleanup(func() {
-			if err := os.Chmod(tmpDir, 0755); err != nil {
+			if err := os.Chmod(tmpDir, 0755); err != nil { // #nosec G302 -- cleanup must restore access to the deliberately locked directory.
 				t.Errorf("restore temporary directory permissions: %v", err)
 			}
-			if err := os.Chmod(exePath, 0755); err != nil {
+			if err := os.Chmod(exePath, 0755); err != nil { // #nosec G302 -- cleanup restores the fixture's executable mode.
 				t.Errorf("restore executable permissions: %v", err)
 			}
 		})

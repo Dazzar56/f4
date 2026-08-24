@@ -117,13 +117,13 @@ func TestRecursiveCopyAppliesTransferNamesAtEveryDepth(t *testing.T) {
 	sourceRoot := t.TempDir()
 	destinationRoot := t.TempDir()
 	sourceDir := filepath.Join(sourceRoot, "root")
-	if err := os.MkdirAll(filepath.Join(sourceDir, "nested [c3d4]"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(sourceDir, "nested [c3d4]"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sourceDir, "document.gdoc [a1b2]"), []byte("doc"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, "document.gdoc [a1b2]"), []byte("doc"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sourceDir, "nested [c3d4]", "sheet.gsheet [e5f6]"), []byte("sheet"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, "nested [c3d4]", "sheet.gsheet [e5f6]"), []byte("sheet"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

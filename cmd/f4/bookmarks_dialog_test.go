@@ -85,7 +85,7 @@ func TestNewBookmarksDialog_LoadFailureReturnsError(t *testing.T) {
 	// A directory where the INI is expected: opening succeeds, reading
 	// does not. The dialog must report that instead of crashing.
 	path := filepath.Join(t.TempDir(), "bookmarks.ini")
-	if err := os.Mkdir(path, 0o755); err != nil {
+	if err := os.Mkdir(path, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	d, err := newBookmarksDialog(nil, path)

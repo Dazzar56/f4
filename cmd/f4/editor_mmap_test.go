@@ -52,7 +52,7 @@ func TestMappedEditor_SearchAllocatesNothing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "big.txt")
 	content := strings.Repeat("the quick brown fox\n", 200000) // ~4 MB
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,7 +102,7 @@ func TestMappedEditor_IndexesWithoutAnAsyncBuffer(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lines.txt")
 	const lines = 5000
-	if err := os.WriteFile(path, []byte(strings.Repeat("a line of text\n", lines)), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Repeat("a line of text\n", lines)), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +138,7 @@ func TestMappedEditor_EditsAndSaves(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "edit.txt")
-	if err := os.WriteFile(path, []byte("hello world\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("hello world\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -204,7 +204,7 @@ func TestMappedEditor_IndexReadsTheFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lines.txt")
 	const lines = 20000
-	if err := os.WriteFile(path, []byte(strings.Repeat("a line of text\n", lines)), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Repeat("a line of text\n", lines)), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -249,7 +249,7 @@ func TestMappedEditor_EditedTextIsScannedFromTheBuffer(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "edited.txt")
 	const lines = 5000
-	if err := os.WriteFile(path, []byte(strings.Repeat("original line\n", lines)), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Repeat("original line\n", lines)), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -318,7 +318,7 @@ func TestMappedEditor_SwappedBufferIsNotReadFromTheFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "reload.txt")
 	content := strings.Repeat("a line of the file\n", 500)
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 

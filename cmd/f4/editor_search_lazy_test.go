@@ -52,7 +52,7 @@ func lazyEditorBuffer(t *testing.T, content string) (*piecetable.PieceTable, *As
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "big.txt")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 

@@ -57,7 +57,7 @@ func TestScaffoldPluginWritesItsFiles(t *testing.T) {
 
 func TestScaffoldPluginRefusesToOverwrite(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "important.txt"), []byte("mine"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "important.txt"), []byte("mine"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 

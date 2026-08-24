@@ -377,8 +377,8 @@ func TestActionCommandHistory_MouseClickPastesEntry(t *testing.T) {
 	menu.ProcessMouse(&vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
-		MouseX:      int16(x1 + 2),
-		MouseY:      int16(rowY),
+		MouseX:      testInt16(x1 + 2),
+		MouseY:      testInt16(rowY),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 
@@ -398,7 +398,7 @@ func TestActionCommandHistory_PathColumnAndInsertion(t *testing.T) {
 	t.Cleanup(func() { vtui.GlobalHistoryProvider = previous })
 
 	path := filepath.Join(t.TempDir(), "folder with space")
-	if err := os.Mkdir(path, 0o755); err != nil {
+	if err := os.Mkdir(path, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	rememberCommandHistoryPath("echo newest", path, provider["cmdline"])
@@ -510,8 +510,8 @@ func TestActionFoldersHistory_MouseClickNavigates(t *testing.T) {
 	menu.ProcessMouse(&vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
-		MouseX:      int16(x1 + 2),
-		MouseY:      int16(rowY),
+		MouseX:      testInt16(x1 + 2),
+		MouseY:      testInt16(rowY),
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	})
 

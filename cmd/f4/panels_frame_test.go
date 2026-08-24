@@ -44,10 +44,10 @@ func TestPanelsFrame_WorkspaceTabTitleUsesFolderNames(t *testing.T) {
 	root := t.TempDir()
 	leftPath := filepath.Join(root, "left-leaf")
 	rightPath := filepath.Join(root, "right-leaf")
-	if err := os.MkdirAll(leftPath, 0755); err != nil {
+	if err := os.MkdirAll(leftPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(rightPath, 0755); err != nil {
+	if err := os.MkdirAll(rightPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -70,10 +70,10 @@ func TestPanelsFrame_WorkspaceMenuInfoUsesFullPanelPaths(t *testing.T) {
 	root := t.TempDir()
 	leftPath := filepath.Join(root, "left", "nested")
 	rightPath := filepath.Join(root, "right", "nested")
-	if err := os.MkdirAll(leftPath, 0755); err != nil {
+	if err := os.MkdirAll(leftPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(rightPath, 0755); err != nil {
+	if err := os.MkdirAll(rightPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -423,12 +423,12 @@ func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
 	oldUserConfigDir := userConfigDir
 	userConfigDir = func() (string, error) { return cfg, nil }
 	t.Cleanup(func() { userConfigDir = oldUserConfigDir })
-	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	target := t.TempDir()
 	if err := os.WriteFile(filepath.Join(cfg, "f4", "settings", "bookmarks.ini"),
-		[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+		[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -485,7 +485,7 @@ func TestPanelsFrame_DriveMenuExpandsBookmarkPath(t *testing.T) {
 	oldUserConfigDir := userConfigDir
 	userConfigDir = func() (string, error) { return cfg, nil }
 	t.Cleanup(func() { userConfigDir = oldUserConfigDir })
-	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -497,7 +497,7 @@ func TestPanelsFrame_DriveMenuExpandsBookmarkPath(t *testing.T) {
 		filepath.Join(home, "sub"),
 		filepath.Join(home, "literal"),
 	} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -526,7 +526,7 @@ func TestPanelsFrame_DriveMenuExpandsBookmarkPath(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := os.WriteFile(BookmarksFilePath(),
-				[]byte("[6]\nPath="+tc.path+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+				[]byte("[6]\nPath="+tc.path+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 
@@ -618,14 +618,14 @@ func TestPanelsFrame_DriveMenuBookmarkKeys(t *testing.T) {
 	oldUserConfigDir := userConfigDir
 	userConfigDir = func() (string, error) { return cfg, nil }
 	t.Cleanup(func() { userConfigDir = oldUserConfigDir })
-	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg, "f4", "settings"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	ini := filepath.Join(cfg, "f4", "settings", "bookmarks.ini")
 	target := t.TempDir()
 	write := func() {
 		if err := os.WriteFile(ini,
-			[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o644); err != nil {
+			[]byte("[6]\nPath="+target+"\nPlugin=\nPluginData=\nPluginFile=\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1264,7 +1264,7 @@ func TestPanelsFrame_RightClickHeaderOpensPanelCenteredSortMenu(t *testing.T) {
 
 	if !pf.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(left.table.X1), MouseY: int16(left.table.Y1),
+		MouseX: testInt16(left.table.X1), MouseY: testInt16(left.table.Y1),
 		ButtonState: vtinput.RightmostButtonPressed,
 	}) {
 		t.Fatal("right click on column header was not handled")
@@ -1314,7 +1314,7 @@ func TestPanelsFrame_RightClickPanelPathOpensDriveMenuForThatPanel(t *testing.T)
 
 	if !pf.ProcessMouse(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		MouseX: int16(right.X1 + 3), MouseY: int16(right.Y1),
+		MouseX: testInt16(right.X1 + 3), MouseY: testInt16(right.Y1),
 		ButtonState: vtinput.RightmostButtonPressed,
 	}) {
 		t.Fatal("right click on the panel path was not handled")
@@ -1460,10 +1460,10 @@ func TestPanelsFrame_CtrlBrackets_Insertion(t *testing.T) {
 	tmp := t.TempDir()
 	leftPath := filepath.Join(tmp, "left")
 	rightPath := filepath.Join(tmp, "right")
-	if err := os.MkdirAll(leftPath, 0755); err != nil {
+	if err := os.MkdirAll(leftPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(rightPath, 0755); err != nil {
+	if err := os.MkdirAll(rightPath, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1514,10 +1514,10 @@ func TestCtrlBracketsInsertPanelPathsIntoFocusedEdit(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 	leftPath := filepath.Join(t.TempDir(), "left path")
 	rightPath := filepath.Join(t.TempDir(), "right path")
-	if err := os.MkdirAll(leftPath, 0o755); err != nil {
+	if err := os.MkdirAll(leftPath, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(rightPath, 0o755); err != nil {
+	if err := os.MkdirAll(rightPath, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := pf.panels[0].(*FileSystemPanel).vfs.SetPath(leftPath); err != nil {
@@ -2112,10 +2112,10 @@ func TestPanelsFrame_SwapPanels(t *testing.T) {
 
 	pathL := filepath.Join(t.TempDir(), "left")
 	pathR := filepath.Join(t.TempDir(), "right")
-	if err := os.MkdirAll(pathL, 0755); err != nil {
+	if err := os.MkdirAll(pathL, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(pathR, 0755); err != nil {
+	if err := os.MkdirAll(pathR, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2169,10 +2169,10 @@ func TestPanelsFrame_VisualLeftRightFollowSwap(t *testing.T) {
 
 	pathL := filepath.Join(t.TempDir(), "left")
 	pathR := filepath.Join(t.TempDir(), "right")
-	if err := os.MkdirAll(pathL, 0755); err != nil {
+	if err := os.MkdirAll(pathL, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(pathR, 0755); err != nil {
+	if err := os.MkdirAll(pathR, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2325,7 +2325,7 @@ func TestPanelsFrame_Prompt_WithProvider(t *testing.T) {
 	promptStr := ""
 	for _, c := range prompt {
 		if c.Char != vtui.WideCharFiller {
-			promptStr += string(rune(c.Char))
+			promptStr += string(testRune(c.Char))
 		}
 	}
 
@@ -2420,10 +2420,10 @@ func TestPanelsFrame_GetPaths(t *testing.T) {
 	tmp := t.TempDir()
 	pathL := filepath.Join(tmp, "left")
 	pathR := filepath.Join(tmp, "right")
-	if err := os.MkdirAll(pathL, 0755); err != nil {
+	if err := os.MkdirAll(pathL, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(pathR, 0755); err != nil {
+	if err := os.MkdirAll(pathR, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2715,7 +2715,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 
 	// 4. Директория -> false
 	subDir := filepath.Join(tmpDir, "folder")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if vfs.IsTerminalRunnable(context.Background(), v, subDir) {
@@ -2728,7 +2728,7 @@ func TestIsTerminalRunnable(t *testing.T) {
 		if err := os.WriteFile(execFile, []byte{0x7f, 'E', 'L', 'F'}, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chmod(execFile, 0700); err != nil {
+		if err := os.Chmod(execFile, 0700); err != nil { // #nosec G302 -- the executable bit is the behavior under test.
 			t.Fatal(err)
 		}
 		if !vfs.IsTerminalRunnable(context.Background(), v, execFile) {
@@ -2990,7 +2990,7 @@ func TestPanelsFrame_DirectoryEnter(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "work_dir")
-	if err := os.Mkdir(sub, 0755); err != nil {
+	if err := os.Mkdir(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3808,7 +3808,7 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 	pf.ResizeConsole(80, 25)
 
 	pathR := filepath.Join(t.TempDir(), "right")
-	if err := os.MkdirAll(pathR, 0755); err != nil {
+	if err := os.MkdirAll(pathR, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := pf.panels[1].(*FileSystemPanel).vfs.SetPath(pathR); err != nil {
@@ -4066,7 +4066,7 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 		promptStr := ""
 		for _, c := range prompt {
 			if c.Char != vtui.WideCharFiller {
-				promptStr += string(rune(c.Char))
+				promptStr += string(testRune(c.Char))
 			}
 		}
 		if strings.Contains(promptStr, "home") {
@@ -4096,7 +4096,7 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 		for _, c := range prompt {
 			if c.Char != vtui.WideCharFiller {
 				visibleLen++
-				promptStr += string(rune(c.Char))
+				promptStr += string(testRune(c.Char))
 			}
 		}
 		if visibleLen > 45 {
@@ -4118,7 +4118,7 @@ func TestPanelsFrame_PromptTruncation(t *testing.T) {
 		for _, c := range prompt {
 			if c.Char != vtui.WideCharFiller {
 				visibleLen++
-				promptStr += string(rune(c.Char))
+				promptStr += string(testRune(c.Char))
 			}
 		}
 
@@ -4509,7 +4509,7 @@ func TestArchiveBulkExtract_ProgressTracking(t *testing.T) {
 	defer func() { _ = arcVFS.Close() }()
 
 	destDir := filepath.Join(tmpDir, "extracted")
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	dstVFS := vfs.NewOSVFS(destDir)
@@ -4787,8 +4787,8 @@ func TestPanelsFrame_MiddleClick_LaunchesFile(t *testing.T) {
 	// Симулируем клик колесом мыши по первой строке
 	ev := &vtinput.InputEvent{
 		Type:        vtinput.MouseEventType,
-		MouseX:      int16(fsp.X1 + 5),
-		MouseY:      int16(fsp.Y1 + 1), // Клик по первой строке
+		MouseX:      testInt16(fsp.X1 + 5),
+		MouseY:      testInt16(fsp.Y1 + 1), // Клик по первой строке
 		ButtonState: vtinput.FromLeft2ndButtonPressed,
 		KeyDown:     true,
 	}
@@ -4821,7 +4821,7 @@ func TestPanelsFrame_CtrlBackslash_GoesToRoot(t *testing.T) {
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "a", "b", "c")
-	if err := os.MkdirAll(sub, 0755); err != nil {
+	if err := os.MkdirAll(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := fsp.vfs.SetPath(sub); err != nil {
@@ -4863,7 +4863,7 @@ func TestPanelsFrame_CtrlPgUp_GoesToParentOrDriveMenu(t *testing.T) {
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "sub")
-	if err := os.MkdirAll(sub, 0755); err != nil {
+	if err := os.MkdirAll(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := fsp.vfs.SetPath(sub); err != nil {
@@ -4921,7 +4921,7 @@ func TestPanelsFrame_CtrlPgDn_EntersDir(t *testing.T) {
 	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
 	tmp := t.TempDir()
 	sub := filepath.Join(tmp, "sub")
-	if err := os.MkdirAll(sub, 0755); err != nil {
+	if err := os.MkdirAll(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := fsp.vfs.SetPath(tmp); err != nil {
@@ -5112,7 +5112,7 @@ func TestPanelsFrame_ShiftEnter_ExplorerLaunch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "doc.txt"), []byte("data"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(tmp, "sub"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmp, "sub"), 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -5739,8 +5739,8 @@ func TestPanelsFrame_ProcessMouse_HoverWheel(t *testing.T) {
 
 	ev := &vtinput.InputEvent{
 		Type:           vtinput.MouseEventType,
-		MouseX:         int16(lx1 + 2),
-		MouseY:         int16(ly1 + 2),
+		MouseX:         testInt16(lx1 + 2),
+		MouseY:         testInt16(ly1 + 2),
 		WheelDirection: -1, // Down scroll -> should move cursor down
 	}
 
@@ -5801,8 +5801,8 @@ func TestPanelsFrame_ProcessMouse_HoverWheel_AltPanel(t *testing.T) {
 	// Simulate wheel over the left slot (where QuickView is)
 	ev := &vtinput.InputEvent{
 		Type:           vtinput.MouseEventType,
-		MouseX:         int16(lx1 + 2),
-		MouseY:         int16(ly1 + 2),
+		MouseX:         testInt16(lx1 + 2),
+		MouseY:         testInt16(ly1 + 2),
 		WheelDirection: -1, // Down scroll
 	}
 
@@ -5866,8 +5866,8 @@ func TestPanelsFrame_ProcessMouse_HoverWheel_Medium_Boundaries(t *testing.T) {
 	lx1, ly1, _, _ := lp.GetPosition()
 	ev := &vtinput.InputEvent{
 		Type:           vtinput.MouseEventType,
-		MouseX:         int16(lx1 + 2),
-		MouseY:         int16(ly1 + 2),
+		MouseX:         testInt16(lx1 + 2),
+		MouseY:         testInt16(ly1 + 2),
 		WheelDirection: 1, // Up scroll
 	}
 
@@ -5937,8 +5937,8 @@ func TestPanelsFrame_ProcessMouse_HoverWheel_Detailed_Boundaries(t *testing.T) {
 	lx1, ly1, _, _ := lp.GetPosition()
 	ev := &vtinput.InputEvent{
 		Type:           vtinput.MouseEventType,
-		MouseX:         int16(lx1 + 2),
-		MouseY:         int16(ly1 + 2),
+		MouseX:         testInt16(lx1 + 2),
+		MouseY:         testInt16(ly1 + 2),
 		WheelDirection: -1, // Down scroll
 	}
 
@@ -5982,8 +5982,8 @@ func TestFilePanel_WheelScrollSpeed(t *testing.T) {
 	wheel := func(dir int) {
 		ev := &vtinput.InputEvent{
 			Type:           vtinput.MouseEventType,
-			MouseX:         int16(x1 + 2),
-			MouseY:         int16(y1 + 2),
+			MouseX:         testInt16(x1 + 2),
+			MouseY:         testInt16(y1 + 2),
 			WheelDirection: dir,
 		}
 		if !p.ProcessMouse(ev) {

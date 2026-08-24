@@ -13,7 +13,7 @@ func gradientSurface(w, h int) *vtui.ImageSurface {
 	s := vtui.NewImageSurface(w, h)
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			s.SetPixel(x, y, byte(x+1), byte(y+1), byte(x*h+y+1), 255)
+			s.SetPixel(x, y, testUint8(x+1), testUint8(y+1), testUint8(x*h+y+1), 255)
 		}
 	}
 	return s
