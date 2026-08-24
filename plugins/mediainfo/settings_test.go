@@ -2,6 +2,7 @@ package mediainfo
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,7 @@ func TestSettingsConcurrentSavesKeepMemoryAndDiskInSync(t *testing.T) {
 		go func(index int) {
 			defer group.Done()
 			settings := DefaultSettings()
-			settings.Prefix = "MediaInfo" + string(rune('A'+index))
+			settings.Prefix = fmt.Sprintf("MediaInfo%c", 'A'+index)
 			if err := store.save(settings); err != nil {
 				t.Errorf("save %d: %v", index, err)
 			}
@@ -95,7 +96,7 @@ func TestSettingsRejectInvalidPrefixAndOversizedTemplate(t *testing.T) {
 func TestSettingsMalformedFileFallsBackToDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "plugins", "mediainfo.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {

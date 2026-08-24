@@ -42,8 +42,8 @@ func TestReportViewUsesDialogThemeAndDimsFieldNames(t *testing.T) {
 	if got := screen.GetCell(valueX, 2).Attributes; got != normal {
 		t.Fatalf("field-value attr = %#x, want dialog text %#x", got, normal)
 	}
-	if cell := screen.GetCell(view.X2, view.Y1); rune(cell.Char) != rune(vtui.ScrollUpArrow) || cell.Attributes != box {
-		t.Fatalf("overflow scrollbar cell = %#v, want arrow %q with dialog box attr %#x", cell, rune(vtui.ScrollUpArrow), box)
+	if cell := screen.GetCell(view.X2, view.Y1); cell.Char != vtui.ScrollUpArrow || cell.Attributes != box {
+		t.Fatalf("overflow scrollbar cell = %#v, want arrow %#x with dialog box attr %#x", cell, vtui.ScrollUpArrow, box)
 	}
 
 	view.SetFocus(true)
@@ -83,7 +83,7 @@ func TestReportViewHidesScrollbarWhenContentFits(t *testing.T) {
 		screen.FillRect(view.X2, y, view.X2, y, '│', border)
 	}
 	view.Show(screen)
-	if cell := screen.GetCell(view.X2, view.Y1); rune(cell.Char) != '│' || cell.Attributes != border {
+	if cell := screen.GetCell(view.X2, view.Y1); cell.Char != '│' || cell.Attributes != border {
 		t.Fatalf("fitting report overwrote dialog border: %#v", cell)
 	}
 }
@@ -103,7 +103,7 @@ func TestReportViewResizeClampsScrollPosition(t *testing.T) {
 	screen := vtui.NewSilentScreenBuf()
 	screen.AllocBuf(80, 25)
 	view.Show(screen)
-	if got := rune(screen.GetCell(view.X2, view.Y1).Char); got == rune(vtui.ScrollUpArrow) {
+	if got := screen.GetCell(view.X2, view.Y1).Char; got == vtui.ScrollUpArrow {
 		t.Fatal("grown report view retained a scrollbar although all rows fit")
 	}
 
@@ -112,8 +112,8 @@ func TestReportViewResizeClampsScrollPosition(t *testing.T) {
 		t.Fatalf("shrunk view = height %d, top %d; want height 4, top 2", view.ViewHeight, view.TopPos)
 	}
 	view.Show(screen)
-	if got := rune(screen.GetCell(view.X2, view.Y1).Char); got != rune(vtui.ScrollUpArrow) {
-		t.Fatalf("shrunk report view scrollbar = %q, want %q", got, rune(vtui.ScrollUpArrow))
+	if got := screen.GetCell(view.X2, view.Y1).Char; got != vtui.ScrollUpArrow {
+		t.Fatalf("shrunk report view scrollbar = %#x, want %#x", got, vtui.ScrollUpArrow)
 	}
 }
 

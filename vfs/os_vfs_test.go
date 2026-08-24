@@ -95,7 +95,7 @@ func TestOSVFS_Symlinks(t *testing.T) {
 
 	// 1. Create a real directory
 	targetDir := filepath.Join(tmpDir, "real_folder")
-	if err := os.Mkdir(targetDir, 0755); err != nil {
+	if err := os.Mkdir(targetDir, 0700); err != nil {
 		t.Fatalf("Failed to create target directory: %v", err)
 	}
 
@@ -218,7 +218,7 @@ func TestOSVFS_SetPath_Validation(t *testing.T) {
 
 	// 1. Existing dir -> Success
 	sub := filepath.Join(tmpDir, "exist")
-	if err := os.Mkdir(sub, 0755); err != nil {
+	if err := os.Mkdir(sub, 0700); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 	if err := v.SetPath(sub); err != nil {
@@ -243,7 +243,7 @@ func TestOSVFS_Abs_Consistency(t *testing.T) {
 	// Test that Abs is relative to the VFS path, not process CWD
 	tmp := t.TempDir()
 	vfsPath := filepath.Join(tmp, "vfs_root")
-	if err := os.Mkdir(vfsPath, 0755); err != nil {
+	if err := os.Mkdir(vfsPath, 0700); err != nil {
 		t.Fatalf("Failed to create VFS root: %v", err)
 	}
 
@@ -264,7 +264,7 @@ func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
 	// Create a folder structure: /tmp/root/subdir
 	tmp := t.TempDir()
 	vfsRoot := filepath.Join(tmp, "vfs_root")
-	if err := os.MkdirAll(vfsRoot, 0755); err != nil {
+	if err := os.MkdirAll(vfsRoot, 0700); err != nil {
 		t.Fatalf("Failed to create VFS root: %v", err)
 	}
 
@@ -289,7 +289,7 @@ func TestOSVFS_Abs_CWD_Independence(t *testing.T) {
 func TestOSVFS_SetPath_Relative(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := "my_sub_folder"
-	if err := os.Mkdir(filepath.Join(tmpDir, subDir), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpDir, subDir), 0700); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 

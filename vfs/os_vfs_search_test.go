@@ -9,7 +9,7 @@ import (
 
 func TestOSVFSFindFilesOptions(t *testing.T) {
 	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, "nested"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(root, "nested"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
@@ -20,7 +20,7 @@ func TestOSVFSFindFilesOptions(t *testing.T) {
 		"nested/empty.dat": "",
 	}
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}

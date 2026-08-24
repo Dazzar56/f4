@@ -270,13 +270,13 @@ func TestFishVFSBrowsesLocalShell(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a file.txt"), []byte("hello"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a file.txt"), []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".hidden"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, "sub dir"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "sub dir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("sub dir", filepath.Join(dir, "link to dir")); err != nil {
@@ -312,8 +312,8 @@ func TestFishVFSBrowsesLocalShell(t *testing.T) {
 	if file.Size != 5 || file.IsDir || file.IsSymlink {
 		t.Errorf("file mapped wrong: %+v", file)
 	}
-	if file.UnixMode&0777 != 0644 {
-		t.Errorf("UnixMode = %o, want 644 in the low bits", file.UnixMode)
+	if file.UnixMode&0777 != 0600 {
+		t.Errorf("UnixMode = %o, want 600 in the low bits", file.UnixMode)
 	}
 	if time.Since(file.MTime) > time.Hour {
 		t.Errorf("MTime = %v, which is nowhere near now", file.MTime)
@@ -348,7 +348,7 @@ func TestFishVFSStatAndOpen(t *testing.T) {
 	dir := t.TempDir()
 	body := strings.Repeat("0123456789", 5000)
 	p := filepath.Join(dir, "payload.bin")
-	if err := os.WriteFile(p, []byte(body), 0755); err != nil {
+	if err := os.WriteFile(p, []byte(body), 0700); err != nil { // #nosec G306 -- executable detection is the behavior under test.
 		t.Fatal(err)
 	}
 
@@ -401,7 +401,7 @@ func TestFishVFSMutations(t *testing.T) {
 	}
 
 	file := filepath.Join(dir, "payload.txt")
-	if err := os.WriteFile(file, []byte("hello"), 0644); err != nil {
+	if err := os.WriteFile(file, []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	moved := filepath.Join(dir, "renamed.txt")
@@ -494,7 +494,7 @@ func TestFishVFSSearch(t *testing.T) {
 	ctx := context.Background()
 	file := filepath.Join(t.TempDir(), "log.txt")
 	content := "alpha\nbeta\ngamma beta\n"
-	if err := os.WriteFile(file, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(file, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -586,7 +586,7 @@ func TestFishVFSClonesShareOneSessionSafely(t *testing.T) {
 	v := newLocalFishVFS(t)
 	dir := t.TempDir()
 	for _, name := range []string{"one", "two", "three"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -686,7 +686,7 @@ func TestFishVFSLineIndex(t *testing.T) {
 
 	dir := t.TempDir()
 	p := filepath.Join(dir, "log with spaces.txt")
-	if err := os.WriteFile(p, []byte("alpha\nbeta\ngamma\n"), 0644); err != nil {
+	if err := os.WriteFile(p, []byte("alpha\nbeta\ngamma\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -728,7 +728,7 @@ func TestFishVFSScan(t *testing.T) {
 	ctx := context.Background()
 
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "tree", "a deep dir"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "tree", "a deep dir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	for name, size := range map[string]int{
@@ -737,7 +737,7 @@ func TestFishVFSScan(t *testing.T) {
 		"tree/a deep dir/three.txt": 1000,
 		"loose.txt":                 7,
 	} {
-		if err := os.WriteFile(filepath.Join(root, name), make([]byte, size), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), make([]byte, size), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -783,7 +783,7 @@ func TestFishVFSFindDuplicates(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "sub dir"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "sub dir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	for name, body := range map[string]string{
@@ -792,7 +792,7 @@ func TestFishVFSFindDuplicates(t *testing.T) {
 		"different.txt":    "the same lengthX\n",
 		"alone.txt":        "on its own\n",
 	} {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -829,7 +829,7 @@ func TestFishVFSPatchFile(t *testing.T) {
 	src := filepath.Join(dir, "original.txt")
 	dst := filepath.Join(dir, "rebuilt.txt")
 	body := []byte("the quick brown fox jumps over the lazy dog")
-	if err := os.WriteFile(src, body, 0644); err != nil {
+	if err := os.WriteFile(src, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -859,13 +859,13 @@ func TestFishVFSFindFiles(t *testing.T) {
 	ctx := context.Background()
 
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "nested dir"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "nested dir"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "top.txt"), []byte("needle here\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "top.txt"), []byte("needle here\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "nested dir", "deep.txt"), []byte("nothing\n"), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "nested dir", "deep.txt"), []byte("nothing\n"), 0700); err != nil { // #nosec G306 -- result mapping of an executable file is the behavior under test.
 		t.Fatal(err)
 	}
 
@@ -915,7 +915,7 @@ func TestFishVFSServerSideCopyAndMove(t *testing.T) {
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "source.txt")
 	content := []byte("Hello Server-Side Copy/Move")
-	if err := os.WriteFile(srcPath, content, 0644); err != nil {
+	if err := os.WriteFile(srcPath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
 

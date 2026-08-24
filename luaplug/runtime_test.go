@@ -273,11 +273,11 @@ func TestLoadStringSkipsShebang(t *testing.T) {
 }
 func TestLoadFileAddsPackagePath(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "helper.lua"), []byte("return { answer = 42 }"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "helper.lua"), []byte("return { answer = 42 }"), 0o600); err != nil {
 		t.Fatalf("write helper: %v", err)
 	}
 	main := filepath.Join(dir, "plugin.lua")
-	if err := os.WriteFile(main, []byte("answer = require('helper').answer"), 0o644); err != nil {
+	if err := os.WriteFile(main, []byte("answer = require('helper').answer"), 0o600); err != nil {
 		t.Fatalf("write plugin: %v", err)
 	}
 

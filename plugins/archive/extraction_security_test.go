@@ -35,7 +35,7 @@ func TestArchiveVFSCopyBulkRejectsTraversal(t *testing.T) {
 			test.write(t, archivePath)
 
 			destination := filepath.Join(workspace, "extracted")
-			if err := os.MkdirAll(destination, 0o755); err != nil {
+			if err := os.MkdirAll(destination, 0o700); err != nil {
 				t.Fatal(err)
 			}
 			outside := filepath.Join(workspace, "escaped.txt")

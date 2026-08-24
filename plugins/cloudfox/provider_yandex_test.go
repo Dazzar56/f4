@@ -81,7 +81,7 @@ func TestYandexTrashAndPermanentDeletePollAcceptedOperation(t *testing.T) {
 			mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = fmt.Fprintf(w, `{"href":%q,"method":"GET"}`, "http://"+r.Host+"/operations/1")
+			_, _ = fmt.Fprintf(w, `{"href":%q,"method":"GET"}`, "http://"+r.Host+"/operations/1") // #nosec G705 -- this closed httptest server uses its own controlled Host to form a fixture operation URL.
 		case r.URL.Path == "/operations/1" && r.Method == http.MethodGet:
 			operationChecks++
 			w.Header().Set("Content-Type", "application/json")

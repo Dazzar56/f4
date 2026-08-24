@@ -685,13 +685,13 @@ func writeFakeADBExecutable(t *testing.T, root string) string {
 		name = "adb.exe"
 	}
 	path := filepath.Join(root, name)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("fake"), 0755); err != nil {
+	if err := os.WriteFile(path, []byte("fake"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if err := os.Chmod(path, 0755); err != nil {
+	if err := os.Chmod(path, 0700); err != nil { // #nosec G302 -- the fake adb must be executable for command-discovery tests.
 		t.Fatalf("Chmod: %v", err)
 	}
 	return path

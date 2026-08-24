@@ -122,7 +122,7 @@ func assertSameIndex(t *testing.T, rng *rand.Rand, step int, got *LineIndex, wan
 // what the blocked layout has to get right: an insert shifts the bases of every
 // later block, and one that adds lines renumbers them as well.
 func TestLineIndex_MatchesDenseImplementation(t *testing.T) {
-	rng := rand.New(rand.NewSource(20260815))
+	rng := rand.New(rand.NewSource(20260815)) // #nosec G404 -- a fixed seed makes this randomized equivalence test reproducible; no security decision uses it.
 
 	for round := 0; round < 20; round++ {
 		li := NewLineIndex()

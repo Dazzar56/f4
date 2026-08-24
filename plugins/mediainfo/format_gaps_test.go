@@ -20,7 +20,7 @@ import (
 
 func isoTestBox(typ string, payload []byte) []byte {
 	b := make([]byte, 8+len(payload))
-	binary.BigEndian.PutUint32(b[:4], uint32(len(b)))
+	binary.BigEndian.PutUint32(b[:4], mediaFixtureUint32(len(b)))
 	copy(b[4:8], typ)
 	copy(b[8:], payload)
 	return b
@@ -75,14 +75,14 @@ func rawTIFFFixture(cr2, dng bool) []byte {
 	}
 	binary.LittleEndian.PutUint16(b[ifd:ifd+2], uint16(entries))
 	pos := ifd + 2
-	put := func(tag, typ uint16, count, value uint32) {
+	put := func(tag, typ uint16, count uint32, value uint16) {
 		binary.LittleEndian.PutUint16(b[pos:pos+2], tag)
 		binary.LittleEndian.PutUint16(b[pos+2:pos+4], typ)
 		binary.LittleEndian.PutUint32(b[pos+4:pos+8], count)
 		if typ == 3 && count == 1 {
-			binary.LittleEndian.PutUint16(b[pos+8:pos+10], uint16(value))
+			binary.LittleEndian.PutUint16(b[pos+8:pos+10], value)
 		} else {
-			binary.LittleEndian.PutUint32(b[pos+8:pos+12], value)
+			binary.LittleEndian.PutUint32(b[pos+8:pos+12], uint32(value))
 		}
 		pos += 12
 	}
@@ -90,7 +90,7 @@ func rawTIFFFixture(cr2, dng bool) []byte {
 	put(0x0101, 4, 1, 4000)
 	put(0x0102, 3, 1, 14)
 	put(0x0103, 3, 1, 7)
-	makeOffset := uint32(180)
+	makeOffset := uint16(180)
 	copy(b[makeOffset:], "Camera Co\x00")
 	put(0x010f, 2, uint32(len("Camera Co\x00")), makeOffset)
 	if dng {
@@ -126,7 +126,7 @@ func TestAnalyzeTIFFBasedCameraRAW(t *testing.T) {
 
 func pngTestChunk(typ string, data []byte) []byte {
 	b := make([]byte, 12+len(data))
-	binary.BigEndian.PutUint32(b[:4], uint32(len(data)))
+	binary.BigEndian.PutUint32(b[:4], mediaFixtureUint32(len(data)))
 	copy(b[4:8], typ)
 	copy(b[8:], data)
 	binary.BigEndian.PutUint32(b[8+len(data):], crc32.ChecksumIEEE(b[4:8+len(data)]))
@@ -186,7 +186,7 @@ func TestAnalyzeGIFSkipsGlobalPalette(t *testing.T) {
 func riffTestChunk(typ string, data []byte) []byte {
 	b := make([]byte, 8+len(data)+(len(data)&1))
 	copy(b, typ)
-	binary.LittleEndian.PutUint32(b[4:8], uint32(len(data)))
+	binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(data)))
 	copy(b[8:], data)
 	return b
 }
@@ -197,7 +197,7 @@ func TestWebPAnimationCountAndDuration(t *testing.T) {
 	vp8x[4], vp8x[7] = 3, 2
 	frame := func(ms int) []byte {
 		d := make([]byte, 16)
-		d[12], d[13], d[14] = byte(ms), byte(ms>>8), byte(ms>>16)
+		d[12], d[13], d[14] = mediaFixtureByte(ms), mediaFixtureByte(ms>>8), mediaFixtureByte(ms>>16)
 		return riffTestChunk("ANMF", d)
 	}
 	payload := append(riffTestChunk("VP8X", vp8x), frame(100)...)
@@ -206,7 +206,7 @@ func TestWebPAnimationCountAndDuration(t *testing.T) {
 	copy(file, "RIFF")
 	copy(file[8:], "WEBP")
 	file = append(file, payload...)
-	binary.LittleEndian.PutUint32(file[4:8], uint32(len(file)-8))
+	binary.LittleEndian.PutUint32(file[4:8], mediaFixtureUint32(len(file)-8))
 	p, err := newProbe(context.Background(), Source{Name: "x.webp", Size: int64(len(file)), Reader: memorySource(file)}, DefaultOptions(ModeFast))
 	if err != nil {
 		t.Fatal(err)
@@ -332,7 +332,7 @@ func TestAnalyzeRF64UsesDS64DataSize(t *testing.T) {
 	copy(b[8:12], "WAVE")
 	copy(b[12:16], "ds64")
 	binary.LittleEndian.PutUint32(b[16:20], 28)
-	binary.LittleEndian.PutUint64(b[20:28], uint64(len(b)-8))
+	binary.LittleEndian.PutUint64(b[20:28], mediaFixtureUint64(len(b)-8))
 	binary.LittleEndian.PutUint64(b[28:36], 8000)
 	binary.LittleEndian.PutUint64(b[36:44], 8000)
 	copy(b[48:52], "fmt ")
@@ -358,7 +358,7 @@ func TestAnalyzeOpenDMLFrameCount(t *testing.T) {
 	chunk := func(id string, payload []byte) []byte {
 		b := make([]byte, 8+len(payload)+(len(payload)&1))
 		copy(b, id)
-		binary.LittleEndian.PutUint32(b[4:8], uint32(len(payload)))
+		binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(payload)))
 		copy(b[8:], payload)
 		return b
 	}
@@ -371,7 +371,7 @@ func TestAnalyzeOpenDMLFrameCount(t *testing.T) {
 	copy(b, "RIFF")
 	copy(b[8:], "AVI ")
 	b = append(b, payload...)
-	binary.LittleEndian.PutUint32(b[4:8], uint32(len(b)-8))
+	binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(b)-8))
 	r, err := analyzeBytes(t, "open-dml.avi", b, ModeFast)
 	if err != nil {
 		t.Fatal(err)
@@ -505,17 +505,17 @@ func TestAVIRejectedStreamDoesNotReusePreviousSTRF(t *testing.T) {
 	chunk := func(id string, payload []byte) []byte {
 		b := make([]byte, 8+len(payload)+(len(payload)&1))
 		copy(b, id)
-		binary.LittleEndian.PutUint32(b[4:8], uint32(len(payload)))
+		binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(payload)))
 		copy(b[8:], payload)
 		return b
 	}
 	strh := make([]byte, 48)
 	copy(strh[:4], "vids")
 	copy(strh[4:8], "H264")
-	strf := func(width int32) []byte {
+	strf := func(width uint32) []byte {
 		b := make([]byte, 40)
 		binary.LittleEndian.PutUint32(b[:4], 40)
-		binary.LittleEndian.PutUint32(b[4:8], uint32(width))
+		binary.LittleEndian.PutUint32(b[4:8], width)
 		binary.LittleEndian.PutUint32(b[8:12], 20)
 		binary.LittleEndian.PutUint16(b[14:16], 24)
 		copy(b[16:20], "H264")
@@ -528,7 +528,7 @@ func TestAVIRejectedStreamDoesNotReusePreviousSTRF(t *testing.T) {
 	copy(b, "RIFF")
 	copy(b[8:], "AVI ")
 	b = append(b, payload...)
-	binary.LittleEndian.PutUint32(b[4:8], uint32(len(b)-8))
+	binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(b)-8))
 	opts := DefaultOptions(ModeFast)
 	opts.MaxStreams = 1
 	r, err := Analyze(context.Background(), Source{Name: "limited.avi", Size: int64(len(b)), Reader: memorySource(b)}, opts)
@@ -636,9 +636,9 @@ func TestAddTagOwnsAcceptedValue(t *testing.T) {
 	p.addTag(target, name, value)
 	got := p.report.Tags[0]
 	if got.Target != target || got.Name != name || got.Value != value ||
-		unsafe.StringData(got.Target) == unsafe.StringData(target) ||
-		unsafe.StringData(got.Name) == unsafe.StringData(name) ||
-		unsafe.StringData(got.Value) == unsafe.StringData(value) {
+		unsafe.StringData(got.Target) == unsafe.StringData(target) || // #nosec G103 -- pointer identity is required to prove the accepted string owns independent backing storage.
+		unsafe.StringData(got.Name) == unsafe.StringData(name) || // #nosec G103 -- pointer identity is required to prove the accepted string owns independent backing storage.
+		unsafe.StringData(got.Value) == unsafe.StringData(value) { // #nosec G103 -- pointer identity is required to prove the accepted string owns independent backing storage.
 		t.Fatalf("accepted field did not own its strings: %#v", got)
 	}
 	p.addTag("", strings.Repeat("N", 2048), "value")

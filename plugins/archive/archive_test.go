@@ -39,7 +39,7 @@ func TestActionExtractArchive_Integrity(t *testing.T) {
 	}
 
 	destDir := filepath.Join(tmpDir, "output")
-	if err := os.Mkdir(destDir, 0755); err != nil {
+	if err := os.Mkdir(destDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -175,7 +175,7 @@ func TestActionExtractArchive_ProgressUpdates(t *testing.T) {
 	}
 
 	destDir := filepath.Join(tmpDir, "output")
-	if err := os.Mkdir(destDir, 0755); err != nil {
+	if err := os.Mkdir(destDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -324,7 +324,7 @@ func TestActionExtractArchive_Cancellation(t *testing.T) {
 	}
 
 	destDir := filepath.Join(tmpDir, "output_cancel")
-	if err := os.Mkdir(destDir, 0755); err != nil {
+	if err := os.Mkdir(destDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 

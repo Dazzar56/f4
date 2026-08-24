@@ -233,7 +233,7 @@ func (filesystem *macroNoMaterializeVFS) Create(context.Context, string) (io.Wri
 func minimalWave() []byte {
 	data := make([]byte, 44)
 	copy(data[0:4], "RIFF")
-	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+	binary.LittleEndian.PutUint32(data[4:8], mediaFixtureUint32(len(data)-8))
 	copy(data[8:12], "WAVE")
 	copy(data[12:16], "fmt ")
 	binary.LittleEndian.PutUint32(data[16:20], 16)
