@@ -74,19 +74,10 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		cpID = 65001
 	}
 
-	bCtx, bCancel := context.WithCancel(context.Background())
-	backend := &ViewerBackend{
-		file:         f,
-		size:         size,
-		path:         path,
-		codepage:     cpID,
-		totalLines:   -1,
-		totalForSize: -1,
-		ctx:          bCtx,
-		cancelCtx:    bCancel,
-	}
-	if indexer, ok := v.(vfs.LineIndexer); ok {
-		backend.indexer = indexer
+	backend, err := newViewerBackend(ctx, v, path, f, cpID)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
 	}
 
 	vv := &ViewerView{
@@ -799,31 +790,110 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 		return
 	}
 
+	backendCP := cpID
+	if vv.HexMode {
+		// Hex mode displays raw bytes; changing the label must not replace
+		// those bytes with a decoded text stream.
+		backendCP = 65001
+	}
+	backend, err := newViewerBackend(context.Background(), vv.vfs, vv.path, f, backendCP)
+	if err != nil {
+		_ = f.Close()
+		return
+	}
+
+	oldBackend := vv.backend
+	oldOffset := vv.TopOffset
+	oldSize := int64(0)
+	if oldBackend != nil {
+		oldSize = oldBackend.Size()
+	}
+	vv.backend = backend
+	vv.Codepage = cpID
+	newSize := vv.backend.Size()
+	if newSize <= 0 {
+		vv.TopOffset = 0
+	} else {
+		// TopOffset is an offset in the decoded stream. Its byte density can
+		// change when the same raw file is viewed as CP1251, CP866, UTF-8,
+		// or UTF-16, so carrying the old value verbatim can put the viewport
+		// past EOF. Preserve the relative position first, then snap to a line.
+		if oldSize > 0 && oldSize != newSize {
+			oldOffset = oldOffset * newSize / oldSize
+		}
+		if oldOffset < 0 {
+			oldOffset = 0
+		}
+		if oldOffset >= newSize {
+			oldOffset = newSize - 1
+		}
+		if vv.HexMode {
+			vv.TopOffset = oldOffset &^ 0xF
+		} else {
+			vv.TopOffset = vv.backend.FindLineStart(oldOffset)
+		}
+	}
+
+	if oldBackend != nil {
+		oldBackend.Close()
+	}
+	vtui.FrameManager.Redraw()
+}
+
+// newViewerBackend gives text mode one consistent coordinate system. A
+// ViewerView's offsets are offsets in the UTF-8 stream it renders, not offsets
+// in the raw file. Keeping a raw CP1251/CP866/UTF-16 window while exposing its
+// decoded bytes made every multi-byte character change the meaning of the
+// next offset; the cursor eventually ran past EOF, especially after Ctrl+End
+// followed by an F8 switch. Non-UTF-8 files are materialized into the same
+// memory-backed stream that the old viewer used, while UTF-8 keeps the lazy
+// windowed backend for large files and remote VFSes.
+func newViewerBackend(ctx context.Context, owner vfs.VFS, path string, f vfs.ReadAtCloser, cpID int) (*ViewerBackend, error) {
+	if cpID != 65001 {
+		size := f.Size()
+		maxInt := int64(int(^uint(0) >> 1))
+		if size < 0 || size > maxInt {
+			return nil, fmt.Errorf("viewer: file is too large to decode: %d bytes", size)
+		}
+		raw := make([]byte, int(size))
+		n, err := f.ReadAt(ctx, raw, 0)
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		decoded, err := vfs.DecodeBytes(raw[:n], cpID)
+		if err != nil {
+			return nil, err
+		}
+		_ = f.Close()
+		bCtx, bCancel := context.WithCancel(context.Background())
+		return &ViewerBackend{
+			file:         &vfs.MemoryReadAtCloser{Data: decoded},
+			size:         int64(len(decoded)),
+			path:         path,
+			totalLines:   -1,
+			totalForSize: -1,
+			ctx:          bCtx,
+			cancelCtx:    bCancel,
+		}, nil
+	}
+
 	size := f.Size()
 	bCtx, bCancel := context.WithCancel(context.Background())
 	backend := &ViewerBackend{
 		file:         f,
 		size:         size,
-		path:         vv.path,
+		path:         path,
+		owner:        owner,
 		codepage:     cpID,
 		totalLines:   -1,
 		totalForSize: -1,
 		ctx:          bCtx,
 		cancelCtx:    bCancel,
 	}
-	if indexer, ok := vv.vfs.(vfs.LineIndexer); ok {
+	if indexer, ok := owner.(vfs.LineIndexer); ok {
 		backend.indexer = indexer
 	}
-
-	oldBackend := vv.backend
-	vv.backend = backend
-	vv.Codepage = cpID
-	vv.TopOffset = vv.backend.FindLineStart(vv.TopOffset)
-
-	if oldBackend != nil {
-		oldBackend.Close()
-	}
-	vtui.FrameManager.Redraw()
+	return backend, nil
 }
 
 func (vv *ViewerView) ReloadWithAutoDetect() {

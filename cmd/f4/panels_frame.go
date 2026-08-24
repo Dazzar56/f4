@@ -3298,6 +3298,25 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 	f2 := Msg("KeyBar.F2")
 	overrideF2 := false
 	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
+		if q, ok := pf.altPanels[pf.activeIdx].(*QuickViewPanel); ok && q != nil && q.IsFocused() {
+			nextCP := vfs.DisplayCodepageName(vfs.GetNextFastSwitchCodepage(q.cacheCodepage))
+			return &vtui.KeySet{
+				Normal: vtui.KeyBarLabels{
+					Msg("KeyBar.ViewerF1"),
+					func() string {
+						if q.wrap {
+							return Msg("KeyBar.ViewerF2")
+						}
+						return Msg("KeyBar.F2Wrap")
+					}(),
+					Msg("KeyBar.ViewerF3"), Msg("KeyBar.ViewerF4"),
+					"", "", Msg("KeyBar.ViewerF7"), nextCP, "", Msg("KeyBar.ViewerF10"),
+				},
+				Shift: vtui.KeyBarLabels{"", "", "", "", "", "", Msg("KeyBar.ViewerF7"), Msg("Codepage.Title"), "", "", "", ""},
+			}
+		}
+	}
+	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 		if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "quick_view" {
 			if q, ok := a.(*QuickViewPanel); ok {
 				if q.wrap {
