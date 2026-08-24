@@ -26,6 +26,18 @@ type mockCrashingHighlighter struct {
 
 const highlighterLimit = 64 * 1024
 
+func TestEditor_UsesDedicatedScrollbarPaletteSlot(t *testing.T) {
+	ev := NewEditorView(piecetable.New([]byte("text")), nil, "test.txt")
+	defer ev.Close()
+
+	if ev.scrollBar == nil {
+		t.Fatal("editor scrollbar was not initialized")
+	}
+	if ev.scrollBar.ColorIdx != ColEditorScrollbar {
+		t.Fatalf("editor scrollbar color index = %d, want %d", ev.scrollBar.ColorIdx, ColEditorScrollbar)
+	}
+}
+
 func (m *mockCrashingHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	if len(line) > highlighterLimit {
 		m.t.Errorf("FATAL: Highlighter received a line of %d bytes, which is over the safety limit of %d", len(line), highlighterLimit)

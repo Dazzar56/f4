@@ -98,6 +98,7 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		Codepage: cpID,
 	}
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
+	vv.scrollBar.ColorIdx = ColViewerScrollbar
 	vv.scrollBar.SetOwner(vv)
 	vv.scrollBar.OnScroll = func(v int) {
 		newOff := int64(v)

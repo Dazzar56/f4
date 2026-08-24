@@ -422,6 +422,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	}
 	vtui.DebugLog("EDITOR_INIT: Path=%q, Highlighter=%T", path, ev.highlighter)
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
+	ev.scrollBar.ColorIdx = ColEditorScrollbar
 	ev.scrollBar.SetOwner(ev)
 	ev.scrollBar.OnScroll = func(v int) {
 		if ev.HexMode || ev.DecodeMode {

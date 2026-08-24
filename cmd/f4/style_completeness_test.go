@@ -44,6 +44,22 @@ func TestBuiltInThemesCoverPanelGroup(t *testing.T) {
 	}
 }
 
+// Every non-classic built-in style is a complete farcolors.ini that can be
+// exported and edited without silently falling back to the classic palette.
+// Classic deliberately remains a sparse inheritance style.
+func TestBuiltInThemesCoverAllColorSlots(t *testing.T) {
+	for _, style := range AvailableColorStyles() {
+		if strings.EqualFold(style.Name, "Classic") {
+			continue
+		}
+		for _, slot := range ColorSlots {
+			if !slotDefinedInIni(style.ini, slot) {
+				t.Errorf("theme %q is missing %s in [farcolors]", style.Name, slot.Canonical)
+			}
+		}
+	}
+}
+
 // slotDefinedInIni reports whether the given colour slot has any entry
 // in the theme's [farcolors] section, checking the canonical key first
 // and then each alias.

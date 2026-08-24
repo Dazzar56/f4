@@ -33,6 +33,27 @@ type largeBinaryFile struct {
 	maxRead int
 }
 
+func TestViewer_UsesDedicatedScrollbarPaletteSlot(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "test.txt")
+	if err := os.WriteFile(path, []byte("text\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(root), path)
+	if err != nil {
+		t.Fatalf("NewViewerView: %v", err)
+	}
+	defer vv.Close()
+
+	if vv.scrollBar == nil {
+		t.Fatal("viewer scrollbar was not initialized")
+	}
+	if vv.scrollBar.ColorIdx != ColViewerScrollbar {
+		t.Fatalf("viewer scrollbar color index = %d, want %d", vv.scrollBar.ColorIdx, ColViewerScrollbar)
+	}
+}
+
 func (f *largeBinaryFile) Size() int64 { return f.size }
 func (*largeBinaryFile) Close() error  { return nil }
 func (f *largeBinaryFile) Read(ctx context.Context, p []byte) (int, error) {

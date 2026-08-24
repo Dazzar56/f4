@@ -183,7 +183,11 @@ var ColorSlots = []ColorSlot{
 	{Canonical: "Panel.Tabs.Active", Index: ColPanelWorkspaceTabsActive, Group: "Panel", ConstantName: "ColPanelWorkspaceTabsActive"},
 	{Canonical: "Panel.Tabs.Accent", Index: ColPanelWorkspaceTabsAccent, Group: "Panel", ConstantName: "ColPanelWorkspaceTabsAccent"},
 	{Canonical: "Panel.Tabs.Attention", Index: ColPanelWorkspaceTabsAttention, Group: "Panel", ConstantName: "ColPanelWorkspaceTabsAttention"},
+	// Table.Box is the separator/tree-line attribute used by generic tables;
+	// it is not the outer frame of a panel or dialog.
 	{Canonical: "Table.Box", Index: vtui.ColTableBox, Group: "Panel", ConstantName: "ColTableBox"},
+	// Scrollbar is the shared fallback for list and menu scrollbars. Widgets
+	// with their own semantic palette slot override it explicitly.
 	{Canonical: "Scrollbar", Index: vtui.ColScrollBar, Group: "Panel", ConstantName: "ColScrollBar"},
 
 	// Dialog Group
@@ -347,6 +351,10 @@ func ExportColors(path string) error {
 
 	for _, group := range ColorGroups {
 		fmt.Fprintf(&sb, "\n# %s\n", group)
+		if group == "Panel" {
+			sb.WriteString("# Table.Box colors table column separators and tree lines, not the outer frame.\n")
+			sb.WriteString("# Scrollbar is the shared fallback for generic lists and menus.\n")
+		}
 		var slots []ColorSlot
 		for _, slot := range ColorSlots {
 			if slot.Group == group {

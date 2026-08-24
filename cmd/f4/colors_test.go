@@ -96,6 +96,37 @@ Editor.Text = foreground:#A0A0A0 | background:#232323
 		t.Errorf("Expected editor background #232323, got %06X", got)
 	}
 }
+
+func TestColors_HelpBoxOverrideReachesHelpViewFrame(t *testing.T) {
+	oldPalette := append([]uint64(nil), vtui.Palette...)
+	oldTheme := vtui.ThemePalette
+	oldCfg := AppConfig
+	t.Cleanup(func() {
+		vtui.Palette = oldPalette
+		vtui.ThemePalette = oldTheme
+		AppConfig = oldCfg
+	})
+
+	AppConfig.EnforceColorCorrection = false
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	InitColors(ParseIni(strings.NewReader(`[farcolors]
+Help.Box = foreground:#102030 | background:#405060
+`)))
+
+	engine := vtui.NewHelpEngine(&memoryHelpVFS{files: map[string]string{}})
+	engine.AddTopic(&vtui.HelpTopic{Name: "Test", Lines: []string{"text"}})
+	view := vtui.NewHelpView(engine, "Test")
+	view.SetPosition(0, 0, 30, 5)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(32, 7)
+	view.Show(scr)
+
+	if got, want := scr.GetCell(0, 0).Attributes, vtui.Palette[vtui.ColHelpBox]; got != want {
+		t.Fatalf("Help.Box frame attribute = %#x, want %#x", got, want)
+	}
+}
+
 func TestColors_ExportColors_Grouped(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
@@ -138,6 +169,14 @@ func TestColors_ExportColors_Grouped(t *testing.T) {
 	for _, h := range expectedHeaders {
 		if !strings.Contains(content, h) {
 			t.Errorf("Exported file missing expected category header %q", h)
+		}
+	}
+	for _, note := range []string{
+		"Table.Box colors table column separators and tree lines",
+		"Scrollbar is the shared fallback for generic lists and menus",
+	} {
+		if !strings.Contains(content, note) {
+			t.Errorf("Exported file missing color usage note %q", note)
 		}
 	}
 
