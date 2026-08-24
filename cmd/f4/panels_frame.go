@@ -970,6 +970,85 @@ func (pf *PanelsFrame) takeLocalPTY() PtyBackend {
 // unrelated PTY tests with ENXIO ("device not configured").
 var spawnLocalShellPTY = true
 
+// newLocalPTY is a seam for the session lifecycle tests. Production always
+// uses the platform PTY implementation; tests can provide a controllable
+// backend without allocating a real terminal.
+var newLocalPTY = func() (PtyBackend, error) {
+	return NewPTY()
+}
+
+// resetLocalShell tears down the current local shell and starts a fresh one.
+// The shell itself is the persistent session used by the command line; reset
+// is deliberately explicit so a plain `exit` can clear all shell-local state
+// without asking the parent process that launched f4 to do anything.
+func (pf *PanelsFrame) resetLocalShell() bool {
+	pf.processEnvironmentWriteMu.Lock()
+	pty := pf.localPTY()
+	if pty == nil {
+		pf.processEnvironmentWriteMu.Unlock()
+		return false
+	}
+
+	pf.ptyMutex.Lock()
+	if pf.pty != pty {
+		pf.ptyMutex.Unlock()
+		pf.processEnvironmentWriteMu.Unlock()
+		return false
+	}
+	pf.pty = nil
+	pf.ptyMutex.Unlock()
+	pf.processEnvironmentWriteMu.Unlock()
+
+	// An environment update may have been serialized for the old shell. Put it
+	// back in the pending queue so the new shell receives it, and release the
+	// old transport's temporary files immediately instead of waiting for the
+	// acknowledgement timeout.
+	pf.processEnvironmentMu.Lock()
+	inFlight := pf.processEnvironmentInFlight
+	pf.processEnvironmentInFlight = nil
+	if inFlight != nil {
+		if inFlight.timeout != nil {
+			inFlight.timeout.Stop()
+		}
+		pf.pendingProcessEnvironment = coalesceProcessEnvironmentChanges(append(
+			cloneProcessEnvironmentChanges(inFlight.changes),
+			pf.pendingProcessEnvironment...,
+		))
+		if inFlight.generation > pf.pendingProcessEnvironmentGeneration {
+			pf.pendingProcessEnvironmentGeneration = inFlight.generation
+		}
+	}
+	pf.processEnvironmentBusy = false
+	pf.processEnvironmentDeliveryFailed = false
+	pf.processEnvironmentOutputTail = nil
+	pf.deferredProcessEnvironmentInput = nil
+	pf.processEnvironmentMu.Unlock()
+	if inFlight != nil && inFlight.cleanup != nil {
+		inFlight.cleanup()
+	}
+	if inFlight != nil && inFlight.muted && pf.termView != nil {
+		pf.termView.SetMuted(false)
+	}
+
+	_ = pty.Close()
+
+	pf.executing = false
+	pf.shellPromptReady = false
+	pf.ignoreNextPrompt = false
+	pf.returnToPanels = false
+	pf.workspaceCommandTitle = ""
+	pf.lastPtyPath = ""
+	pf.lastPtyVFS = nil
+	if pf.termView != nil {
+		pf.termView.SetMuted(false)
+		pf.termView.pty = nil
+		pf.termView.ResetBuffer(pf.termView.Width, pf.termView.Height)
+	}
+	pf.parser = NewAnsiParser(pf.termView, nil)
+	pf.initPTY()
+	return true
+}
+
 func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
@@ -993,7 +1072,7 @@ func (pf *PanelsFrame) initPTY() {
 
 		if p == nil {
 			var err error
-			p, err = NewPTY()
+			p, err = newLocalPTY()
 			if err != nil {
 				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
 				logPTYDiagnostics()
@@ -2100,6 +2179,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			isDirChange := false
 			targetPath := ""
 
+			if lowerCmd == "exit f4" {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
+				return true
+			}
+
 			// Intercept drive letter changes (e.g., "C:", "D:\") on Windows
 			if runtime.GOOS == "windows" && len(trimmedCmd) >= 2 && len(trimmedCmd) <= 3 && trimmedCmd[1] == ':' {
 				if lowerCmd[0] >= 'a' && lowerCmd[0] <= 'z' {
@@ -2137,6 +2225,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
 					pf.setCommandLineFocus(false)
 				}
+				pf.resetLocalShell()
 				return true
 			}
 
@@ -2223,10 +2312,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if activePty != nil {
 				var path string
 				isWindowsShell := runtime.GOOS == "windows"
+				var localShellVFS vfs.VFS
 				var integration vfs.PtyShellIntegration
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
-					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
+					if isLocalOSVFS(fsp.vfs) {
 						path = fsp.vfs.GetPath()
+						localShellVFS = fsp.vfs
 					} else if vfsHasRemotePTY(fsp.vfs) {
 						path = fsp.vfs.GetPath()
 						isWindowsShell = false
@@ -2250,6 +2341,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 				if isWindowsShell {
 					cmd = resolveWindowsCommand(cmd)
+				}
+
+				// The local Unix PTY is a persistent shell session. Its current
+				// directory must not be reset to the panel path before every
+				// command: doing that discards a `cd` performed by an alias. The
+				// panel still synchronizes the shell when the panel itself moves;
+				// this one-shot check only covers an Enter arriving before the
+				// next frame refresh.
+				if localShellVFS != nil && !isWindowsShell {
+					if path != pf.lastPtyPath || !sameVFSInstance(localShellVFS, pf.lastPtyVFS) {
+						if pf.syncPTYDirectory(path, localShellVFS) {
+							pf.lastPtyPath = path
+							pf.lastPtyVFS = localShellVFS
+						}
+					}
+					path = ""
 				}
 
 				if integration != nil {
