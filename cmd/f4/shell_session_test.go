@@ -34,7 +34,7 @@ func TestPanelsFrame_ExitResetsLocalShell(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_RETURN,
 	})
 
-	if !oldPTY.closed {
+	if !oldPTY.IsClosed() {
 		t.Fatal("exit did not close the old local shell")
 	}
 
