@@ -4002,7 +4002,9 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	}
 	fontChoices := guiFontDisplayChoices(AppConfig.Language, AppConfig.GuiFont)
 	comboFont := vtui.NewComboBox(0, 0, 30, fontChoices)
-	comboFont.Edit.SetText(guiFontDisplayName(AppConfig.GuiFont))
+	comboFont.Edit.SetText(guiFontCurrentDisplayName(AppConfig.Language, AppConfig.GuiFont))
+	comboFont.Edit.SelectAll()
+	configureGuiFontCombo(comboFont, fontChoices)
 	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), comboFont)
 	chkSystemMonospace := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.UseSystemMonospace"), false)
 	if AppConfig.GuiUseSystemMonospace {
@@ -4185,11 +4187,12 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
 		}
 		useSystemMonospace := chkSystemMonospace.State == 1
-		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != comboFont.Edit.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
+		fontValue := guiFontValueForDisplay(AppConfig.Language, AppConfig.GuiFont, comboFont.Edit.GetText())
+		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != fontValue || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
 		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
 		AppConfig.GuiUseSystemMonospace = useSystemMonospace
-		AppConfig.GuiFont = comboFont.Edit.GetText()
+		AppConfig.GuiFont = fontValue
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {
 			AppConfig.GuiFontSize = defaultGuiFontSize(runtime.GOOS)

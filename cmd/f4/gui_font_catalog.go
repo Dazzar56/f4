@@ -15,6 +15,10 @@ var discoverInstalledGuiFonts = platformGuiFontFiles
 // guiFontChoices keeps the current value even when it is a manually entered
 // path or family name that the platform catalog cannot discover.
 func guiFontChoices(language, current string) []string {
+	return guiFontChoicesFromInstalled(current, discoverInstalledGuiFonts(language))
+}
+
+func guiFontChoicesFromInstalled(current string, installed []string) []string {
 	choices := make([]string, 0)
 	appendUnique := func(value string) {
 		value = strings.TrimSpace(value)
@@ -30,7 +34,7 @@ func guiFontChoices(language, current string) []string {
 	}
 
 	appendUnique(current)
-	for _, path := range discoverInstalledGuiFonts(language) {
+	for _, path := range installed {
 		appendUnique(path)
 	}
 	return choices
@@ -39,27 +43,80 @@ func guiFontChoices(language, current string) []string {
 // platformGuiFontDisplayChoices and platformGuiFontDisplayName are indirection
 // variables so the non-Windows build never references the Windows-only font
 // name helpers: those live in the //go:build windows file and override these
-// from init there. The defaults keep the previous path-based behaviour.
+// from init there. The non-Windows default uses the font file's short name.
 var platformGuiFontDisplayChoices = func(language, current string) []string {
-	return guiFontChoices(language, current)
+	installed := discoverInstalledGuiFonts(language)
+	choices := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, value := range guiFontChoicesFromInstalled(current, installed) {
+		display := guiFontDisplayValueFromInstalled(value, installed)
+		if display == "" {
+			continue
+		}
+		key := strings.ToLower(display)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		choices = append(choices, display)
+	}
+	return choices
 }
 
-var platformGuiFontDisplayName = func(value string) string {
-	return value
-}
+var platformGuiFontDisplayName = defaultGuiFontDisplayName
 
 // guiFontDisplayChoices returns the strings shown in the font picker. On
-// Windows these are font family names (e.g. "Cascadia Mono") instead of file
-// paths; elsewhere the platform catalog has no name metadata, so the paths are
-// returned as before.
+// Windows these are font family names (e.g. "Cascadia Mono"); on other
+// platforms they are short names derived from the discovered font files.
 func guiFontDisplayChoices(language, current string) []string {
 	return platformGuiFontDisplayChoices(language, current)
 }
 
-// guiFontDisplayName maps a stored font value to its picker label, resolving a
-// Windows font file path back to its family name when possible.
+// guiFontDisplayName maps a stored font value to its platform-specific label.
 func guiFontDisplayName(value string) string {
 	return platformGuiFontDisplayName(value)
+}
+
+// guiFontDisplayValue shortens discovered file paths for the picker but keeps
+// an unknown manually entered path intact. The latter is important: replacing
+// a custom path with its basename would make merely opening and accepting the
+// settings dialog silently point at another file.
+func guiFontDisplayValue(language, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return guiFontDisplayValueFromInstalled(value, discoverInstalledGuiFonts(language))
+}
+
+func guiFontDisplayValueFromInstalled(value string, installed []string) string {
+	for _, path := range installed {
+		if sameGuiFontValue(value, path) {
+			return guiFontDisplayName(value)
+		}
+	}
+	return value
+}
+
+func guiFontCurrentDisplayName(language, current string) string {
+	return guiFontDisplayValue(language, current)
+}
+
+// guiFontValueForDisplay converts a picker label back to the value consumed by
+// the GUI backend. Manual input that is not one of the catalog labels passes
+// through unchanged.
+func guiFontValueForDisplay(language, current, display string) string {
+	display = strings.TrimSpace(display)
+	if display == "" {
+		return ""
+	}
+	installed := discoverInstalledGuiFonts(language)
+	for _, value := range guiFontChoicesFromInstalled(current, installed) {
+		if strings.EqualFold(guiFontDisplayValueFromInstalled(value, installed), display) {
+			return value
+		}
+	}
+	return display
 }
 
 func sameGuiFontValue(left, right string) bool {
@@ -165,4 +222,16 @@ func parseFontconfigPaths(output string) []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+func defaultGuiFontDisplayName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	base := filepath.Base(value)
+	if isFontFile(base) {
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	return base
 }
