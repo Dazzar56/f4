@@ -129,12 +129,52 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	return sb.String()
 }
 
+// vkSpelledHotkeys lists the punctuation keys that configurable hotkeys name
+// after their virtual-key code ("VK_DC" for backslash) rather than after the
+// character they type. It is the same set keyTokenDisplayNames renders back
+// into punctuation for the UI, and the set DefaultKeys already uses:
+// CtrlVK_DC (Panel.GoRoot), CtrlShiftVK_DC (Panel.Bookmarks), CtrlVK_DB and
+// CtrlVK_DD (bracket navigation).
+//
+// EventToFarString names a key after e.Char whenever the backend fills that
+// field in, and for these keys the character depends on Shift and on the
+// active layout. Under the kitty keyboard protocol, which f4 turns on with
+// its alternate-key reporting flag, Ctrl+\ arrives as VK_OEM_5 with Char '\'
+// and Ctrl+Shift+\ as the same VK_OEM_5 with Char '|', so the two produced
+// "Ctrl\" and "CtrlShift|" and missed every VK_DC binding. The far2l, Win32
+// and legacy-tty backends send no Char with Ctrl held and did match. Naming
+// these keys after the virtual key gives one spelling on every backend and
+// every layout.
+var vkSpelledHotkeys = map[uint16]bool{
+	vtinput.VK_OEM_1:      true, // ;
+	vtinput.VK_OEM_PLUS:   true, // =
+	vtinput.VK_OEM_COMMA:  true, // ,
+	vtinput.VK_OEM_MINUS:  true, // -
+	vtinput.VK_OEM_PERIOD: true, // .
+	vtinput.VK_OEM_2:      true, // /
+	vtinput.VK_OEM_3:      true, // `
+	vtinput.VK_OEM_4:      true, // [
+	vtinput.VK_OEM_5:      true, // \
+	vtinput.VK_OEM_6:      true, // ]
+	vtinput.VK_OEM_7:      true, // '
+	vtinput.VK_OEM_102:    true, // \ on 102-key keyboards
+}
+
 // EventToHotkeyString preserves an otherwise normalized Right Ctrl modifier
-// for configurable hotkeys. Macros intentionally keep treating Left Ctrl and
-// Right Ctrl as the same key, while actions such as AI.TogglePanel may be
-// rebound or explicitly unbound on the RCtrl spelling.
+// for configurable hotkeys, and spells the punctuation keys in
+// vkSpelledHotkeys after their virtual key. Macros intentionally keep
+// treating Left Ctrl and Right Ctrl as the same key and keep naming keys the
+// way Far does, while actions such as AI.TogglePanel may be rebound or
+// explicitly unbound on the RCtrl spelling.
 func EventToHotkeyString(e *vtinput.InputEvent) string {
 	key := EventToFarString(e)
+	if vkSpelledHotkeys[e.VirtualKeyCode] && e.Char != 0 {
+		// Re-run the naming without the character so the modifiers,
+		// and only the modifiers, keep coming from one place.
+		withoutChar := *e
+		withoutChar.Char = 0
+		key = EventToFarString(&withoutChar)
+	}
 	mods := e.ControlKeyState
 	if mods.Contains(vtinput.RightCtrlPressed) && !mods.Contains(vtinput.LeftCtrlPressed) && strings.HasPrefix(key, "Ctrl") {
 		return "RCtrl" + key[len("Ctrl"):]
