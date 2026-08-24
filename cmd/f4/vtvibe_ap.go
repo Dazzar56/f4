@@ -316,10 +316,10 @@ func aiEnsurePatcher(ctx context.Context, update func(msg string, percent int)) 
 	if !strings.Contains(string(data), "def apply_patch(") {
 		return "", fmt.Errorf("%s", Msg("AI.PatchBadDownload"))
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return "", err
 	}
 	return path, nil

@@ -130,7 +130,7 @@ func installColorerSchemas(data []byte, destDir string, ctx context.Context) err
 	}
 
 	parent := filepath.Dir(destDir)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}
 	if info, err := os.Lstat(destDir); err == nil && info.Mode()&os.ModeSymlink != 0 {
@@ -163,23 +163,19 @@ func installColorerSchemas(data []byte, destDir string, ctx context.Context) err
 			return err
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, 0o755); err != nil {
+			if err := os.MkdirAll(targetPath, 0o700); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 			return err
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		mode := f.Mode().Perm()
-		if mode == 0 {
-			mode = 0o644
-		}
-		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err != nil {
 			_ = rc.Close()
 			return err

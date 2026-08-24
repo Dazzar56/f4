@@ -1069,7 +1069,7 @@ func (ev *EditorView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 			asmStr = fmt.Sprintf("db 0x%02X", data[0])
 			if err == nil {
 				instLen = inst.Len
-				asmStr = x86asm.IntelSyntax(inst, uint64(currOffset), nil)
+				asmStr = x86asm.IntelSyntax(inst, nonNegativeUint64(int64(currOffset)), nil)
 			}
 		}
 
@@ -5782,6 +5782,7 @@ func bytesToString(b []byte) string {
 	if len(b) == 0 {
 		return ""
 	}
+	// #nosec G103 -- the returned string is read-only and every caller retains b for the full lifetime of the synchronous search.
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 

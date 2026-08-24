@@ -367,14 +367,14 @@ func (q *QuickViewPanel) renderDir(item *fileEntry, writeLine func(string)) {
 	if runtime.GOOS == "windows" {
 		logical = stats.Bytes
 	}
-	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(uint64(logical))))
+	writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.FilesSize"), formatBytes(nonNegativeUint64(logical))))
 	// Physical size + Ratio need per-item on-disk footprint. Stub /
 	// remote VFSes leave PhysicalBytes at 0 during the whole scan —
 	// hide the rows in that case. Ratio is also hidden when it would
 	// just read "100%" — on Unix that's every uncompressed tree, and
 	// a constant carries no information for the reader.
 	if stats.PhysicalBytes > 0 {
-		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.PhysicalSize"), formatBytes(uint64(stats.PhysicalBytes))))
+		writeLine(fmt.Sprintf(" %-14s %s", Msg("QuickView.PhysicalSize"), formatBytes(nonNegativeUint64(stats.PhysicalBytes))))
 		if stats.PhysicalBytes < logical {
 			// Ratio interpretation matches far/far2l — >100% means "on
 			// disk it takes less than the logical size", i.e. real
@@ -516,7 +516,7 @@ func (q *QuickViewPanel) Close() {
 func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(string), attr uint64, scr *vtui.ScreenBuf) {
 	// Header block (name + size + optional binary note). Two rows.
 	writeLine(" " + item.Name)
-	writeLine(fmt.Sprintf(" %s: %s", Msg("QuickView.Size"), formatBytes(uint64(item.Size))))
+	writeLine(fmt.Sprintf(" %s: %s", Msg("QuickView.Size"), formatBytes(nonNegativeUint64(item.Size))))
 	if q.cacheReadErr != nil {
 		writeLine("")
 		writeLine(" " + Msg("QuickView.ReadError") + ": " + q.cacheReadErr.Error())

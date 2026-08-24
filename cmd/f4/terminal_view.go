@@ -328,9 +328,7 @@ func (tv *TerminalView) extrudeGridHistoryRow(idx int) {
 			tv.styles = append(tv.styles, StyleChange{Offset: int(tv.pt.Size()) + sb.Len(), Attr: line[i].Attributes})
 			tv.lastAttr = line[i].Attributes
 		}
-		if line[i].Char != vtui.WideCharFiller {
-			sb.WriteRune(rune(line[i].Char))
-		}
+		sb.WriteString(vtui.CellString(line[i].Char))
 	}
 	if !isWrapped {
 		sb.WriteRune('\n')
@@ -360,9 +358,7 @@ func (tv *TerminalView) GetAllLogBytes() []byte {
 			lastChar--
 		}
 		for j := 0; j <= lastChar; j++ {
-			if line[j].Char != vtui.WideCharFiller {
-				sb.WriteRune(rune(line[j].Char))
-			}
+			sb.WriteString(vtui.CellString(line[j].Char))
 		}
 		if !isWrapped {
 			sb.WriteRune('\n')
@@ -401,9 +397,7 @@ func (tv *TerminalView) GetAllLogBytes() []byte {
 			}
 
 			for i := 0; i <= lastChar; i++ {
-				if line[i].Char != vtui.WideCharFiller {
-					sb.WriteRune(rune(line[i].Char))
-				}
+				sb.WriteString(vtui.CellString(line[i].Char))
 			}
 			if !isWrapped && y < lastValidRow {
 				sb.WriteRune('\n')
@@ -1156,22 +1150,14 @@ func (tv *TerminalView) ExtractSelection() string {
 			r = tv.X1 + tv.Width - 1
 		}
 
-		var line []rune
+		var line strings.Builder
 		for x := l; x <= r; x++ {
-			ci := row[x-tv.X1]
-			if ci.Char == vtui.WideCharFiller {
-				continue
-			}
-			ch := rune(ci.Char)
-			if ch == 0 {
-				ch = ' '
-			}
-			line = append(line, ch)
+			line.WriteString(vtui.CellString(row[x-tv.X1].Char))
 		}
 		if !tv.selBlock {
-			sb.WriteString(strings.TrimRight(string(line), " "))
+			sb.WriteString(strings.TrimRight(line.String(), " "))
 		} else {
-			sb.WriteString(string(line))
+			sb.WriteString(line.String())
 		}
 		if y < y2 {
 			sb.WriteByte('\n')
@@ -1640,6 +1626,7 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			// Guest expects: dataID (U64) + data (Bytes) + length (U32)
 			reply.PushU64(0)
 			reply.PushBytes([]byte(clipData))
+			// #nosec G115 -- clipData is capped to 64 KiB immediately above.
 			reply.PushU32(uint32(len(clipData)))
 		case 'i':
 			_ = stk.PopU32()
@@ -1649,8 +1636,8 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 			reply.PushU32(0xC000)
 		}
 	case 'w': // Window size
-		reply.PushU16(uint16(tv.Height))
-		reply.PushU16(uint16(tv.Width))
+		reply.PushU16(ptyPixels(tv.Height))
+		reply.PushU16(ptyPixels(tv.Width))
 	case 'h': // Cursor height
 		_ = stk.PopU8()
 	case 'n': // Desktop notification
@@ -1693,8 +1680,8 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 
 func (tv *TerminalView) SendFar2lTerminalSize() {
 	stk := vtinput.Far2lStack{}
-	stk.PushU16(uint16(tv.Height))
-	stk.PushU16(uint16(tv.Width))
+	stk.PushU16(ptyPixels(tv.Height))
+	stk.PushU16(ptyPixels(tv.Width))
 	stk.PushU8('S')
 	b64 := base64.StdEncoding.EncodeToString(stk)
 	if tv.pty != nil {

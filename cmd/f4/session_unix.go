@@ -449,6 +449,12 @@ func runServer(sockPath string) {
 		// anything that reassigns vtui.FrameManager meanwhile.
 		frames := vtui.FrameManager
 		go func(pipeWriteFD int, inFD int) {
+			pipePollFD, pipeOK := boundedInt32(pipeWriteFD)
+			inputPollFD, inputOK := boundedInt32(inFD)
+			if !pipeOK || !inputOK {
+				frames.Stop()
+				return
+			}
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
 			for {
@@ -463,8 +469,8 @@ func runServer(sockPath string) {
 					// error/hangup bits, so a healthy writable pipe or
 					// readable stdin never trips them.
 					pfds := []unix.PollFd{
-						{Fd: int32(pipeWriteFD), Events: unix.POLLOUT},
-						{Fd: int32(inFD), Events: unix.POLLIN},
+						{Fd: pipePollFD, Events: unix.POLLOUT},
+						{Fd: inputPollFD, Events: unix.POLLIN},
 					}
 					_, err := unix.Poll(pfds, 0)
 					if err == nil {

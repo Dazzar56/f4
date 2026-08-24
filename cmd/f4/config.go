@@ -39,11 +39,13 @@ func GetF4ConfigDir() string {
 
 		// Ищем Far.exe.ini (имя_бинарника.ini) или f4.ini в папке программы
 		iniPath := exe + ".ini"
+		// #nosec G703 -- iniPath is the executable path plus ".ini", not an untrusted path component.
 		if _, err := os.Stat(iniPath); os.IsNotExist(err) {
 			iniPath = filepath.Join(exeDir, "f4.ini")
 		}
 
 		useSystemProfiles := true
+		// #nosec G703 -- iniPath is either executable.ini or the fixed f4.ini name in the executable directory.
 		if _, err := os.Stat(iniPath); err == nil {
 			ini := ParseIni(bytesReader(iniPath))
 			if ini.GetString("General", "UseSystemProfiles", "1") == "0" {
@@ -54,7 +56,7 @@ func GetF4ConfigDir() string {
 		if !useSystemProfiles {
 			cachedF4Portable = true
 			cachedF4ConfigDir = filepath.Join(exeDir, "Profile")
-			_ = os.MkdirAll(cachedF4ConfigDir, 0755)
+			_ = os.MkdirAll(cachedF4ConfigDir, 0700)
 		} else {
 			sysDir, _ := userConfigDir()
 			cachedF4ConfigDir = filepath.Join(sysDir, "f4")
@@ -867,7 +869,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 		fmt.Fprintf(&sb, "%s=%s\n", k, layoutKeys[k])
 	}
 
-	err := writeFileAtomically(path, []byte(sb.String()), 0644)
+	err := writeFileAtomically(path, []byte(sb.String()), 0600)
 	if err != nil {
 		vtui.DebugLog("CONFIG: Failed to save application settings: %v", err)
 		return
@@ -899,7 +901,10 @@ func persistedGuiWindowSize() (int, int) {
 // unrelated settings and unknown keys in an existing settings.ini.
 func saveGuiWindowSize() {
 	path := getUserConfigIniPath()
-	os.MkdirAll(filepath.Dir(path), 0755)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		vtui.DebugLog("CONFIG: Failed to create settings directory: %v", err)
+		return
+	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		for _, source := range getConfigIniPaths() {
@@ -908,8 +913,10 @@ func saveGuiWindowSize() {
 			}
 			if inherited, readErr := os.ReadFile(source); readErr == nil {
 				updated := updateIniValues(inherited, "Appearance", guiWindowValues())
-				if writeErr := os.WriteFile(path, updated, 0644); writeErr != nil {
+				if writeErr := os.WriteFile(path, updated, 0600); writeErr != nil {
 					vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
+				} else if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+					vtui.DebugLog("CONFIG: Failed to restrict GUI settings permissions: %v", chmodErr)
 				}
 				return
 			}
@@ -918,8 +925,10 @@ func saveGuiWindowSize() {
 		if AppConfig.GuiPositionSaved {
 			data = append(data, []byte(fmt.Sprintf("GuiPosX = %d\nGuiPosY = %d\n", AppConfig.GuiPosX, AppConfig.GuiPosY))...)
 		}
-		if writeErr := os.WriteFile(path, data, 0644); writeErr != nil {
+		if writeErr := os.WriteFile(path, data, 0600); writeErr != nil {
 			vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
+		} else if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+			vtui.DebugLog("CONFIG: Failed to restrict GUI settings permissions: %v", chmodErr)
 		}
 		return
 	}
@@ -928,8 +937,10 @@ func saveGuiWindowSize() {
 		return
 	}
 	updated := updateIniValues(data, "Appearance", guiWindowValues())
-	if err := os.WriteFile(path, updated, 0644); err != nil {
+	if err := os.WriteFile(path, updated, 0600); err != nil {
 		vtui.DebugLog("CONFIG: Failed to save GUI size: %v", err)
+	} else if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+		vtui.DebugLog("CONFIG: Failed to restrict GUI settings permissions: %v", chmodErr)
 	}
 }
 
@@ -1111,7 +1122,8 @@ func createDefaultHighlightIni(path string) {
 # you specifically want to override the theme's colors.
 
 `
-	_ = os.WriteFile(path, []byte(content), 0644)
+	_ = os.WriteFile(path, []byte(content), 0600)
+	_ = os.Chmod(path, 0600)
 }
 
 // ApplyProxySettings publishes the configured proxy to netproxy, which is

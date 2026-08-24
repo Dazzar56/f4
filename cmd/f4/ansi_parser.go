@@ -888,6 +888,7 @@ func (p *AnsiParser) handleOSC() {
 		if strings.HasPrefix(colorStr, "#") && len(colorStr) >= 7 {
 			v, err := strconv.ParseUint(colorStr[1:7], 16, 32)
 			if err == nil {
+				// #nosec G115 -- ParseUint with bitSize 32 rejects values outside uint32.
 				rgbVal = uint32(v)
 				parsed = true
 			}
@@ -898,6 +899,7 @@ func (p *AnsiParser) handleOSC() {
 				r, _ := strconv.ParseUint(rgbParts[0], 16, 8)
 				g, _ := strconv.ParseUint(rgbParts[1], 16, 8)
 				b, _ := strconv.ParseUint(rgbParts[2], 16, 8)
+				// #nosec G115 -- each component was parsed with bitSize 8, so the packed value is at most 0xFFFFFF.
 				rgbVal = uint32((r << 16) | (g << 8) | b)
 				parsed = true
 			}

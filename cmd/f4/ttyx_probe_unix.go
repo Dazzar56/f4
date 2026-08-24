@@ -100,6 +100,9 @@ func pollAnswer(in *os.File, budget time.Duration, prefix string) (string, bool)
 	}
 	var sb strings.Builder
 	cerr := rc.Control(func(fd uintptr) {
+		if fd > 1<<31-1 {
+			return
+		}
 		deadline := time.Now().Add(budget)
 		buf := make([]byte, 128)
 		for {
@@ -107,6 +110,7 @@ func pollAnswer(in *os.File, budget time.Duration, prefix string) (string, bool)
 			if left <= 0 {
 				return
 			}
+			// #nosec G115 -- descriptors larger than PollFd's int32 field are rejected above.
 			pfd := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
 			n, err := unix.Poll(pfd, int(left/time.Millisecond)+1)
 			if err == unix.EINTR {

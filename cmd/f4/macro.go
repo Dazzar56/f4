@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -586,15 +587,27 @@ func (m *MacroManager) Load() {
 					for _, p := range strings.Split(val, ",") {
 						fields := strings.Split(p, ":")
 						if len(fields) == 3 {
-							char, _ := strconv.Atoi(fields[0])
-							vk, _ := strconv.Atoi(fields[1])
-							mods, _ := strconv.Atoi(fields[2])
+							charValue, charErr := strconv.ParseInt(fields[0], 10, 32)
+							vkValue, vkErr := strconv.ParseUint(fields[1], 10, 16)
+							modsValue, modsErr := strconv.ParseUint(fields[2], 10, 32)
+							if charErr != nil || vkErr != nil || modsErr != nil {
+								continue
+							}
+							// #nosec G115 -- ParseInt with bitSize 32 bounds the conversion; ValidRune rejects negative and surrogate values.
+							char := rune(charValue)
+							if char != 0 && !utf8.ValidRune(char) {
+								continue
+							}
+							// #nosec G115 -- ParseUint with bitSize 16 bounds the virtual key code.
+							vk := uint16(vkValue)
+							// #nosec G115 -- ParseUint with bitSize 32 bounds the control-state bit field.
+							mods := vtinput.ControlKeyState(uint32(modsValue))
 							events = append(events, &vtinput.InputEvent{
 								Type:            vtinput.KeyEventType,
 								KeyDown:         true,
-								Char:            rune(char),
-								VirtualKeyCode:  uint16(vk),
-								ControlKeyState: vtinput.ControlKeyState(mods),
+								Char:            char,
+								VirtualKeyCode:  vk,
+								ControlKeyState: mods,
 							})
 						}
 					}
@@ -627,11 +640,16 @@ func (m *MacroManager) Save() {
 		}
 	}
 
-	os.MkdirAll(filepath.Dir(m.iniPath), 0755)
-	err := os.WriteFile(m.iniPath, []byte(sb.String()), 0644)
+	if err := os.MkdirAll(filepath.Dir(m.iniPath), 0700); err != nil {
+		vtui.DebugLog("MACRO: Failed to create macro directory: %v", err)
+		return
+	}
+	err := os.WriteFile(m.iniPath, []byte(sb.String()), 0600)
 	if err != nil {
 		vtui.DebugLog("MACRO: Failed to save: %v", err)
+		return
 	}
+	_ = os.Chmod(m.iniPath, 0600)
 }
 
 // MacroAssignFrame is a modal frame that captures a key combination to assign a macro.

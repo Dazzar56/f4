@@ -117,6 +117,7 @@ func initializeProcessEnvironmentRuntime() error {
 		if err := os.MkdirAll(processEnvironmentRuntimeDir, 0o700); err != nil {
 			return err
 		}
+		// #nosec G302 -- processEnvironmentRuntimeDir is a directory and needs owner execute permission for traversal.
 		if err := os.Chmod(processEnvironmentRuntimeDir, 0o700); err != nil {
 			return err
 		}
@@ -131,6 +132,7 @@ func createProcessEnvironmentRuntimeSession(root string) (string, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", err
 	}
+	// #nosec G302 -- root is a private directory and needs owner execute permission for traversal.
 	if err := os.Chmod(root, 0o700); err != nil {
 		return "", err
 	}
@@ -146,6 +148,7 @@ func createProcessEnvironmentRuntimeSession(root string) (string, error) {
 	if err := os.Mkdir(sessionDir, 0o700); err != nil {
 		return "", err
 	}
+	// #nosec G302 -- sessionDir is a private directory and needs owner execute permission for traversal.
 	if err := os.Chmod(sessionDir, 0o700); err != nil {
 		_ = os.Remove(sessionDir)
 		return "", err
@@ -863,6 +866,11 @@ func windowsProcessEnvironmentScript(changes []vfs.ProcessEnvironmentChange, val
 	fmt.Fprintf(&script, "chcp 65001 >nul || set \"%s=1\"\r\n", statusName)
 	fmt.Fprintf(&script, "set \"%s=OFF\"\r\nset \"%s=!\"\r\nif not defined %s set \"%s=ON\"\r\nset \"%s=\"\r\n", modeName, probeName, probeName, modeName, probeName)
 	for i, change := range changes {
+		var paths []string
+		if len(valuePaths) > 0 {
+			paths = valuePaths[0]
+			valuePaths = valuePaths[1:]
+		}
 		fmt.Fprintf(&script, "set \"%s=\"\r\n", change.Name)
 		if change.Unset || change.Value == "" {
 			continue
@@ -872,7 +880,7 @@ func windowsProcessEnvironmentScript(changes []vfs.ProcessEnvironmentChange, val
 		localFailureName := "F4_ENV_LOCALFAIL_" + labelToken
 		fmt.Fprintf(&script, "if \"%%%s%%\"==\"ON\" goto :F4_ENV_ON_%s\r\ngoto :F4_ENV_OFF_%s\r\n", modeName, labelToken, labelToken)
 		fmt.Fprintf(&script, ":F4_ENV_ON_%s\r\n", labelToken)
-		for _, path := range valuePaths[i] {
+		for _, path := range paths {
 			fmt.Fprintf(&script, "set \"%s=\"\r\n", chunkName)
 			fmt.Fprintf(&script, "set /p \"%s=\" < \"%s\" || set \"%s=1\"\r\n", chunkName, cmdProcessEnvironmentPath(path), statusName)
 			fmt.Fprintf(&script, "set \"%s=!%s!!%s!\"\r\n", change.Name, change.Name, chunkName)
@@ -881,7 +889,7 @@ func windowsProcessEnvironmentScript(changes []vfs.ProcessEnvironmentChange, val
 
 		fmt.Fprintf(&script, ":F4_ENV_OFF_%s\r\nset \"%s=\"\r\nsetlocal EnableDelayedExpansion\r\nset \"%s=\"\r\nset \"%s=0\"\r\n",
 			labelToken, transferName, change.Name, localFailureName)
-		for _, path := range valuePaths[i] {
+		for _, path := range paths {
 			fmt.Fprintf(&script, "set \"%s=\"\r\n", chunkName)
 			fmt.Fprintf(&script, "set /p \"%s=\" < \"%s\" || set \"%s=1\"\r\n", chunkName, cmdProcessEnvironmentPath(path), localFailureName)
 			fmt.Fprintf(&script, "set \"%s=!%s!!%s!\"\r\n", change.Name, change.Name, chunkName)
