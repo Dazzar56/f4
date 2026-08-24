@@ -341,6 +341,46 @@ func TestConfiguredHotkeyActionRightCtrlFallback(t *testing.T) {
 	}
 }
 
+func TestConfiguredHotkeyActionExplicitCtrlOverridesBuiltInRightCtrl(t *testing.T) {
+	hm := NewHotkeyManager("")
+
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlA"); got != "AI.TogglePanel" {
+		t.Fatalf("built-in RCtrlA action = %q, want AI.TogglePanel", got)
+	}
+
+	hm.Bind("Shell", "CtrlA", "Panel.Toggle")
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlA"); got != "Panel.Toggle" {
+		t.Fatalf("explicit CtrlA should override built-in RCtrlA: got %q, want Panel.Toggle", got)
+	}
+
+	hm.Bind("Shell", "CtrlA", "None")
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlA"); got != "None" {
+		t.Fatalf("explicit CtrlA unbind should override built-in RCtrlA: got %q, want None", got)
+	}
+}
+
+func TestConfigurableHotkeyCanOverrideRightCtrlBookmark(t *testing.T) {
+	hm := NewHotkeyManager("")
+	rightCtrl3 := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_3,
+		ControlKeyState: vtinput.RightCtrlPressed,
+	}
+
+	if configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
+		t.Fatal("built-in Ctrl3 should leave RightCtrl+3 owned by bookmarks")
+	}
+
+	hm.Bind("Shell", "Ctrl3", "File.Attributes")
+	if !configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
+		t.Fatal("explicit Ctrl3 should make RightCtrl+3 configurable")
+	}
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrl3"); got != "File.Attributes" {
+		t.Fatalf("RightCtrl+3 fallback = %q, want File.Attributes", got)
+	}
+}
+
 func TestPanelBookmarkHotkeysKeepRightCtrlDistinct(t *testing.T) {
 	tests := []struct {
 		name string

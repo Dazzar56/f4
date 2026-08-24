@@ -182,15 +182,50 @@ func EventToHotkeyString(e *vtinput.InputEvent) string {
 	return key
 }
 
-// configuredHotkeyAction gives an explicit RCtrl binding precedence while
-// preserving the historical behavior that a plain Ctrl binding also responds
-// to the physical Right Ctrl key when no RCtrl-specific binding exists.
+// configuredHotkeyAction gives explicit user bindings precedence while
+// preserving built-in Right Ctrl shortcuts. In particular, a user override of
+// CtrlA must be able to replace the built-in RCtrlA AI shortcut without also
+// requiring a duplicate RCtrlA entry.
 func configuredHotkeyAction(hm *HotkeyManager, area, key string) string {
-	action := hm.GetAction(area, key)
-	if action == "" && strings.HasPrefix(key, "RCtrl") {
-		return hm.GetAction(area, "Ctrl"+strings.TrimPrefix(key, "RCtrl"))
+	if hm == nil {
+		return ""
 	}
-	return action
+	action := hm.GetAction(area, key)
+	if !strings.HasPrefix(key, "RCtrl") {
+		return action
+	}
+
+	plainKey := "Ctrl" + strings.TrimPrefix(key, "RCtrl")
+	if hm.hasExplicitBinding(area, key) {
+		return action
+	}
+	if hm.hasExplicitBinding(area, plainKey) {
+		if plainAction := hm.GetAction(area, plainKey); plainAction != "" {
+			return plainAction
+		}
+	}
+	if action != "" {
+		return action
+	}
+	return hm.GetAction(area, plainKey)
+}
+
+// configurableHotkeyOwnsPanelBookmark lets an explicit configurable binding
+// take the place of far2l's built-in Right Ctrl/Ctrl+Alt bookmark shortcuts.
+// Unmodified defaults keep their historical bookmark behavior, while a user
+// binding on either Ctrl spelling is honored without requiring both spellings.
+func configurableHotkeyOwnsPanelBookmark(hm *HotkeyManager, area string, e *vtinput.InputEvent) bool {
+	if hm == nil || e == nil || !isPanelBookmarkHotkey(e) {
+		return false
+	}
+	key := EventToHotkeyString(e)
+	if hm.hasExplicitBinding(area, key) {
+		return true
+	}
+	if strings.HasPrefix(key, "RCtrl") {
+		return hm.hasExplicitBinding(area, "Ctrl"+strings.TrimPrefix(key, "RCtrl"))
+	}
+	return false
 }
 
 func ParseFarKey(s string) *vtinput.InputEvent {
@@ -336,8 +371,10 @@ func (m *MacroManager) GetCurrentArea() string {
 }
 
 // isPanelBookmarkHotkey identifies far2l-compatible folder bookmark keys.
-// They must reach PanelsFrame before macro and configurable hotkey handling,
-// because EventToFarString intentionally normalizes left and right Ctrl.
+// Built-in bookmark combinations reach PanelsFrame before macro and
+// configurable hotkey handling, because EventToFarString intentionally
+// normalizes left and right Ctrl. Explicit configurable bindings are allowed
+// to reclaim the combination before this handoff.
 func isPanelBookmarkHotkey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
@@ -456,7 +493,9 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		// must not consume keys before PanelsFrame can update its query.
 		return false
 	}
-	if currentArea == "Shell" && (isPanelBookmarkHotkey(e) || isPanelFastFindToggleKey(e)) {
+	if currentArea == "Shell" &&
+		((isPanelBookmarkHotkey(e) && !configurableHotkeyOwnsPanelBookmark(GlobalHotkeysMgr, currentArea, e)) ||
+			isPanelFastFindToggleKey(e)) {
 		return false
 	}
 

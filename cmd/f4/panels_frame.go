@@ -1925,7 +1925,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Terminals that cannot tell the two Ctrls apart report LeftCtrlPressed
 	// for either one — that is what the Ctrl+Alt alias (far2l offers the
 	// same pair) is for.
-	if e.KeyDown {
+	if e.KeyDown && !configurableHotkeyOwnsPanelBookmark(GlobalHotkeysMgr, "Shell", e) {
 		rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
 		lctrl := (e.ControlKeyState & vtinput.LeftCtrlPressed) != 0
 		isBookmarkGoto := (rctrl && !shift && !alt) || ((lctrl || rctrl) && alt && !shift)

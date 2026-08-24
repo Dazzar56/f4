@@ -601,6 +601,54 @@ func (hm *HotkeyManager) GetAction(area, key string) string {
 	return ""
 }
 
+// hasExplicitBinding reports whether key differs from the built-in binding in
+// the effective area. Bindings starts as a copy of Defaults, so comparing the
+// two maps also lets us distinguish a user's override from a default RCtrl
+// shortcut (notably the built-in RCtrlA AI shortcut). A missing key whose
+// default exists is an explicit unbind written by the settings dialog.
+func (hm *HotkeyManager) hasExplicitBinding(area, key string) bool {
+	if hm == nil {
+		return false
+	}
+
+	layerHasKey := func(layer string) bool {
+		if binds, ok := hm.Bindings[layer]; ok {
+			if _, exists := binds[key]; exists {
+				return true
+			}
+		}
+		if defaults, ok := hm.Defaults[layer]; ok {
+			if _, exists := defaults[key]; exists {
+				return true
+			}
+		}
+		return false
+	}
+
+	checkLayer := func(layer string) bool {
+		if !layerHasKey(layer) {
+			return false
+		}
+		current, currentExists := hm.Bindings[layer][key]
+		def, defaultExists := hm.Defaults[layer][key]
+		return !currentExists || !defaultExists || current != def
+	}
+
+	if checkLayer(area) {
+		return true
+	}
+	// An unchanged area-local default wins over Common in GetAction, so do
+	// not inspect Common in that case. Only fall through when the area has no
+	// binding layer for this key at all.
+	if layerHasKey(area) {
+		return false
+	}
+	if area != "Common" {
+		return checkLayer("Common")
+	}
+	return false
+}
+
 // Bind assigns an action to a key in a specific area.
 func (hm *HotkeyManager) Bind(area, key, action string) {
 	if hm.Bindings[area] == nil {
