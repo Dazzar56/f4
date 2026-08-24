@@ -133,6 +133,26 @@ func TestSelectedHotkeyRowUsesDisplayedTablePosition(t *testing.T) {
 	}
 }
 
+func TestSelectedHotkeyRowAtUsesActionPosition(t *testing.T) {
+	rows := []hotkeyRow{
+		{Label: "Zulu action"},
+		{Label: "Alpha action"},
+		{Label: "Middle action"},
+	}
+	table := vtui.NewTable(0, 0, 80, 10, []vtui.TableColumn{{Title: "Command", Width: 40}})
+	table.Sortable = true
+	table.SetRows([]vtui.TableRow{rows[0], rows[1], rows[2]})
+	table.SetSort(0, true)
+
+	// Simulate Enter dispatching an explicit display position while the
+	// table's current selection contains a different value.
+	table.SelectPos = 2
+	row, ok := selectedHotkeyRowAt(table, rows, 0)
+	if !ok || row.Label != "Alpha action" {
+		t.Fatalf("action-position row selected %q, want Alpha action", row.Label)
+	}
+}
+
 func TestNativeHotkeyInventory(t *testing.T) {
 	selectAction, ok := GetAction("Panel.SelectNavigation")
 	if !ok {
