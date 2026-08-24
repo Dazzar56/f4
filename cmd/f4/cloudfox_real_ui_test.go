@@ -68,7 +68,7 @@ func TestRealSavedCloudConnectionsUI(t *testing.T) {
 	if !filepath.IsAbs(configDir) {
 		t.Fatal("real CloudFox UI config directory must be absolute")
 	}
-	info, err := os.Stat(configDir)
+	info, err := os.Stat(configDir) // #nosec G703 -- this opt-in integration config must be an operator-supplied absolute directory.
 	if err != nil || !info.IsDir() {
 		t.Fatal("real CloudFox UI config directory is unavailable")
 	}

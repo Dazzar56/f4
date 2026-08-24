@@ -148,7 +148,7 @@ func LoadAssociations(path string) ([]FileAssoc, error) {
 // order far2l uses so file-level diffs stay small.
 func SaveAssociations(path string, list []FileAssoc) error {
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
@@ -174,7 +174,7 @@ func SaveAssociations(path string, list []FileAssoc) error {
 		fmt.Fprintf(&buf, "State=%d\n", encodeAssocState(a.Enabled))
 	}
 
-	return writeFileAtomically(path, []byte(buf.String()), 0o644)
+	return writeFileAtomically(path, []byte(buf.String()), 0o600)
 }
 
 func parseAssocState(v string) uint32 {

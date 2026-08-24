@@ -72,7 +72,7 @@ func TestRealSavedCloudSharing(t *testing.T) {
 	if configDir == "" || !filepath.IsAbs(configDir) {
 		t.Fatal("real CloudFox sharing requires an absolute config directory")
 	}
-	if info, err := os.Stat(configDir); err != nil || !info.IsDir() {
+	if info, err := os.Stat(configDir); err != nil || !info.IsDir() { // #nosec G703 -- the doubly opted-in sharing test intentionally loads the operator-supplied absolute config directory.
 		t.Fatal("real CloudFox sharing config directory is unavailable")
 	}
 
@@ -690,7 +690,7 @@ func TestRealAnonymousShareProbeIsCredentiallessAndDoesNotExposeURLsInErrors(t *
 		t.Fatalf("closed probe = accessible:%t error:%s", accessible, realSharingErrorClass(err))
 	}
 
-	secretURL := "https://share.invalid/file?token=must-not-leak"
+	secretURL := "https://share.invalid/file?token=must-not-leak" // #nosec G101 -- a synthetic secret-bearing URL verifies error redaction.
 	class := realSharingErrorClass(fmt.Errorf("request %s: %w", secretURL, errRealAnonymousShareProbe))
 	if strings.Contains(class, "share.invalid") || strings.Contains(class, "must-not-leak") || strings.Contains(class, "https://") {
 		t.Fatalf("error class leaked a share URL: %q", class)

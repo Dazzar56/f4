@@ -18,7 +18,7 @@ func TestPatchInPlace_RejectsWithoutWriting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 	const original = "hello world\n"
-	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -49,7 +49,7 @@ func TestPatchInPlace_RejectsWithoutWriting(t *testing.T) {
 func TestPatchInPlace_AppliesSameLengthEdits(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
-	if err := os.WriteFile(path, []byte("hello world\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("hello world\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -75,7 +75,7 @@ func TestPatchInPlace_AppliesSameLengthEdits(t *testing.T) {
 func TestPatchInPlace_TruncatesShorterReplacement(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
-	if err := os.WriteFile(path, []byte("aGVsbG8gd29ybGQ=\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("aGVsbG8gd29ybGQ=\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

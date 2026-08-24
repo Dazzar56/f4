@@ -115,14 +115,7 @@ func urlCellRangesFromCells(cells []vtui.CharInfo) []urlCellRange {
 	offsets := make([]int, 0, len(cells))
 	for _, cell := range cells {
 		offsets = append(offsets, text.Len())
-		if cell.Char == vtui.WideCharFiller {
-			continue
-		}
-		ch := rune(cell.Char)
-		if ch == 0 {
-			ch = ' '
-		}
-		text.WriteRune(ch)
+		text.WriteString(vtui.CellString(cell.Char))
 	}
 	return urlCellRanges(text.String(), offsets)
 }

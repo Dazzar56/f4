@@ -12,6 +12,8 @@ package main
 // it never shows would put the pictures nowhere.
 
 import (
+	"encoding/binary"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -200,19 +202,18 @@ type consolePiece struct {
 func consoleFrameKey(pieces []consolePiece, frame wincon.Rect) string {
 	var sb strings.Builder
 	add := func(v int) {
-		var b [4]byte
-		b[0], b[1], b[2], b[3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
-		sb.Write(b[:])
+		sb.WriteString(strconv.Itoa(v))
+		sb.WriteByte(0)
 	}
+	var hashBytes [8]byte
 	add(frame.X)
 	add(frame.Y)
 	add(frame.W)
 	add(frame.H)
 	for _, pc := range pieces {
 		h := pc.p.Surface.Hash()
-		for i := 0; i < 8; i++ {
-			sb.WriteByte(byte(h >> (8 * i)))
-		}
+		binary.LittleEndian.PutUint64(hashBytes[:], h)
+		sb.Write(hashBytes[:])
 		add(pc.rect.X)
 		add(pc.rect.Y)
 		add(pc.rect.W)

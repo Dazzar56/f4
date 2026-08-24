@@ -231,7 +231,7 @@ func TestFolderHistoryBackUsesPendingVisualTargetInsteadOfSourceVFS(t *testing.T
 	sourcePath := filepath.Join(root, "source")
 	olderPath := filepath.Join(root, "older")
 	for _, path := range []string{sourcePath, olderPath} {
-		if err := os.Mkdir(path, 0o755); err != nil {
+		if err := os.Mkdir(path, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}

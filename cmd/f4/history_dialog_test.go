@@ -106,7 +106,7 @@ func TestHistorySearchDrawHighlightsMatchAndSearchTitle(t *testing.T) {
 	foundBracket := false
 	foundStar := false
 	for x := menu.X1 + 1; x < menu.X2; x++ {
-		char := rune(scr.GetCell(x, menu.Y1).Char)
+		char := testRune(scr.GetCell(x, menu.Y1).Char)
 		if char == '[' {
 			foundBracket = true
 		}
@@ -120,7 +120,7 @@ func TestHistorySearchDrawHighlightsMatchAndSearchTitle(t *testing.T) {
 	foundHighlightedQuery := false
 	for x := menu.X1 + 1; x < menu.X2; x++ {
 		cell := scr.GetCell(x, menu.Y1)
-		if rune(cell.Char) == 'm' && cell.Attributes == vtui.Palette[vtui.ColDialogHighlightText] {
+		if testRune(cell.Char) == 'm' && cell.Attributes == vtui.Palette[vtui.ColDialogHighlightText] {
 			foundHighlightedQuery = true
 			break
 		}
@@ -130,7 +130,7 @@ func TestHistorySearchDrawHighlightsMatchAndSearchTitle(t *testing.T) {
 	}
 	foundF2Hint := false
 	for x := menu.X1 + 1; x < menu.X2-1; x++ {
-		if rune(scr.GetCell(x, menu.Y2).Char) == 'F' && rune(scr.GetCell(x+1, menu.Y2).Char) == '2' {
+		if testRune(scr.GetCell(x, menu.Y2).Char) == 'F' && testRune(scr.GetCell(x+1, menu.Y2).Char) == '2' {
 			foundF2Hint = true
 			break
 		}
@@ -164,10 +164,10 @@ func TestHistorySearchLockColumnAndDetailsAreCapabilityGated(t *testing.T) {
 	}
 	menu.Show(scr)
 	search.draw(scr)
-	if got := rune(scr.GetCell(menu.X1+1, menu.Y1+1).Char); got != '*' {
+	if got := testRune(scr.GetCell(menu.X1+1, menu.Y1+1).Char); got != '*' {
 		t.Fatalf("lock marker = %q, want *", got)
 	}
-	if got := rune(scr.GetCell(menu.X1+2, menu.Y1+1).Char); got != 'e' {
+	if got := testRune(scr.GetCell(menu.X1+2, menu.Y1+1).Char); got != 'e' {
 		t.Fatalf("text after lock marker = %q, want e with no spacer", got)
 	}
 	search.showDetails = true
@@ -209,7 +209,7 @@ func TestHistorySearchResolvesDialogThemeAtRenderTime(t *testing.T) {
 		menu.Show(scr)
 		search.draw(scr)
 		y := menu.Y1 + 1 + (menu.SelectPos - menu.TopPos)
-		if got := rune(scr.GetCell(menu.X1+1, y).Char); got != '*' {
+		if got := testRune(scr.GetCell(menu.X1+1, y).Char); got != '*' {
 			t.Fatalf("selected lock marker = %q, want * at the first inner cell", got)
 		}
 		if got := scr.GetCell(menu.X1+2, y).Attributes; got != selected {

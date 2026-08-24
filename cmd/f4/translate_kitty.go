@@ -130,12 +130,15 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	isSpecial := ctrl && (e.Char < 32)
 
 	if shift && (!caps || (!isLetter && !isSpecial)) && e.Char != ' ' {
-		shifted = uint(unicode.ToUpper(e.Char))
+		shifted, _ = runeCodepoint(unicode.ToUpper(e.Char))
 	}
-	keycode = uint(unicode.ToLower(e.Char))
+	keycode, _ = runeCodepoint(unicode.ToLower(e.Char))
 
 	if (e.VirtualKeyCode >= 'A' && e.VirtualKeyCode <= 'Z') || (e.VirtualKeyCode >= '0' && e.VirtualKeyCode <= '9') {
-		base = uint(unicode.ToLower(rune(e.VirtualKeyCode)))
+		base = uint(e.VirtualKeyCode)
+		if e.VirtualKeyCode >= 'A' && e.VirtualKeyCode <= 'Z' {
+			base += 'a' - 'A'
+		}
 	}
 
 	switch e.VirtualKeyCode {

@@ -2005,8 +2005,10 @@ func googlePanelSnapshot(about *drive.About, refreshed time.Time) vfs.PanelInfoS
 	if about.StorageQuota != nil && about.StorageQuota.Limit > 0 {
 		available := uint64(0)
 		if about.StorageQuota.Usage < about.StorageQuota.Limit {
+			// #nosec G115 -- both signed quota values are positive here and Usage is smaller than Limit.
 			available = uint64(about.StorageQuota.Limit - about.StorageQuota.Usage)
 		}
+		// #nosec G115 -- the surrounding condition proves Limit is positive.
 		account.Fields = append(account.Fields, vfs.PanelInfoField{ID: "quota", Label: "Storage", Kind: vfs.PanelInfoUsage, TotalBytes: uint64(about.StorageQuota.Limit), AvailableBytes: available})
 	}
 	snapshot.Sections = []vfs.PanelInfoSection{account}

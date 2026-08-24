@@ -343,9 +343,10 @@ func parseTIFFMeta(p *probe, b []byte, im *Image) {
 				continue
 			}
 			unitSize := map[uint16]int{1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8}[typ]
-			if unitSize == 0 || uint64(units)*uint64(unitSize) > uint64(len(b)) {
+			if unitSize == 0 || uint64(units)*uint64(unitSize) > uint64(len(b)) { // #nosec G115 -- unitSize and slice lengths are non-negative.
 				continue
 			}
+			// #nosec G115 -- the product was checked against len(b), so units fits int here.
 			n := int(units) * unitSize
 			var raw []byte
 			if n <= 4 {
@@ -585,8 +586,8 @@ func tiffRationals(order binary.ByteOrder, raw []byte, signed bool, limit int) [
 		part := raw[index*8 : index*8+8]
 		var numerator, denominator float64
 		if signed {
-			numerator = float64(int32(order.Uint32(part[:4])))
-			denominator = float64(int32(order.Uint32(part[4:])))
+			numerator = float64(signedInt32Bits(order.Uint32(part[:4])))
+			denominator = float64(signedInt32Bits(order.Uint32(part[4:])))
 		} else {
 			numerator = float64(order.Uint32(part[:4]))
 			denominator = float64(order.Uint32(part[4:]))

@@ -50,13 +50,13 @@ func setupPanelWithFile(t *testing.T, name string) (*PanelsFrame, *mockPty) {
 	if name != ".." && name != "" {
 		fullPath := filepath.Join(tmpDir, name)
 		if name == "some_subdir" {
-			_ = os.MkdirAll(fullPath, 0755)
+			_ = os.MkdirAll(fullPath, 0700)
 		} else {
-			_ = os.WriteFile(fullPath, []byte("mock"), 0644)
+			_ = os.WriteFile(fullPath, []byte("mock"), 0600)
 		}
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	t.Cleanup(pf.Close)
 	pf.ResizeConsole(80, 25)
 

@@ -18,7 +18,7 @@ import (
 // and Ctrl+Q on the focused alt closes IT (not spawns a second one).
 func TestPanelsFrame_CtrlQ_TogglesQuickView(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -64,7 +64,7 @@ func TestPanelsFrame_CtrlQ_TogglesQuickView(t *testing.T) {
 // info on one side, quick view on the other — without collisions.
 func TestPanelsFrame_CtrlLQ_CoexistOnDifferentSides(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -108,7 +108,7 @@ func TestQuickView_TextFilePreview(t *testing.T) {
 
 	tmp := t.TempDir()
 	filePath := filepath.Join(tmp, "hello.txt")
-	if err := os.WriteFile(filePath, []byte("first line\nsecond line\n"), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte("first line\nsecond line\n"), 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestQuickView_ScrollAndWrap(t *testing.T) {
 		}
 	}
 	path := filepath.Join(tmp, "long.txt")
-	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(b.String()), 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestPanelsFrame_QuickViewWheel_ActivePanelScrolls(t *testing.T) {
 	vtui.FrameManager.Init(scr)
 	vtui.SetDefaultPalette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -265,6 +265,7 @@ func TestPanelsFrame_QuickViewWheel_ActivePanelScrolls(t *testing.T) {
 		VirtualKeyCode: vtinput.VK_Q, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 	q := pf.altPanels[0].(*QuickViewPanel)
+	pf.lastAutoRefresh = time.Now()
 	pf.Show(scr)
 
 	// Tab — active moves to left (alt slot). From now on wheel should
@@ -298,7 +299,7 @@ func TestQuickView_MouseWheelScrolls(t *testing.T) {
 		}
 	}
 	path := filepath.Join(tmp, "many.txt")
-	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(b.String()), 0600); err != nil {
 		t.Fatal(err)
 	}
 	fsp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(tmp))
@@ -368,13 +369,13 @@ func TestQuickView_DirScan_PopulatesRecursive(t *testing.T) {
 	// Expected recursive: Folders=1 (sub), Files=2, Bytes=150.
 	dir := filepath.Join(tmp, "dir")
 	sub := filepath.Join(dir, "sub")
-	if err := os.MkdirAll(sub, 0755); err != nil {
+	if err := os.MkdirAll(sub, 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), make([]byte, 100), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), make([]byte, 100), 0600); err != nil {
 		t.Fatalf("write a: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "b.txt"), make([]byte, 50), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "b.txt"), make([]byte, 50), 0600); err != nil {
 		t.Fatalf("write b: %v", err)
 	}
 
@@ -448,7 +449,7 @@ func TestQuickView_DotDot_ScansCurrentDir(t *testing.T) {
 	vtui.SetDefaultPalette()
 
 	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "one.bin"), make([]byte, 200), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "one.bin"), make([]byte, 200), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -498,13 +499,13 @@ func TestQuickView_DirScan_CancelsOnSelectionChange(t *testing.T) {
 	tmp := t.TempDir()
 	dirA := filepath.Join(tmp, "A")
 	dirB := filepath.Join(tmp, "B")
-	if err := os.MkdirAll(dirA, 0755); err != nil {
+	if err := os.MkdirAll(dirA, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(dirB, 0755); err != nil {
+	if err := os.MkdirAll(dirB, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dirA, "onlyA.bin"), make([]byte, 42), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dirA, "onlyA.bin"), make([]byte, 42), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -566,7 +567,7 @@ func TestQuickView_DirScan_CancelsOnSelectionChange(t *testing.T) {
 // this PR the B toggle only fired for `info` alts.
 func TestPanelsFrame_BToggle_WithQuickView(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -614,7 +615,7 @@ func TestQuickView_ImageFilePreview(t *testing.T) {
 		0xff, 0xff, 0x00, 0x00, 0xff,
 	}
 
-	if err := os.WriteFile(filePath, qoiBytes, 0644); err != nil {
+	if err := os.WriteFile(filePath, qoiBytes, 0600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -692,7 +693,7 @@ func TestQuickView_ImageGraphicsNotSupported(t *testing.T) {
 		for x := q.X1; x <= q.X2; x++ {
 			ci := scr.GetCell(x, y)
 			if ci.Char != 0 {
-				line = append(line, rune(ci.Char))
+				line = append(line, testRune(ci.Char))
 			}
 		}
 		if strings.Contains(string(line), "not supported") {

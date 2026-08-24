@@ -15,6 +15,18 @@ import (
 	"time"
 )
 
+func mediaFixtureUint32(value int) uint32 {
+	return uint32(value) // #nosec G115 -- generated media fixtures are bounded well below uint32 size fields.
+}
+
+func mediaFixtureUint64(value int) uint64 {
+	return uint64(value) // #nosec G115 -- generated media fixtures have small non-negative buffer sizes.
+}
+
+func mediaFixtureByte(value int) byte {
+	return byte(value) // #nosec G115 -- callers deliberately encode bounded fixture values into byte fields.
+}
+
 type memorySource []byte
 
 func (m memorySource) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
@@ -39,7 +51,7 @@ func analyzeBytes(t *testing.T, name string, b []byte, mode Mode) (Report, error
 func TestAnalyzeWave(t *testing.T) {
 	b := make([]byte, 12+8+16+8+8000)
 	copy(b[:4], "RIFF")
-	binary.LittleEndian.PutUint32(b[4:8], uint32(len(b)-8))
+	binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(b)-8))
 	copy(b[8:12], "WAVE")
 	copy(b[12:16], "fmt ")
 	binary.LittleEndian.PutUint32(b[16:20], 16)
@@ -181,7 +193,7 @@ func TestAnalyzePNG(t *testing.T) {
 func TestAnalyzeMinimalMP4(t *testing.T) {
 	box := func(typ string, payload []byte) []byte {
 		x := make([]byte, 8+len(payload))
-		binary.BigEndian.PutUint32(x[:4], uint32(len(x)))
+		binary.BigEndian.PutUint32(x[:4], mediaFixtureUint32(len(x)))
 		copy(x[4:8], typ)
 		copy(x[8:], payload)
 		return x
@@ -204,9 +216,9 @@ func TestAnalyzeMinimalMP4(t *testing.T) {
 
 func ebmlSize(n int) []byte {
 	if n < 127 {
-		return []byte{0x80 | byte(n)}
+		return []byte{0x80 | mediaFixtureByte(n)}
 	}
-	return []byte{0x40 | byte(n>>8), byte(n)}
+	return []byte{0x40 | mediaFixtureByte(n>>8), mediaFixtureByte(n)}
 }
 func ebmlElement(id, payload []byte) []byte {
 	b := append(append([]byte(nil), id...), ebmlSize(len(payload))...)
@@ -265,7 +277,7 @@ func TestAnalyzeWithBackgroundContext(t *testing.T) {
 func TestAnalyzeReadLimitReturnsPartial(t *testing.T) {
 	b := make([]byte, 12+8+16)
 	copy(b[:4], "RIFF")
-	binary.LittleEndian.PutUint32(b[4:8], uint32(len(b)-8))
+	binary.LittleEndian.PutUint32(b[4:8], mediaFixtureUint32(len(b)-8))
 	copy(b[8:12], "WAVE")
 	copy(b[12:16], "fmt ")
 	binary.LittleEndian.PutUint32(b[16:20], 16)

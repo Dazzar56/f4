@@ -111,6 +111,7 @@ func (li *LineIndex) appendOffset(off int) {
 		blk := &li.blocks[len(li.blocks)-1]
 		rel := off - blk.base
 		if len(blk.entries) < lineBlockTarget && fitsRelativeOffset(rel) {
+			// #nosec G115 -- fitsRelativeOffset proves rel is in the uint32 range.
 			blk.entries = append(blk.entries, uint32(rel))
 			li.count++
 			return
@@ -186,6 +187,7 @@ func (li *LineIndex) shiftFrom(line, delta int) {
 				li.shiftFrom(line, delta)
 				return
 			}
+			// #nosec G115 -- fitsRelativeOffset above proves rel is in the uint32 range.
 			blk.entries[i] = uint32(rel)
 		}
 	}
@@ -224,6 +226,7 @@ func (li *LineIndex) insertLines(at int, vals []int) {
 			li.insertLines(at, vals)
 			return
 		}
+		// #nosec G115 -- fitsRelativeOffset above proves r is in the uint32 range.
 		rel[i] = uint32(r)
 	}
 
@@ -254,6 +257,7 @@ func (li *LineIndex) splitIfLarge(b int) {
 	}
 	shift := tail.base - blk.base
 	for i := range tail.entries {
+		// #nosec G115 -- shift is the non-negative difference between two offsets encoded in this uint32 block.
 		tail.entries[i] -= uint32(shift)
 	}
 	blk.entries = blk.entries[:half]

@@ -786,6 +786,7 @@ PathHints.SourceBoth=Обе панели
 PathHints.Timeout=Таймаут &ReadDir (с):
 PathHints.MaxVisible=&Видимых строк:
 PathHints.PerCategory=Ограничение строк на &категорию
+PathHints.DialogAutoComplete=&Автодополнение при вводе в диалогах
 PathHints.MarkersNote=Пометки подсветки следуют настройке панелей
 
 StartupSettings.Title= Настройки запуска

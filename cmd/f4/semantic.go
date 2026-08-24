@@ -771,17 +771,21 @@ func semanticInt(v any) int {
 	case int32:
 		return int(n)
 	case int64:
-		return int(n)
+		value, _ := boundedInt64ToInt(n)
+		return value
 	case uint:
-		return int(n)
+		value, _ := boundedUint64ToInt(uint64(n))
+		return value
 	case uint8:
 		return int(n)
 	case uint16:
 		return int(n)
 	case uint32:
-		return int(n)
+		value, _ := boundedUint64ToInt(uint64(n))
+		return value
 	case uint64:
-		return int(n)
+		value, _ := boundedUint64ToInt(n)
+		return value
 	case float32:
 		return int(n)
 	case float64:

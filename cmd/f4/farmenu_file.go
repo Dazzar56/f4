@@ -144,8 +144,14 @@ func decodeUTF32Bytes(b []byte, bo binary.ByteOrder) string {
 	b = b[:len(b)-len(b)%4]
 	runes := make([]rune, 0, len(b)/4)
 	for i := 0; i < len(b); i += 4 {
-		r := rune(bo.Uint32(b[i : i+4]))
-		if r < 0 || r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
+		value := bo.Uint32(b[i : i+4])
+		if value > utf8.MaxRune || (value >= 0xD800 && value <= 0xDFFF) {
+			runes = append(runes, utf8.RuneError)
+			continue
+		}
+		// #nosec G115 -- value is bounded to a valid Unicode scalar above.
+		r := rune(value)
+		if !utf8.ValidRune(r) {
 			r = utf8.RuneError
 		}
 		runes = append(runes, r)

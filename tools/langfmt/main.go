@@ -108,6 +108,7 @@ func main() {
 			if err != nil {
 				fatal("stat %s: %v", path, err)
 			}
+			// #nosec G703 -- path is the exact user-supplied language file (or a match from the user's glob) being formatted in place.
 			if err := os.WriteFile(path, formatted, info.Mode().Perm()); err != nil {
 				fatal("write %s: %v", path, err)
 			}

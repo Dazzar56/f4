@@ -131,8 +131,10 @@ func TestOverlayIsClippedToTheTerminal(t *testing.T) {
 		t.Fatalf("place: %v", err)
 	}
 	pix := make([]byte, 80*40*4)
-	for i := 0; i < len(pix); i += 4 {
-		pix[i], pix[i+1], pix[i+2], pix[i+3] = 0, 0, 255, 255
+	for i := range pix {
+		if i%4 >= 2 {
+			pix[i] = 255
+		}
 	}
 	if err := ov.Draw(pix, 80, 40, 80*4); err != nil {
 		t.Fatalf("draw: %v", err)
@@ -150,10 +152,10 @@ func TestOverlayIsClippedToTheTerminal(t *testing.T) {
 }
 
 // pixelIsBlue reads one pixel off the screen.
-func (f *xFixture) pixelIsBlue(t *testing.T, x, y int) bool {
+func (f *xFixture) pixelIsBlue(t *testing.T, x, y int16) bool {
 	t.Helper()
 	reply, err := xproto.GetImage(f.conn, xproto.ImageFormatZPixmap,
-		xproto.Drawable(f.root), int16(x), int16(y), 1, 1, 0xFFFFFFFF).Reply()
+		xproto.Drawable(f.root), x, y, 1, 1, 0xFFFFFFFF).Reply()
 	if err != nil || reply == nil || len(reply.Data) < 4 {
 		t.Fatalf("read back at %d,%d: %v", x, y, err)
 	}

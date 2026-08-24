@@ -18,13 +18,13 @@ func TestHelpLanguageSwitch(t *testing.T) {
 		helpActionStrings = oldHelpActionStrings
 	})
 
-	err := os.MkdirAll(filepath.Join(tempDir, "help"), 0755)
+	err := os.MkdirAll(filepath.Join(tempDir, "help"), 0700)
 	if err != nil {
 		t.Fatalf("failed to create help dir: %v", err)
 	}
 
 	ruHelpContent := "@TestTopic\n$RU Title\nRussian Help Content\n"
-	err = os.WriteFile(filepath.Join(tempDir, "help", "ru.hlf"), []byte(ruHelpContent), 0644)
+	err = os.WriteFile(filepath.Join(tempDir, "help", "ru.hlf"), []byte(ruHelpContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to write test hlf: %v", err)
 	}

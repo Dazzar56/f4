@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/unxed/vtui"
@@ -55,5 +56,34 @@ func TestPlugRingRowColorsFollowDialogTheme(t *testing.T) {
 	installed := plugRingRow{status: "Installed"}.GetCellAttr(0, selected)
 	if got := vtui.GetRGBFore(installed); got != 0xABCDEF {
 		t.Fatalf("installed foreground = %#x, want dialog text foreground", got)
+	}
+}
+
+// The ID names the directory install replaces and remove deletes, and it comes
+// from a remote catalog. Anything that resolves outside its own element, or to
+// the plugring directory itself, has to be refused.
+func TestSafePlugRingIDRejectsAnythingThatEscapesItsElement(t *testing.T) {
+	for _, id := range []string{
+		"",
+		".",
+		"..",
+		"../evil",
+		"a/b",
+		`a\b`,
+		"a\x00b",
+		"./a",
+		"a/",
+	} {
+		if safePlugRingID(id) {
+			t.Errorf("accepted %q, which resolves to %q", id, filepath.Join("plugring", id))
+		}
+	}
+}
+
+func TestSafePlugRingIDAcceptsOrdinaryNames(t *testing.T) {
+	for _, id := range []string{"netfox", "cloud-fox", "media_info", "plugin.v2", ".hidden"} {
+		if !safePlugRingID(id) {
+			t.Errorf("rejected %q, which is a plain directory name", id)
+		}
 	}
 }

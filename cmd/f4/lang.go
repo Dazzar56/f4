@@ -54,6 +54,10 @@ func loadEmbeddedLanguageMap(code string) map[string]string {
 	return loadLangMapFromINI(ParseIni(strings.NewReader(string(data))))
 }
 
+func safeLanguageCode(code string) bool {
+	return code != "" && !strings.Contains(code, "..") && !strings.ContainsAny(code, `/\`)
+}
+
 // InitLang transfers all f4 strings to vtui localization engine.
 func InitLang() {
 	languageState.Lock()
@@ -76,6 +80,12 @@ func InitLang() {
 		primary = "en"
 	}
 	fallback := AppConfig.FallbackLanguage
+	if !safeLanguageCode(primary) {
+		primary = "en"
+	}
+	if fallback != "" && !safeLanguageCode(fallback) {
+		fallback = ""
+	}
 
 	// 1. Always load embedded English as absolute fallback (Tier 1)
 	embedIni := ParseIni(strings.NewReader(defaultLangData))
@@ -93,6 +103,9 @@ func InitLang() {
 	userDir := filepath.Join(GetF4ConfigDir(), "lang")
 
 	loadLang := func(code string) {
+		if !safeLanguageCode(code) {
+			return
+		}
 		// Use the version embedded in this binary as the language baseline. A
 		// separately installed or development-time .lng file may lag behind the
 		// executable; loading it only as an overlay keeps new strings in the
@@ -107,6 +120,7 @@ func InitLang() {
 		}
 		var langIni *IniFile
 		for _, cand := range candidates {
+			// #nosec G703 -- safeLanguageCode rejects separators and ".." before code is used as a path component.
 			if _, err := os.Stat(cand); err == nil {
 				langIni = LoadIni(cand)
 				vtui.DebugLog("LANG: Loaded language file from disk: %s", cand)

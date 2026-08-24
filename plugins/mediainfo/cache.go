@@ -163,6 +163,7 @@ func (w *cacheWeight) addSlice(capacity int, elementSize uintptr) {
 		w.value = maxCacheWeight
 		return
 	}
+	// #nosec G115 -- the product was checked against maxCacheWeight immediately above.
 	w.add(int64(uint64(capacity) * uint64(elementSize)))
 }
 

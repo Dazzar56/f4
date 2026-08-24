@@ -30,7 +30,7 @@ func (p *panelPluginTestController) GetSelectedName() string { return "plugin-ro
 
 func TestPanelProviderOpensInActiveSlotAndReceivesContext(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	pf.ResizeConsole(80, 25)
 	defer pf.Close()
 

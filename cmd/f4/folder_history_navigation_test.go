@@ -163,5 +163,5 @@ func TestFolderHistoryNavigationAndMenuDoNotReorderHistory(t *testing.T) {
 }
 
 func ensureDir(path string) error {
-	return os.Mkdir(path, 0o755)
+	return os.Mkdir(path, 0o700)
 }

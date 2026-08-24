@@ -72,10 +72,10 @@ func TestColorerSchemasExist_FollowsTheConfiguredCatalog(t *testing.T) {
 	if SchemasExist() {
 		t.Fatal("Expected no schemas in an empty folder")
 	}
-	if err := os.MkdirAll(filepath.Join(custom, "base"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(custom, "base"), 0700); err != nil {
 		t.Fatalf("Cannot create the fixture directory: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(custom, "base", "catalog.xml"), []byte("<catalog/>"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(custom, "base", "catalog.xml"), []byte("<catalog/>"), 0600); err != nil {
 		t.Fatalf("Cannot write the catalog: %v", err)
 	}
 	if !SchemasExist() {

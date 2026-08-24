@@ -522,12 +522,12 @@ func TestMacroFailingActionIsContained(t *testing.T) {
 func TestMacroLoadDir(t *testing.T) {
 	dir := t.TempDir()
 	nested := filepath.Join(dir, "user")
-	if err := os.MkdirAll(nested, 0o755); err != nil {
+	if err := os.MkdirAll(nested, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	write := func(path, content string) {
 		t.Helper()
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 	}

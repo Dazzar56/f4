@@ -131,7 +131,7 @@ func TestViewerBackendLineStartFromEnd(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")
 	content := "line1\nline2\nline3\n"
-	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -172,7 +172,7 @@ func TestViewerBackendLineStartFromEnd(t *testing.T) {
 func TestViewerBackendLineStartFromEndFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(tmp, []byte("a\nb\n"), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte("a\nb\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,7 +230,7 @@ func (v *searchingVFS) Search(ctx context.Context, path, pattern string) (chan i
 func TestViewerBackendSearchFrom(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(tmp, []byte("needle here and needle there\n"), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte("needle here and needle there\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -314,7 +314,7 @@ func TestViewerBackendLineStart(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")
 	content := "line1\nline2\nline3\n"
-	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -354,7 +354,7 @@ func TestViewerBackendLineStart(t *testing.T) {
 func TestViewerBackendLineStartWithoutTrailingNewline(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(tmp, []byte("alpha\nomega"), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte("alpha\nomega"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	vb, err := NewViewerBackend(context.Background(), vfs.NewOSVFS(dir), tmp)

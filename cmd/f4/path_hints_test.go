@@ -13,10 +13,10 @@ import (
 func setupPathHintDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "subdir1"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "subdir1"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, "subdir2"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "subdir2"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "subdir1", "inner.txt"), []byte("x"), 0600); err != nil {
@@ -224,10 +224,10 @@ func TestPathHintProvider_BothPanels(t *testing.T) {
 
 	dirA := t.TempDir() // active panel
 	dirB := t.TempDir() // passive panel
-	if err := os.Mkdir(filepath.Join(dirA, "sub"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dirA, "sub"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dirB, "sub"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dirB, "sub"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dirA, "sub", "active.txt"), []byte("x"), 0600); err != nil {
@@ -237,7 +237,7 @@ func TestPathHintProvider_BothPanels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.panels[1].(*FileSystemPanel).vfs = vfs.NewOSVFS(dirA) // activeIdx = 1
@@ -286,14 +286,14 @@ func TestPathHintProvider_DisabledWhenCommandLineAutoCompleteOff(t *testing.T) {
 	SetDefaultF4Palette()
 
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "sub"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "sub", "file.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.panels[1].(*FileSystemPanel).vfs = vfs.NewOSVFS(dir)

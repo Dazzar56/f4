@@ -334,13 +334,13 @@ func TestListingAgainstLocalShell(t *testing.T) {
 	ctx := context.Background()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a file.txt"), []byte("hello"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a file.txt"), []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".hidden"), []byte("0123456789"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, "sub dir"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "sub dir"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("sub dir", filepath.Join(dir, "link to dir")); err != nil {
@@ -381,8 +381,8 @@ func TestListingAgainstLocalShell(t *testing.T) {
 			if !file.IsRegular() {
 				t.Errorf("Mode = %o, want a regular file", file.Mode)
 			}
-			if file.Perm() != 0644 {
-				t.Errorf("Perm = %o, want 644", file.Perm())
+			if file.Perm() != 0600 {
+				t.Errorf("Perm = %o, want 600", file.Perm())
 			}
 			if time.Since(file.MTime) > time.Hour || time.Since(file.MTime) < -time.Hour {
 				t.Errorf("MTime = %v, which is nowhere near now", file.MTime)
@@ -451,10 +451,10 @@ func TestTargetDirsAgainstLocalShell(t *testing.T) {
 	dir := t.TempDir()
 	targetDir := filepath.Join(dir, "target dir")
 	targetFile := filepath.Join(dir, "target file")
-	if err := os.Mkdir(targetDir, 0755); err != nil {
+	if err := os.Mkdir(targetDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(targetFile, []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(targetFile, []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	dirLink := filepath.Join(dir, "directory link")
@@ -486,7 +486,7 @@ func TestListingSurvivesWeirdNames(t *testing.T) {
 	dir := t.TempDir()
 	names := []string{"trailing space ", "back\\slash", "tab\there", "юникод", "-dash", "~tilde"}
 	for _, name := range names {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0600); err != nil {
 			t.Skipf("cannot create %q here: %v", name, err)
 		}
 	}

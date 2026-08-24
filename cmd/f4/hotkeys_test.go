@@ -215,7 +215,7 @@ func TestHotkeyManager_Conditions(t *testing.T) {
 // condition must return true unconditionally once panels are hidden.
 func TestNoAltScreenApp_SimpleInline_IgnoresBackgroundTermView(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pf.shellMode = ShellModeSimpleInline

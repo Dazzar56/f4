@@ -897,7 +897,7 @@ func TestMacro_ReassignAndCleanup(t *testing.T) {
 	mgr.Lua = engine
 
 	scriptDir := filepath.Join(GetF4ConfigDir(), "Macros", "scripts")
-	if err := os.MkdirAll(scriptDir, 0755); err != nil {
+	if err := os.MkdirAll(scriptDir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	scriptPath := filepath.Join(scriptDir, RecordedMacroFileName("Common", key))

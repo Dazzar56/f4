@@ -59,8 +59,8 @@ func (tv *TerminalView) handleFar2lImage(stk *vtinput.Far2lStack, reply *vtinput
 		// The order is far2l's: it pops the cell height, then the cell
 		// width, then the capabilities, so they go on in reverse.
 		reply.PushU64(wpImgCapRGBA)
-		reply.PushU16(uint16(cw))
-		reply.PushU16(uint16(ch))
+		reply.PushU16(ptyPixels(cw))
+		reply.PushU16(ptyPixels(ch))
 
 	case 's': // FARTTY_INTERACT_IMAGE_SET
 		reply.PushU8(tv.far2lImageSet(stk))

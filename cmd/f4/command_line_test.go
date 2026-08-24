@@ -209,3 +209,37 @@ func TestCommandLine_AutoCompleteSuppressed(t *testing.T) {
 		t.Error("AutoCompleteMenu was shown even though AutoCompleteSuppressed is true")
 	}
 }
+
+// The command line opts out of the generic vtui trigger because it drives the
+// completion menu itself, in ProcessKey, under gating vtui cannot see. If the
+// opt-out is ever dropped, Edit.ProcessKey opens the menu one call earlier and
+// CommandLineAutoComplete, AutoCompleteSuppressed and history browsing stop
+// having any effect -- which is how the three tests above started failing once
+// vtui learned to complete history fields on its own.
+func TestCommandLine_OptsOutOfWidgetAutoComplete(t *testing.T) {
+	cl := NewCommandLine("> ")
+	if !cl.Edit.NoAutoComplete {
+		t.Error("command line edit must opt out of vtui's own autocomplete trigger")
+	}
+}
+
+func TestCommandLine_AutoCompleteStillOpensWhenAllowed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	AppConfig.CommandLineAutoComplete = true
+	defer func() { AppConfig = oldCfg }()
+
+	cl := NewCommandLine("> ")
+	cl.SetPosition(0, 0, 10, 0)
+	cl.Edit.History = []string{"ls", "long-command"}
+
+	cl.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'l'})
+
+	top := vtui.FrameManager.GetTopFrame()
+	if _, isAc := top.(*vtui.AutoCompleteMenu); !isAc {
+		t.Fatal("opting out of the widget trigger also killed the command line's own menu")
+	}
+	vtui.FrameManager.Pop()
+}

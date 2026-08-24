@@ -365,7 +365,7 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 			if width == 0 {
 				continue
 			}
-			cells = append(cells, vtui.CharInfo{Char: uint64(sanitized), Attributes: attr})
+			cells = append(cells, vtui.CharInfo{Char: vtui.RegisterCluster(string(sanitized)), Attributes: attr})
 			for j := 1; j < width; j++ {
 				cells = append(cells, vtui.CharInfo{Char: vtui.WideCharFiller, Attributes: attr})
 			}

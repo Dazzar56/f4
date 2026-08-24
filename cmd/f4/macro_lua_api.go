@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -412,6 +413,13 @@ func (e *LuaMacroEngine) newFarNamespace(L *lua.LState) *lua.LTable {
 
 func newBitTable(L *lua.LState) *lua.LTable {
 	table := L.NewTable()
+	shiftCount := func(v int64) (uint, bool) {
+		if v < 0 || v >= 64 {
+			return 0, false
+		}
+		// #nosec G115 -- v is bounded to [0, 63] above.
+		return uint(v), true
+	}
 	binary := func(op func(a, b int64) int64) lua.LGFunction {
 		return func(L *lua.LState) int {
 			result := int64(L.CheckNumber(1))
@@ -430,8 +438,21 @@ func newBitTable(L *lua.LState) *lua.LTable {
 			L.Push(lua.LNumber(^int64(L.CheckNumber(1))))
 			return 1
 		},
-		"lshift": binary(func(a, b int64) int64 { return a << uint(b) }),
-		"rshift": binary(func(a, b int64) int64 { return int64(uint64(a) >> uint(b)) }),
+		"lshift": binary(func(a, b int64) int64 {
+			shift, ok := shiftCount(b)
+			if !ok {
+				return 0
+			}
+			return a << shift
+		}),
+		"rshift": binary(func(a, b int64) int64 {
+			shift, ok := shiftCount(b)
+			if !ok {
+				return 0
+			}
+			// #nosec G115 -- logical right shift intentionally reinterprets a's signed bits as uint64.
+			return int64(uint64(a) >> shift)
+		}),
 	})
 	return table
 }
@@ -505,7 +526,17 @@ func (e *LuaMacroEngine) newMFTable(L *lua.LState) *lua.LTable {
 			return 1
 		},
 		"chr": func(L *lua.LState) int {
-			L.Push(lua.LString(string(rune(int(L.CheckNumber(1))))))
+			value := float64(L.CheckNumber(1))
+			if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > utf8.MaxRune {
+				L.ArgError(1, "Unicode code point out of range")
+				return 0
+			}
+			r, ok := boundedRune(int(value))
+			if !ok {
+				L.ArgError(1, "invalid Unicode code point")
+				return 0
+			}
+			L.Push(lua.LString(string(r)))
 			return 1
 		},
 		"env": func(L *lua.LState) int {

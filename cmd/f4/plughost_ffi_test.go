@@ -97,9 +97,9 @@ func ffiNumber(t *testing.T, value any) int64 {
 	case uint32:
 		return int64(n)
 	case uint64:
-		return int64(n)
+		return testInt64Uint64(n)
 	case uint:
-		return int64(n)
+		return testInt64Uint(n)
 	case float64:
 		return int64(n)
 	}
@@ -190,7 +190,7 @@ func TestFFIPointerResultSurvivesTheWire(t *testing.T) {
 		t.Fatalf("memcpy: %v", err)
 	}
 	// A uintptr has no MessagePack representation; it must arrive as a number.
-	if got := ffiNumber(t, copied.Value); got != int64(dst.Addr) {
+	if got := ffiNumber(t, copied.Value); got != testInt64Uint64(dst.Addr) {
 		t.Fatalf("memcpy returned %#v, want the destination address", copied.Value)
 	}
 

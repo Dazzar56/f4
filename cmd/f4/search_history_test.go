@@ -319,3 +319,44 @@ func TestNewEditPrompt_DoesNotStorePlaceholderName(t *testing.T) {
 		t.Errorf("typed name not stored: %v", got)
 	}
 }
+
+func TestDialogAutoComplete_TogglePushedIntoVtui(t *testing.T) {
+	previous := vtui.AutoCompleteEnabled
+	oldConfig := AppConfig
+	t.Cleanup(func() {
+		vtui.AutoCompleteEnabled = previous
+		AppConfig = oldConfig
+	})
+
+	AppConfig.DialogAutoComplete = false
+	applyPathHintSettings()
+	if vtui.AutoCompleteEnabled {
+		t.Error("switching the setting off did not reach vtui")
+	}
+
+	AppConfig.DialogAutoComplete = true
+	applyPathHintSettings()
+	if !vtui.AutoCompleteEnabled {
+		t.Error("switching the setting on did not reach vtui")
+	}
+}
+
+func TestDialogAutoComplete_CannotReachUnqualifiedFields(t *testing.T) {
+	previous := vtui.AutoCompleteEnabled
+	t.Cleanup(func() { vtui.AutoCompleteEnabled = previous })
+	vtui.AutoCompleteEnabled = true
+
+	store := useStubHistory(t)
+	store["SearchText"] = []string{"needle"}
+
+	// A field wired by attachHistory qualifies; a bare one never does, and
+	// the setting is subtractive so it cannot change that.
+	withHistory := attachHistory(vtui.NewEdit(0, 0, 20, ""), searchTextHistoryID)
+	if len(withHistory.History) == 0 {
+		t.Fatal("history field did not load its bucket")
+	}
+	plain := vtui.NewEdit(0, 0, 20, "")
+	if len(plain.History) != 0 || plain.HistoryID != "" {
+		t.Error("a plain edit picked up history it was never given")
+	}
+}

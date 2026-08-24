@@ -112,7 +112,7 @@ func TestWebDAVEdgeSettingsAndAuthenticationMatrix(t *testing.T) {
 		{name: "anonymous over HTTP", settings: WebDAVSettings{BaseURL: "http://dav.example/dav", Auth: "anonymous"}},
 		{name: "missing host", settings: WebDAVSettings{BaseURL: "https:///dav"}, wantErr: "invalid WebDAV base URL"},
 		{name: "unsupported scheme", settings: WebDAVSettings{BaseURL: "ftp://dav.example/dav"}, wantErr: "invalid WebDAV base URL"},
-		{name: "userinfo", settings: WebDAVSettings{BaseURL: "https://alice:secret@dav.example/dav"}, wantErr: "invalid WebDAV base URL"},
+		{name: "userinfo", settings: WebDAVSettings{BaseURL: "https://alice:secret@dav.example/dav"}, wantErr: "invalid WebDAV base URL"}, // #nosec G101 -- credential-like userinfo is an invalid-input fixture whose rejection is under test.
 		{name: "query", settings: WebDAVSettings{BaseURL: "https://dav.example/dav?token=secret"}, wantErr: "invalid WebDAV base URL"},
 		{name: "fragment", settings: WebDAVSettings{BaseURL: "https://dav.example/dav#fragment"}, wantErr: "invalid WebDAV base URL"},
 		{name: "encoded base separator", settings: WebDAVSettings{BaseURL: "https://dav.example/dav%2Ftenant"}, wantErr: "ambiguous WebDAV base URL path"},

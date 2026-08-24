@@ -12,27 +12,31 @@ func TestTIFFUsefulEXIFIsParsedAndRendered(t *testing.T) {
 	b := make([]byte, 560)
 	copy(b, "II*\x00")
 	binary.LittleEndian.PutUint32(b[4:8], 8)
-	putIFD := func(off int, entries [][4]uint32) {
-		binary.LittleEndian.PutUint16(b[off:off+2], uint16(len(entries)))
+	putIFD := func(off int, entries [][4]uint16) {
+		var entryCount uint16
+		for range entries {
+			entryCount++
+		}
+		binary.LittleEndian.PutUint16(b[off:off+2], entryCount)
 		for i, entry := range entries {
 			pos := off + 2 + i*12
-			binary.LittleEndian.PutUint16(b[pos:pos+2], uint16(entry[0]))
-			binary.LittleEndian.PutUint16(b[pos+2:pos+4], uint16(entry[1]))
-			binary.LittleEndian.PutUint32(b[pos+4:pos+8], entry[2])
-			binary.LittleEndian.PutUint32(b[pos+8:pos+12], entry[3])
+			binary.LittleEndian.PutUint16(b[pos:pos+2], entry[0])
+			binary.LittleEndian.PutUint16(b[pos+2:pos+4], entry[1])
+			binary.LittleEndian.PutUint32(b[pos+4:pos+8], uint32(entry[2]))
+			binary.LittleEndian.PutUint32(b[pos+8:pos+12], uint32(entry[3]))
 		}
 	}
-	putIFD(8, [][4]uint32{
+	putIFD(8, [][4]uint16{
 		{0x010f, 2, 6, 320}, {0x0110, 2, 8, 340}, {0x0112, 3, 1, 6},
 		{0x8769, 4, 1, 100}, {0x8825, 4, 1, 200},
 	})
-	putIFD(100, [][4]uint32{
+	putIFD(100, [][4]uint16{
 		{0x829a, 5, 1, 420}, {0x829d, 5, 1, 428}, {0x8827, 3, 1, 400},
 		{0x9003, 2, 20, 360}, {0x920a, 5, 1, 436}, {0xa434, 2, 8, 390},
 	})
-	putIFD(200, [][4]uint32{
-		{0x0001, 2, 2, uint32('N')}, {0x0002, 5, 3, 444},
-		{0x0003, 2, 2, uint32('W')}, {0x0004, 5, 3, 468},
+	putIFD(200, [][4]uint16{
+		{0x0001, 2, 2, 'N'}, {0x0002, 5, 3, 444},
+		{0x0003, 2, 2, 'W'}, {0x0004, 5, 3, 468},
 		{0x0005, 1, 1, 0}, {0x0006, 5, 1, 492},
 	})
 	copy(b[320:], "Canon\x00")

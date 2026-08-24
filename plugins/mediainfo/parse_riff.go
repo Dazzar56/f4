@@ -128,6 +128,7 @@ func parseWave(p *probe, order binary.ByteOrder, riffID string) error {
 			}
 		case "data":
 			if dataSize == 0 || (riffID != "RF64" && riffID != "BW64") {
+				// #nosec G115 -- walkRIFF rejects negative chunk sizes before invoking this callback.
 				dataSize = uint64(c.size)
 			}
 		case "ds64":
@@ -221,7 +222,7 @@ func parseAVI(p *probe, order binary.ByteOrder, riffID string) error {
 			}
 			microseconds, totalFrames = u32(b[0:4], order), u32(b[16:20], order)
 			if microseconds > 0 {
-				p.report.General.Duration = time.Duration(uint64(microseconds)*uint64(totalFrames)) * time.Microsecond
+				p.report.General.Duration = durationFromUnits(uint64(microseconds)*uint64(totalFrames), uint64(time.Second/time.Microsecond))
 				p.report.General.FrameRate = 1e6 / float64(microseconds)
 				p.report.General.FrameCount = int64(totalFrames)
 			}
@@ -283,8 +284,8 @@ func parseAVI(p *probe, order binary.ByteOrder, riffID string) error {
 				return err
 			}
 			if current.Kind == StreamVideo && len(b) >= 20 {
-				current.Video.Width = int(int32(u32(b[4:8], order)))
-				current.Video.Height = int(int32(u32(b[8:12], order)))
+				current.Video.Width = int(signedInt32Bits(u32(b[4:8], order)))
+				current.Video.Height = int(signedInt32Bits(u32(b[8:12], order)))
 				current.Video.BitDepth = int(u16(b[14:16], order))
 				current.CodecID = fourCC(b[16:20])
 				current.Format = videoCodec(current.CodecID)
@@ -311,7 +312,7 @@ func parseAVI(p *probe, order binary.ByteOrder, riffID string) error {
 		return err
 	}
 	if microseconds > 0 && totalFrames > 0 {
-		p.report.General.Duration = time.Duration(uint64(microseconds)*uint64(totalFrames)) * time.Microsecond
+		p.report.General.Duration = durationFromUnits(uint64(microseconds)*uint64(totalFrames), uint64(time.Second/time.Microsecond))
 		p.report.General.FrameRate = 1e6 / float64(microseconds)
 		p.report.General.FrameCount = int64(totalFrames)
 	}

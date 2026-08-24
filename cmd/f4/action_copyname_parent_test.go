@@ -28,7 +28,7 @@ func waitForCopyNameClipboard(t *testing.T, want string) string {
 func seedPanelForCopyName(t *testing.T, path string) *PanelsFrame {
 	t.Helper()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	t.Cleanup(func() { pf.Close() })
 	pf.ResizeConsole(80, 25)
 
@@ -50,7 +50,7 @@ func seedPanelForCopyName(t *testing.T, path string) *PanelsFrame {
 
 func TestAction_PanelCopyName_CursorOnFile(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedPanelForCopyName(t, tmp)
@@ -68,7 +68,7 @@ func TestAction_PanelCopyName_CursorOnFile(t *testing.T) {
 
 func TestAction_PanelCopyName_CopiesCommandLineWhenNotEmpty(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedPanelForCopyName(t, tmp)
@@ -87,7 +87,7 @@ func TestAction_PanelCopyName_CopiesCommandLineWhenNotEmpty(t *testing.T) {
 
 func TestAction_PanelCopyPath_CursorOnFile(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedPanelForCopyName(t, tmp)
@@ -107,7 +107,7 @@ func TestAction_PanelCopyPath_CursorOnFile(t *testing.T) {
 func TestAction_PanelCopyPath_CursorOnParentUsesCurrentFolderPath(t *testing.T) {
 	tmp := t.TempDir()
 	inner := filepath.Join(tmp, "some-folder")
-	if err := os.Mkdir(inner, 0755); err != nil {
+	if err := os.Mkdir(inner, 0700); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedPanelForCopyName(t, inner)
@@ -125,7 +125,7 @@ func TestAction_PanelCopyPath_CursorOnParentUsesCurrentFolderPath(t *testing.T) 
 
 func TestAction_PanelInsertPath_CursorOnFile(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedPanelForCopyName(t, tmp)
@@ -150,7 +150,7 @@ func TestAction_PanelCopyName_CursorOnParentUsesCurrentFolderName(t *testing.T) 
 	// what the far2l "cursor on .. = current folder name" rule should yield.
 	tmp := t.TempDir()
 	inner := filepath.Join(tmp, "some-folder")
-	if err := os.Mkdir(inner, 0755); err != nil {
+	if err := os.Mkdir(inner, 0700); err != nil {
 		t.Fatal(err)
 	}
 	pf := seedPanelForCopyName(t, inner)

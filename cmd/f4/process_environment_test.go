@@ -585,6 +585,37 @@ func runProcessEnvironmentUIInline(t *testing.T) {
 	t.Cleanup(func() { processEnvironmentRunOnUI = previous })
 }
 
+func setupProcessEnvironmentFailureUI(t *testing.T) {
+	t.Helper()
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	previousDuration := processEnvironmentFailureToastDuration
+	processEnvironmentFailureToastDuration = 20 * time.Millisecond
+	t.Cleanup(func() { processEnvironmentFailureToastDuration = previousDuration })
+	runProcessEnvironmentUIInline(t)
+}
+
+func waitForProcessEnvironmentFailureToast(t *testing.T) {
+	t.Helper()
+	// The first sentinel runs the outer failure-report task. ShowToast and the
+	// coalescer each post one nested task behind it, so a second sentinel joins
+	// those as well.
+	drainUITasks()
+	drainUITasks()
+	if vtui.FrameManager.GetActiveToast() == "" {
+		t.Fatal("environment failure toast did not start")
+	}
+	processEnvironmentFailureToast.Lock()
+	done := processEnvironmentFailureToast.done
+	processEnvironmentFailureToast.Unlock()
+	waitForToastExpiry(t, 6*time.Second)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("environment failure toast coalescer did not stop")
+	}
+}
+
 func TestPanelsFrameEnvironmentGatesLocalInputAndLeavesRemoteUntouched(t *testing.T) {
 	runProcessEnvironmentUIInline(t)
 	local := &processEnvironmentPTY{}
@@ -618,7 +649,7 @@ func TestPanelsFrameEnvironmentGatesLocalInputAndLeavesRemoteUntouched(t *testin
 }
 
 func TestPanelsFrameEnvironmentPrepareFailureGatesInputUntilRetry(t *testing.T) {
-	runProcessEnvironmentUIInline(t)
+	setupProcessEnvironmentFailureUI(t)
 	originalPreparer := processEnvironmentPayloadPreparer
 	prepareFailed := true
 	processEnvironmentPayloadPreparer = func(changes []vfs.ProcessEnvironmentChange) (processEnvironmentShellPayload, error) {
@@ -660,10 +691,11 @@ func TestPanelsFrameEnvironmentPrepareFailureGatesInputUntilRetry(t *testing.T) 
 		t.Fatalf("prepare retry writes = %q", writes)
 	}
 	pf.closeProcessEnvironmentShell()
+	waitForProcessEnvironmentFailureToast(t)
 }
 
 func TestPanelsFrameEnvironmentWriteFailureGatesInputUntilRetry(t *testing.T) {
-	runProcessEnvironmentUIInline(t)
+	setupProcessEnvironmentFailureUI(t)
 	local := &processEnvironmentPTY{err: errors.New("injected PTY write failure")}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
 	pf.queueProcessEnvironment(6, []vfs.ProcessEnvironmentChange{{Name: "WRITE_RETRY", Value: "private"}}, true)
@@ -688,6 +720,7 @@ func TestPanelsFrameEnvironmentWriteFailureGatesInputUntilRetry(t *testing.T) {
 		t.Fatalf("write retry writes = %q", writes)
 	}
 	pf.closeProcessEnvironmentShell()
+	waitForProcessEnvironmentFailureToast(t)
 }
 
 func TestPanelsFrameEnvironmentSerializesParserReplies(t *testing.T) {
@@ -723,7 +756,7 @@ func TestPanelsFrameEnvironmentSerializesParserReplies(t *testing.T) {
 }
 
 func TestPanelsFrameEnvironmentFailureKeepsInputUntilSuccessfulRetry(t *testing.T) {
-	runProcessEnvironmentUIInline(t)
+	setupProcessEnvironmentFailureUI(t)
 	local := &processEnvironmentPTY{}
 	pf := &PanelsFrame{pty: local, termView: NewTerminalView(80, 24)}
 	pf.queueProcessEnvironment(4, []vfs.ProcessEnvironmentChange{{Name: "RETRY_ME", Value: "private"}}, true)
@@ -767,14 +800,15 @@ func TestPanelsFrameEnvironmentFailureKeepsInputUntilSuccessfulRetry(t *testing.
 		t.Fatalf("successful retry generation = %d", generation)
 	}
 	pf.closeProcessEnvironmentShell()
+	waitForProcessEnvironmentFailureToast(t)
 }
 
 func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testing.T) {
-	runProcessEnvironmentUIInline(t)
-	timeoutDone := make(chan struct{})
+	setupProcessEnvironmentFailureUI(t)
+	released := make(chan struct{})
 	processEnvironmentRunOnUI = func(task func()) {
 		task()
-		close(timeoutDone)
+		close(released)
 	}
 	oldTimeout := processEnvironmentAcknowledgementTimeout
 	processEnvironmentAcknowledgementTimeout = 15 * time.Millisecond
@@ -786,15 +820,10 @@ func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testi
 	if _, err := pf.writePTY(local, []byte("held-after-timeout\r")); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for {
-		pf.processEnvironmentMu.Lock()
-		inFlight := pf.processEnvironmentInFlight != nil
-		pf.processEnvironmentMu.Unlock()
-		if !inFlight || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for acknowledgement failure callback")
 	}
 	pf.processEnvironmentMu.Lock()
 	inFlight := pf.processEnvironmentInFlight
@@ -808,12 +837,8 @@ func TestPanelsFrameEnvironmentAcknowledgementTimeoutKeepsDeferredInput(t *testi
 	if writes := local.snapshotWrites(); len(writes) != 1 {
 		t.Fatalf("timeout released held input: %q", writes)
 	}
-	select {
-	case <-timeoutDone:
-	case <-time.After(time.Second):
-		t.Fatal("timeout callback did not finish")
-	}
 	pf.closeProcessEnvironmentShell()
+	waitForProcessEnvironmentFailureToast(t)
 }
 
 func TestPanelsFrameExplicitBusyNeverExpiresFromBackendIdle(t *testing.T) {

@@ -11,6 +11,8 @@ package main
 // kitty delete commands off them.
 
 import (
+	"encoding/binary"
+
 	"github.com/unxed/vtui"
 )
 
@@ -41,7 +43,9 @@ func (tv *TerminalView) sixelBackground(attr uint64) [3]byte {
 		rgb = tv.Palette[vtui.GetIndexBack(attr)]
 		tv.mu.Unlock()
 	}
-	return [3]byte{byte(rgb >> 16), byte(rgb >> 8), byte(rgb)}
+	var encoded [4]byte
+	binary.BigEndian.PutUint32(encoded[:], rgb)
+	return [3]byte{encoded[1], encoded[2], encoded[3]}
 }
 
 func (tv *TerminalView) sixelPlace(img *sixelImage) {

@@ -110,7 +110,7 @@ func loadFarMenuFile(path string) ([]UserMenuItem, error) {
 // saveFarMenuFile writes a FarMenu.ini text-format file atomically.
 func saveFarMenuFile(path string, items []UserMenuItem) error {
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
@@ -118,7 +118,7 @@ func saveFarMenuFile(path string, items []UserMenuItem) error {
 	if err := WriteFarMenu(&buf, items); err != nil {
 		return err
 	}
-	return writeFileAtomically(path, buf.Bytes(), 0o644)
+	return writeFileAtomically(path, buf.Bytes(), 0o600)
 }
 
 // loadRootForMode reads the current root menu from disk based on the

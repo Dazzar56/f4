@@ -1066,11 +1066,12 @@ func saveSessionFileWithOptions(path string, savePanelSettings, saveCurrentPanel
 	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastRightSortRev])
 	writeWorkspaceSessions(&sb, LastWorkspaceSessions, LastActiveWorkspace)
 
-	err := os.WriteFile(path, []byte(sb.String()), 0644)
+	err := os.WriteFile(path, []byte(sb.String()), 0600)
 	if err != nil {
 		vtui.DebugLog("SESSION: Failed to save state: %v", err)
 		return
 	}
+	_ = os.Chmod(path, 0600)
 
 	vtui.DebugLog("SESSION: Saved state to %s", path)
 }

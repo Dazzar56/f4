@@ -52,7 +52,7 @@ func TestRealSavedCloudLargeF5RoundTrip(t *testing.T) {
 	if configDir == "" || !filepath.IsAbs(configDir) {
 		t.Fatal("real CloudFox large F5 config directory must be absolute")
 	}
-	info, err := os.Stat(configDir)
+	info, err := os.Stat(configDir) // #nosec G703 -- this opt-in integration config must be an operator-supplied absolute directory.
 	if err != nil || !info.IsDir() {
 		t.Fatal("real CloudFox large F5 config directory is unavailable")
 	}
@@ -124,7 +124,7 @@ func loadRealCloudFoxLargeF5Fixture(t *testing.T) (string, int64, string) {
 	if fixturePath == "" || !filepath.IsAbs(fixturePath) {
 		t.Fatal("real CloudFox large F5 fixture path must be absolute")
 	}
-	info, err := os.Stat(fixturePath)
+	info, err := os.Stat(fixturePath) // #nosec G703 -- this opt-in integration fixture must be an operator-supplied absolute path.
 	if err != nil || !info.Mode().IsRegular() {
 		t.Fatal("real CloudFox large F5 fixture is unavailable or is not a regular file")
 	}

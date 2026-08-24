@@ -89,10 +89,10 @@ func TestTerminfoExists(t *testing.T) {
 	}
 
 	// The database keeps an entry under the first letter of its name.
-	if err := os.MkdirAll(filepath.Join(dir, "x"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "x"), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "x", "xterm-kitty"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "x", "xterm-kitty"), []byte("x"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	if !terminfoExists("xterm-kitty") {
@@ -102,10 +102,10 @@ func TestTerminfoExists(t *testing.T) {
 	// And on some systems under the hexadecimal code of that letter.
 	other := t.TempDir()
 	t.Setenv("TERMINFO", other)
-	if err := os.MkdirAll(filepath.Join(other, "78"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(other, "78"), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(other, "78", "xterm-kitty"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(other, "78", "xterm-kitty"), []byte("x"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	if !terminfoExists("xterm-kitty") {

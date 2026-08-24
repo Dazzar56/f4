@@ -383,7 +383,7 @@ func (vv *ViewerView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 		inst, err := x86asm.Decode(data, vv.DisasmMode)
 		if err == nil {
 			instLen = inst.Len
-			asmStr = x86asm.IntelSyntax(inst, uint64(currOffset), nil)
+			asmStr = x86asm.IntelSyntax(inst, nonNegativeUint64(currOffset), nil)
 		}
 
 		line := fmt.Sprintf("%010X: ", currOffset)

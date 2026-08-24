@@ -13,7 +13,10 @@ import (
 )
 
 func TestAIChatPanel_Resize(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewNullVFS(0))
+	waitForLoad(t, fp)
 	cp := NewAIChatPanel(fp)
 	cp.SetPosition(0, 0, 79, 23)
 
@@ -54,8 +57,11 @@ func TestFormatAttachedFilesLabel(t *testing.T) {
 }
 
 func TestAIChatPanel_AttachedFilesBarFocusAndNavigation(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	session := vtvibe.NewSession()
 	fp := NewFileSystemPanel(0, 0, 80, 24, &aiVFSWrapper{AIVFS: vtvibe.NewVFS(session)})
+	waitForLoad(t, fp)
 	cp := NewAIChatPanel(fp)
 	cp.SetFocus(true)
 
@@ -95,7 +101,10 @@ func TestAIChatPanel_AttachedFilesBarFocusAndNavigation(t *testing.T) {
 	}
 }
 func TestAIChatPanel_TabPassesThroughForPanelSwitching(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewNullVFS(0))
+	waitForLoad(t, fp)
 	cp := NewAIChatPanel(fp)
 	cp.SetFocus(true)
 
@@ -113,6 +122,7 @@ func TestAIChatPanel_TabPassesThroughForPanelSwitching(t *testing.T) {
 func TestAIChatPanel_RCtrlC_CopiesLastResponse(t *testing.T) {
 	session := vtvibe.NewSession()
 	fp := NewFileSystemPanel(0, 0, 80, 24, &aiVFSWrapper{AIVFS: vtvibe.NewVFS(session)})
+	waitForLoad(t, fp)
 	cp := NewAIChatPanel(fp)
 	cp.SetFocus(true)
 
@@ -134,6 +144,7 @@ func TestAIChatPanel_ContextFilesRenderingAndLinkNavigation(t *testing.T) {
 	_ = session.Ask // compile check
 
 	fp := NewFileSystemPanel(0, 0, 80, 24, &aiVFSWrapper{AIVFS: vtvibe.NewVFS(session)})
+	waitForLoad(t, fp)
 	cp := NewAIChatPanel(fp)
 	cp.SetFocus(true)
 
@@ -170,6 +181,7 @@ func TestAIChatPanel_ContextFilesRenderingAndLinkNavigation(t *testing.T) {
 func TestAIChatPanel_BarKindExcludesApSpec(t *testing.T) {
 	session := vtvibe.NewSession()
 	fp := NewFileSystemPanel(0, 0, 80, 24, &aiVFSWrapper{AIVFS: vtvibe.NewVFS(session)})
+	waitForLoad(t, fp)
 	cp := NewAIChatPanel(fp)
 
 	// Case 1: No files

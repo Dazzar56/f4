@@ -30,6 +30,33 @@ func waitForDirectoryLoads(t *testing.T) {
 	}
 }
 
+func pumpUntilToastActive(t *testing.T) {
+	t.Helper()
+	for vtui.FrameManager.GetActiveToast() == "" {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(time.Second):
+			t.Fatal("toast did not start")
+		}
+	}
+}
+
+func waitForToastExpiry(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		select {
+		case <-vtui.FrameManager.RedrawChan:
+			if vtui.FrameManager.GetActiveToast() == "" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("toast did not expire")
+		}
+	}
+}
+
 // swapFrameManager replaces the global vtui.FrameManager with a fresh,
 // independent instance and returns a function that restores the original
 // pointer. In particular, the fresh manager has its own task queue: Init

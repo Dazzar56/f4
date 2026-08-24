@@ -386,7 +386,13 @@ func showApplyCommandDialog(session *applyCommandSession) {
 			vtui.ShowMessageOn(dlg, Msg("ApplyCommand.Title"), Msg("ApplyCommand.UnknownDialect"), []string{Msg("vtui.Ok")})
 			return
 		}
-		mode := ApplyCommandMode(comboMode.Menu.SelectPos)
+		mode := ApplyCommandSequential
+		switch comboMode.Menu.SelectPos {
+		case 1:
+			mode = ApplyCommandParallel
+		case 2:
+			mode = ApplyCommandQueued
+		}
 		workers := 1
 		if mode == ApplyCommandParallel {
 			if chkUnlimited.State == 1 {

@@ -1276,7 +1276,7 @@ func TestWebDAVDirectoryMutationsUseCollectionURLs(t *testing.T) {
 				return
 			}
 			w.WriteHeader(http.StatusMultiStatus)
-			_, _ = io.WriteString(w, davMultiStatusXML(davResponseXML(r.URL.Path+"/", "source", "0", true)))
+			_, _ = io.WriteString(w, davMultiStatusXML(davResponseXML(r.URL.Path+"/", "source", "0", true))) // #nosec G705 -- the local test server returns its controlled request path to exercise collection-URL handling.
 			return
 		}
 		requests = append(requests, mutationRequest{method: r.Method, path: r.URL.Path, destination: r.Header.Get("Destination"), overwrite: r.Header.Get("Overwrite")})

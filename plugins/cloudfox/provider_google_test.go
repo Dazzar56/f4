@@ -234,7 +234,7 @@ func TestGoogleRangeReaderFallsBackWhenRangeIsIgnored(t *testing.T) {
 
 	buffer := make([]byte, 4)
 	readCtx := context.WithValue(context.Background(), vfs.ProgressKey, vfs.ProgressCallback(func(_ string, percent int) {
-		progress.Store(int32(percent))
+		progress.Store(int32(percent)) // #nosec G115 -- progress callbacks are bounded to percentages from 0 through 100.
 	}))
 	if n, err := reader.ReadAt(readCtx, buffer, 2); err != nil || n != 4 || string(buffer) != "mple" {
 		t.Fatalf("first ReadAt = %d, %v, %q", n, err, buffer)

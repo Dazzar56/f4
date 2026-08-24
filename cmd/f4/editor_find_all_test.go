@@ -635,7 +635,11 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 		t.Fatal("occurrences menu did not open")
 	}
 	defer frame.Close()
-	if elapsed > 200*time.Millisecond {
+	// Under the race detector every access is instrumented, so this measures
+	// the instrumentation, not the lazy open. The assertions below prove the
+	// same property structurally: nothing is materialized, yet the count is
+	// right.
+	if !raceEnabled && elapsed > 200*time.Millisecond {
 		t.Errorf("opening a %d-occurrence list took %v; it should not scale with the list", n, elapsed)
 	}
 	if len(frame.Items) != 0 {
@@ -693,8 +697,8 @@ func TestEditorFindAll_MouseClickJumps(t *testing.T) {
 		Type:        vtinput.MouseEventType,
 		KeyDown:     true,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
-		MouseX:      int16(x1 + 2),
-		MouseY:      int16(y1 + 2), // second row
+		MouseX:      testInt16(x1 + 2),
+		MouseY:      testInt16(y1 + 2), // second row
 	}
 	if !frame.ProcessMouse(click) {
 		t.Fatal("click on an occurrence was not handled")
@@ -751,7 +755,7 @@ func openMappedFindAllEditor(t *testing.T, content string) *EditorView {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "occurrences.txt")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 	ev := openMappedEditor(t, dir, path)
@@ -1013,7 +1017,7 @@ func TestCollectMatchSpans_ReadsTheFileNotTheMapping(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "occurrences.txt")
 	content := strings.Repeat("a line with needle in it\n", 20000)
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 	ev := openMappedEditor(t, dir, path)

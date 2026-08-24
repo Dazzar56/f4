@@ -86,7 +86,7 @@ func vtvibeSaveSetting(key, value string) error {
 	for _, k := range keys {
 		fmt.Fprintf(&sb, "%s = %s\n", k, ini.data["general"][k])
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	// 0600: the file may hold an API key.

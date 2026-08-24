@@ -112,13 +112,16 @@ func RecordedMacroFileName(area, key string) string {
 // hands it to the running engine, so it takes effect immediately rather than
 // at the next start. That immediacy is the whole appeal of recording one.
 func (m *MacroManager) SaveRecordedMacro(dir, area, key, description string, events []*vtinput.InputEvent) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
 	source := RecordedMacroToLua(area, key, description, events)
 	path := filepath.Join(dir, RecordedMacroFileName(area, key))
-	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
 		return err
 	}
 

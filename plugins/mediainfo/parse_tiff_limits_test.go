@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func sharedTIFFValueFixture(tag, typ uint16, valueCount uint32, entries int, value uint32) []byte {
+func sharedTIFFValueFixture(tag, typ uint16, valueCount uint32, entries uint16, value byte) []byte {
 	unit := 4
 	switch typ {
 	case 1:
@@ -15,28 +15,28 @@ func sharedTIFFValueFixture(tag, typ uint16, valueCount uint32, entries int, val
 	case 3:
 		unit = 2
 	}
-	ifdSize := 2 + entries*12 + 4
+	ifdSize := 2 + int(entries)*12 + 4
 	payloadOffset := 8 + ifdSize
 	b := make([]byte, payloadOffset+int(valueCount)*unit)
 	copy(b, "II*\x00")
 	binary.LittleEndian.PutUint32(b[4:8], 8)
-	binary.LittleEndian.PutUint16(b[8:10], uint16(entries))
-	for i := 0; i < entries; i++ {
-		pos := 10 + i*12
+	binary.LittleEndian.PutUint16(b[8:10], entries)
+	for i := uint16(0); i < entries; i++ {
+		pos := 10 + int(i)*12
 		binary.LittleEndian.PutUint16(b[pos:pos+2], tag)
 		binary.LittleEndian.PutUint16(b[pos+2:pos+4], typ)
 		binary.LittleEndian.PutUint32(b[pos+4:pos+8], valueCount)
-		binary.LittleEndian.PutUint32(b[pos+8:pos+12], uint32(payloadOffset))
+		binary.LittleEndian.PutUint32(b[pos+8:pos+12], mediaFixtureUint32(payloadOffset))
 	}
 	for i := uint32(0); i < valueCount; i++ {
 		pos := payloadOffset + int(i)*unit
 		switch typ {
 		case 1:
-			b[pos] = byte(value)
+			b[pos] = value
 		case 3:
 			binary.LittleEndian.PutUint16(b[pos:pos+2], uint16(value))
 		default:
-			binary.LittleEndian.PutUint32(b[pos:pos+4], value)
+			binary.LittleEndian.PutUint32(b[pos:pos+4], uint32(value))
 		}
 	}
 	return b

@@ -476,6 +476,7 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 	}
 
 	dir := filepath.Dir(targetPath)
+	// #nosec G301 -- updater targets may be shared/system installations whose directories must remain searchable by other users.
 	errMkdir := os.MkdirAll(dir, 0755)
 	if errMkdir != nil && os.IsPermission(errMkdir) && vfs.GetSudoClient().IsAvailable() {
 		_ = vfs.GetSudoClient().MkDir(dir, 0755)
@@ -532,6 +533,7 @@ func extractEntry(e archiveEntry, destDir string) error {
 	}
 
 	if e.isDir {
+		// #nosec G301 -- release archive directories may belong to a shared installation and must remain searchable by other users.
 		errMkdir := os.MkdirAll(targetPath, 0755)
 		if errMkdir != nil && os.IsPermission(errMkdir) && vfs.GetSudoClient().IsAvailable() {
 			_ = vfs.GetSudoClient().MkDir(targetPath, 0755)
@@ -570,10 +572,14 @@ func extractTarGzToDir(data []byte, destDir string) error {
 		if err != nil {
 			return err
 		}
+		// tar.Header.Mode is a signed container, but only its low permission
+		// bits are meaningful to the extracted file.
+		// #nosec G115 -- masking to 0777 bounds the os.FileMode conversion.
+		mode := os.FileMode(hdr.Mode & 0o777)
 		if err := extractEntry(archiveEntry{
 			name:  hdr.Name,
 			isDir: hdr.Typeflag == tar.TypeDir,
-			mode:  os.FileMode(hdr.Mode),
+			mode:  mode,
 			open:  func() (io.ReadCloser, error) { return io.NopCloser(tr), nil },
 		}, destDir); err != nil {
 			return err

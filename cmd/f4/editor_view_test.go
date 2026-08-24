@@ -450,7 +450,7 @@ func TestEditorView_SaveFile(t *testing.T) {
 			t.Errorf("remove temporary save file: %v", err)
 		}
 	})
-	err := os.WriteFile(tmpFile, []byte("Original"), 0644)
+	err := os.WriteFile(tmpFile, []byte("Original"), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1620,7 +1620,7 @@ func TestViewerView_CodepageSwitch_Crash(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	tmpFile := filepath.Join(t.TempDir(), "test_viewer_cp.txt")
-	err := os.WriteFile(tmpFile, []byte("Hello World\nLine 2\nLine 3"), 0644)
+	err := os.WriteFile(tmpFile, []byte("Hello World\nLine 2\nLine 3"), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3113,7 +3113,7 @@ type editorStageModeWriter struct {
 }
 
 func (w *editorStageModeWriter) Write(p []byte) (int, error) {
-	info, err := os.Stat(w.path)
+	info, err := os.Stat(w.path) // #nosec G703 -- the wrapped VFS supplies a generated staging path beneath the test temp directory.
 	if err != nil {
 		return 0, err
 	}
@@ -4279,7 +4279,6 @@ func TestEditorView_Save_MetadataIntegrity(t *testing.T) {
 			t.Fatal("Timeout")
 		}
 	}
-
 	// 2. Verification
 	if !attrCalled {
 		t.Error("vfs.SetAttributes was not called after save")
@@ -4466,7 +4465,7 @@ func TestEditorView_Search_Reverse_StartAtZero(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("match"))
 	ev := NewEditorView(pt, nil, "")
-	defer ev.Close()
+	t.Cleanup(ev.Close)
 	ev.CursorPos = 0 // Start at beginning
 
 	// Reverse search from 0 should exit instantly, not hang
@@ -4848,13 +4847,13 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 		t.Errorf("Expected cells[0] to be the combining cluster, got %q", got)
 	}
 	if cells[1].Char != '世' {
-		t.Errorf("Expected cells[1] to be '世', got %c", rune(cells[1].Char))
+		t.Errorf("Expected cells[1] to be '世', got %c", testRune(cells[1].Char))
 	}
 	if cells[2].Char != uint64(vtui.WideCharFiller) {
 		t.Errorf("Expected cells[2] to be WideCharFiller, got %d", cells[2].Char)
 	}
 	if cells[3].Char != 'b' {
-		t.Errorf("Expected cells[3] to be 'b', got %c", rune(cells[3].Char))
+		t.Errorf("Expected cells[3] to be 'b', got %c", testRune(cells[3].Char))
 	}
 }
 

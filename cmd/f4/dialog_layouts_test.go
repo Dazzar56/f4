@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -117,6 +118,7 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 		"panel.insertleftpath":             true, // no dialog
 		"panel.insertrightpath":            true, // no dialog
 		"debug.dummyoperation":             true, // async queue
+		"macro.reload":                     true, // no dialog; owns an asynchronous toast
 		"panel.infopanel":                  true, // no dialog
 		"panel.quickview":                  true, // no dialog
 	}
@@ -167,6 +169,8 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 				pf.panels[0] = left
 				pf.panels[1] = right
 				pf.ResizeConsole(120, 60)
+				waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+				waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 				vtui.FrameManager.Push(pf)
 
 				// Setup editor/viewer context if testing editor/viewer actions
@@ -183,6 +187,11 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 
 				// Trigger the action handler!
 				act.Handler()
+				waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+				waitForLoad(t, pf.panels[1].(*FileSystemPanel))
+				if vtui.FrameManager.GetActiveToast() != "" {
+					waitForToastExpiry(t, 6*time.Second)
+				}
 
 				frames := vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].Frames
 				if len(frames) <= initialCount {

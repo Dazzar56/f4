@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/ncruces/go-sqlite3/driver"
@@ -196,10 +197,15 @@ func Load(ctx context.Context, path string) (*Sheet, error) {
 		if col < 0 || col >= MaxColumns || row < 0 || row >= MaxRows {
 			continue
 		}
+		if display < int(DisplayAsIs) || display > int(DisplayHidden) ||
+			justify < int(JustifyLeft) || justify > int(JustifyCenter) ||
+			decimals < 0 || decimals > math.MaxUint8 {
+			return nil, fmt.Errorf("invalid cell formatting at column %d row %d", col, row)
+		}
 		cell := NewCell(text)
-		cell.Display = Display(display)
-		cell.Justify = Justify(justify)
-		cell.Decimals = uint8(decimals)
+		cell.Display = Display(display) // #nosec G115 -- display was checked against the Display enum range above.
+		cell.Justify = Justify(justify) // #nosec G115 -- justify was checked against the Justify enum range above.
+		cell.Decimals = uint8(decimals) // #nosec G115 -- decimals was checked against the uint8 range above.
 		cell.Protected = protected != 0
 		sheet.cells[Point{Col: col, Row: row}] = cell
 	}

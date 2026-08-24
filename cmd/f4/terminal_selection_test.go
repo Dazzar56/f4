@@ -16,7 +16,7 @@ func seedRow(tv *TerminalView, row int, text string) {
 		if i >= tv.Width {
 			return
 		}
-		tv.Lines[row][i] = vtui.CharInfo{Char: uint64(r), Attributes: attr}
+		tv.Lines[row][i] = vtui.CharInfo{Char: testUint64Rune(r), Attributes: attr}
 	}
 }
 
@@ -193,6 +193,8 @@ func panelsFrameWithMouseSelect(t *testing.T) (*PanelsFrame, *fakePTY) {
 	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
 	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
 	pf.showPanels = false
 	pf.termView.SetPosition(0, 0, 79, 22)
 	pf.termView.clipboardWriter = func(string) {}

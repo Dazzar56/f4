@@ -136,8 +136,9 @@ func ensureRadiolaSchema(configsDir string) {
 	hrdDir := filepath.Join(configsDir, "base", "hrd", "rgb")
 	hrdPath := filepath.Join(hrdDir, "radiola.hrd")
 
-	_ = os.MkdirAll(hrdDir, 0755)
-	_ = os.WriteFile(hrdPath, []byte(embedded.RadiolaHRD), 0644)
+	_ = os.MkdirAll(hrdDir, 0700)
+	_ = os.WriteFile(hrdPath, []byte(embedded.RadiolaHRD), 0600)
+	_ = os.Chmod(hrdPath, 0600)
 
 	catalogRGBPath := filepath.Join(configsDir, "base", "hrd", "catalog-rgb.xml")
 	data, err := os.ReadFile(catalogRGBPath)
@@ -145,7 +146,9 @@ func ensureRadiolaSchema(configsDir string) {
 		content := string(data)
 		if !strings.Contains(content, "name=\"Radiola\"") {
 			entry := "\n        <hrd class=\"rgb\" name=\"Radiola\" description=\"Radiola\">\n            <location link=\"&hrd;/rgb/radiola.hrd\"/>\n        </hrd>\n"
-			_ = os.WriteFile(catalogRGBPath, []byte(content+entry), 0644)
+			// #nosec G703 -- configsDir is the user-selected Colorer catalog root and every appended component is fixed here.
+			_ = os.WriteFile(catalogRGBPath, []byte(content+entry), 0600)
+			_ = os.Chmod(catalogRGBPath, 0600)
 		}
 	}
 }

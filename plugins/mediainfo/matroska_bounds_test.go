@@ -182,7 +182,7 @@ func TestVorbisVendorIsBoundedAndOwned(t *testing.T) {
 	const capBytes = 8
 	vendor := []byte("vendor-application-with-a-long-version")
 	b := make([]byte, 4+len(vendor)+4)
-	binary.LittleEndian.PutUint32(b[:4], uint32(len(vendor)))
+	binary.LittleEndian.PutUint32(b[:4], mediaFixtureUint32(len(vendor)))
 	copy(b[4:], vendor)
 	p, err := newProbe(context.Background(), Source{Name: "comments", Reader: memorySource(nil)}, Options{Mode: ModeFast, MaxValueBytes: capBytes})
 	if err != nil {

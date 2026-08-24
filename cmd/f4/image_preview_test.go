@@ -63,7 +63,7 @@ func jpegWithThumbnail(t *testing.T, outer, thumb []byte) []byte {
 	put16(0x0202)
 	put16(4)
 	put32(1)
-	put32(uint32(len(thumb)))
+	put32(testUint32(len(thumb)))
 	put32(0) // no further directories
 
 	if tiff.Len() != thumbOffset {
@@ -76,7 +76,7 @@ func jpegWithThumbnail(t *testing.T, outer, thumb []byte) []byte {
 	payload := append([]byte("Exif\x00\x00"), tiff.Bytes()...)
 
 	out := []byte{0xFF, 0xD8, 0xFF, 0xE1}
-	out = binary.BigEndian.AppendUint16(out, uint16(len(payload)+2))
+	out = binary.BigEndian.AppendUint16(out, testUint16(len(payload)+2))
 	out = append(out, payload...)
 	return append(out, outer[2:]...)
 }

@@ -23,7 +23,7 @@ func TestMacroManagerReloadLuaMacros(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "debug.lua")
 	const first = `Macro { area = "Shell"; key = "CtrlJ"; action = function() end }`
-	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(first), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +50,7 @@ func TestMacroManagerReloadLuaMacros(t *testing.T) {
 		t.Fatalf("rename loaded script: %v", err)
 	}
 	const second = `Macro { area = "Shell"; key = "CtrlK"; action = function() end }`
-	if err := os.WriteFile(renamed, []byte(second), 0o644); err != nil {
+	if err := os.WriteFile(renamed, []byte(second), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

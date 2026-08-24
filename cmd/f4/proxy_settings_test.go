@@ -68,7 +68,7 @@ func TestProxySettings_DefaultKeepsTheOldBehaviour(t *testing.T) {
 	// http.DefaultClient, which honours the proxy environment variables.
 	// A config file without a [Proxy] section must keep doing exactly that.
 	userIniPath := filepath.Join(t.TempDir(), "settings.ini")
-	if err := os.WriteFile(userIniPath, []byte("[Interface]\nColorStyle = Modern\n"), 0644); err != nil {
+	if err := os.WriteFile(userIniPath, []byte("[Interface]\nColorStyle = Modern\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	origUserPathFunc := getUserConfigIniPath

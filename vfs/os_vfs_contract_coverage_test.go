@@ -122,7 +122,7 @@ func TestOSVFSLinksAndDirectoryChunkDelivery(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".hidden"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(filepath.Join(root, "file-0000"), 0700); err != nil {
+	if err := os.Chmod(filepath.Join(root, "file-0000"), 0700); err != nil { // #nosec G302 -- executable detection is the behavior under test.
 		t.Fatal(err)
 	}
 

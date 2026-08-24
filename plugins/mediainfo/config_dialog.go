@@ -87,9 +87,12 @@ func (plugin *Plugin) configure(app vfs.App) {
 		vtui.ShowMessageOn(dialog, " "+plugin.text("MediaInfo.SettingsError", "Settings error", "Ошибка настроек")+" ", err.Error(), []string{plugin.text("MediaInfo.OK", "&OK", "&ОК")})
 	}
 	saveButton.OnClick = func() {
-		languageIndex := language.Menu.SelectPos
-		if languageIndex < 0 || languageIndex > 2 {
-			languageIndex = 0
+		languageCode := "auto"
+		switch language.Menu.SelectPos {
+		case 1:
+			languageCode = "en"
+		case 2:
+			languageCode = "ru"
 		}
 		next := Settings{
 			ShowInPluginMenu: showMenu.State == 1,
@@ -97,7 +100,7 @@ func (plugin *Plugin) configure(app vfs.App) {
 			UseEditor:        useEditor.State == 1,
 			Prefix:           prefix.GetText(),
 			Template:         template.GetText(),
-			Language:         []string{"auto", "en", "ru"}[languageIndex],
+			Language:         languageCode,
 		}
 		next = normalizeSettings(next)
 		if err := next.validate(); err != nil {

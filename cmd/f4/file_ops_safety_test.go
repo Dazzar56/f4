@@ -71,10 +71,10 @@ func TestRecursiveCopyAbortsWhenDestinationStatIsInconclusive(t *testing.T) {
 			sourceRoot, destinationRoot := t.TempDir(), t.TempDir()
 			sourcePath := filepath.Join(sourceRoot, "source")
 			if directory {
-				if err := os.Mkdir(sourcePath, 0o755); err != nil {
+				if err := os.Mkdir(sourcePath, 0o700); err != nil {
 					t.Fatal(err)
 				}
-			} else if err := os.WriteFile(sourcePath, []byte("content"), 0o644); err != nil {
+			} else if err := os.WriteFile(sourcePath, []byte("content"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			destinationPath := filepath.Join(destinationRoot, "target")
@@ -203,7 +203,7 @@ func (w *stagedAbortWriter) Write(p []byte) (int, error) {
 
 func (w *stagedAbortWriter) Close() error {
 	w.closeCalls++
-	return os.WriteFile(w.path, w.staged, 0o644)
+	return os.WriteFile(w.path, w.staged, 0o600)
 }
 
 func (w *stagedAbortWriter) Abort() error {
@@ -219,11 +219,11 @@ func TestRecursiveCopyAbortsStagedReplacementAfterSourceReadError(t *testing.T) 
 	sourceRoot, destinationRoot := t.TempDir(), t.TempDir()
 	sourcePath := filepath.Join(sourceRoot, "source.bin")
 	destinationPath := filepath.Join(destinationRoot, "existing.bin")
-	if err := os.WriteFile(sourcePath, []byte("declared source"), 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, []byte("declared source"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	const original = "existing destination must survive"
-	if err := os.WriteFile(destinationPath, []byte(original), 0o644); err != nil {
+	if err := os.WriteFile(destinationPath, []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	readErr := errors.New("source failed after returning a prefix")
@@ -262,7 +262,7 @@ func TestRecursiveCopySurfacesSourceAndAbortFailures(t *testing.T) {
 	sourceRoot, destinationRoot := t.TempDir(), t.TempDir()
 	sourcePath := filepath.Join(sourceRoot, "source.bin")
 	destinationPath := filepath.Join(destinationRoot, "new.bin")
-	if err := os.WriteFile(sourcePath, []byte("declared source"), 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, []byte("declared source"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	readErr := errors.New("source failed after returning a prefix")
@@ -338,7 +338,7 @@ func TestRecursiveCopyResetsProviderProgressThroughProductionStartPath(t *testin
 	first := filepath.Join(sourceRoot, "first.bin")
 	second := filepath.Join(sourceRoot, "second.bin")
 	for _, path := range []string{first, second} {
-		if err := os.WriteFile(path, []byte{'x'}, 0o644); err != nil {
+		if err := os.WriteFile(path, []byte{'x'}, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -388,7 +388,7 @@ func (w *phaseUploadWriter) Close() error {
 			reporter.UpdateTransfer("Uploading", filepath.Base(w.path), percent, "", percent, "")
 		}
 	}
-	return os.WriteFile(w.path, w.staged, 0o644)
+	return os.WriteFile(w.path, w.staged, 0o600)
 }
 
 func (w *phaseUploadWriter) Abort() error {
@@ -405,7 +405,7 @@ func TestRecursiveCopyWeightsDownloadAndManagedUploadPhases(t *testing.T) {
 	for i := range payload {
 		payload[i] = byte(i)
 	}
-	if err := os.WriteFile(sourcePath, payload, 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	source := &reportingOpenVFS{VFS: vfs.NewOSVFS(sourceRoot), reportPath: sourcePath}
@@ -452,7 +452,7 @@ func TestRecursiveCopyWeightsMaterializedDownloadAndStreamingCloudWrite(t *testi
 	sourcePath := filepath.Join(sourceRoot, "materialized-source.bin")
 	destinationPath := filepath.Join(destinationRoot, "streaming-destination.bin")
 	payload := make([]byte, 100)
-	if err := os.WriteFile(sourcePath, payload, 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	source := &reportingOpenVFS{VFS: vfs.NewOSVFS(sourceRoot), reportPath: sourcePath}
@@ -494,7 +494,7 @@ func TestRecursiveCopyLearnsUnknownMaterializedSizeForManagedPhases(t *testing.T
 	sourcePath := filepath.Join(sourceRoot, "unknown-export.bin")
 	destinationPath := filepath.Join(destinationRoot, "managed-upload.bin")
 	payload := make([]byte, 100)
-	if err := os.WriteFile(sourcePath, payload, 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	source := &reportingOpenVFS{VFS: vfs.NewOSVFS(sourceRoot), reportPath: sourcePath, unknownSize: true}
@@ -534,7 +534,7 @@ func TestRecursiveCopyZeroByteManagedUploadWaitsForCommitPhase(t *testing.T) {
 	sourceRoot, destinationRoot := t.TempDir(), t.TempDir()
 	sourcePath := filepath.Join(sourceRoot, "empty.bin")
 	destinationPath := filepath.Join(destinationRoot, "empty.bin")
-	if err := os.WriteFile(sourcePath, nil, 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	destination := &fileOpSafetyProbeVFS{
@@ -566,7 +566,7 @@ func TestRecursiveCopyDoesNotDeleteConcurrentDestinationAfterConditionalCloseFai
 	sourceRoot, destinationRoot := t.TempDir(), t.TempDir()
 	sourcePath := filepath.Join(sourceRoot, "source.txt")
 	destinationPath := filepath.Join(destinationRoot, "target.txt")
-	if err := os.WriteFile(sourcePath, []byte("payload"), 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, []byte("payload"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	probe := &fileOpSafetyProbeVFS{

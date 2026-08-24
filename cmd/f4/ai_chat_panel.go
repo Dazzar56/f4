@@ -467,7 +467,7 @@ func (cp *AIChatPanel) updateLines() {
 				col = 0
 			}
 
-			charVal := uint64(r)
+			charVal := vtui.RegisterCluster(string(r))
 			for j := 0; j < rw; j++ {
 				currentCells = append(currentCells, vtui.CharInfo{Char: charVal, Attributes: attrs[i]})
 				currentTargets = append(currentTargets, targets[i])
@@ -488,7 +488,7 @@ func (cp *AIChatPanel) updateLines() {
 			if rw <= 0 {
 				rw = 1
 			}
-			charVal := uint64(r)
+			charVal := vtui.RegisterCluster(string(r))
 			for j := 0; j < rw; j++ {
 				cells = append(cells, vtui.CharInfo{Char: charVal, Attributes: attr})
 				targets = append(targets, "")

@@ -193,7 +193,7 @@ func TestWatchdog_DetectsClientDisconnect(t *testing.T) {
 	// POLLOUT must be requested: macOS reports nothing for Events: 0, so
 	// polling with an empty event mask never detects the closed read end
 	// (the watchdog bug this test guards against).
-	pfds := []unix.PollFd{{Fd: int32(writeEnd), Events: unix.POLLOUT}}
+	pfds := []unix.PollFd{{Fd: testInt32(writeEnd), Events: unix.POLLOUT}}
 	_, err := unix.Poll(pfds, 0)
 	if err != nil {
 		t.Fatalf("poll: %v", err)
@@ -208,7 +208,7 @@ func TestWatchdog_DetectsClientDisconnect(t *testing.T) {
 	}
 
 	// Now poll on writeEnd must report POLLERR, POLLHUP, or POLLNVAL
-	pfds = []unix.PollFd{{Fd: int32(writeEnd), Events: unix.POLLOUT}}
+	pfds = []unix.PollFd{{Fd: testInt32(writeEnd), Events: unix.POLLOUT}}
 	_, err = unix.Poll(pfds, 0)
 	if err != nil {
 		t.Fatalf("poll after close: %v", err)

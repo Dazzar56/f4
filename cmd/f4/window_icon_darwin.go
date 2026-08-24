@@ -86,6 +86,7 @@ func applyDarwinDockIcon(backend string) {
 	// runs before gogpu sets up an NSAutoreleasePool, so an autoreleased
 	// object would never be drained.
 	data := objc.ID(objc.GetClass("NSData")).Send(objc.RegisterName("alloc")).Send(objc.RegisterName("initWithBytes:length:"),
+		// #nosec G103 -- NSData copies this non-empty embedded byte slice during the synchronous initializer call.
 		unsafe.Pointer(&darwinIconICNS[0]), len(darwinIconICNS))
 	if data == 0 {
 		return

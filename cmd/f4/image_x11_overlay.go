@@ -15,7 +15,9 @@ package main
 // terminal loses the focus, because nothing in X will take it down for us.
 
 import (
+	"encoding/binary"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -381,19 +383,18 @@ const overlayGridTolerance = 12
 func overlayFrameKey(list []vtui.ImagePlacement, rect ttyx.Rect) string {
 	var sb strings.Builder
 	add := func(v int) {
-		var b [4]byte
-		b[0], b[1], b[2], b[3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
-		sb.Write(b[:])
+		sb.WriteString(strconv.Itoa(v))
+		sb.WriteByte(0)
 	}
+	var hashBytes [8]byte
 	add(rect.X)
 	add(rect.Y)
 	add(rect.W)
 	add(rect.H)
 	for _, p := range list {
 		h := p.Surface.Hash()
-		for i := 0; i < 8; i++ {
-			sb.WriteByte(byte(h >> (8 * i)))
-		}
+		binary.LittleEndian.PutUint64(hashBytes[:], h)
+		sb.Write(hashBytes[:])
 		add(p.Col)
 		add(p.Row)
 		add(p.Cols)

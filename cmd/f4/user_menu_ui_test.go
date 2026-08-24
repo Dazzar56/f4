@@ -128,11 +128,11 @@ func TestFormatMenuItemText_AmpersandInLabel(t *testing.T) {
 func TestFindLocalFarMenu_WalksUp(t *testing.T) {
 	root := t.TempDir()
 	deep := filepath.Join(root, "a", "b", "c")
-	if err := os.MkdirAll(deep, 0o755); err != nil {
+	if err := os.MkdirAll(deep, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	wanted := filepath.Join(root, "a", farMenuFileName)
-	if err := os.WriteFile(wanted, []byte("x:  X\r\n"), 0o644); err != nil {
+	if err := os.WriteFile(wanted, []byte("x:  X\r\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got, found := findLocalFarMenu(deep)
@@ -160,15 +160,15 @@ func TestFindLocalFarMenu_PicksClosest(t *testing.T) {
 	root := t.TempDir()
 	mid := filepath.Join(root, "mid")
 	leaf := filepath.Join(mid, "leaf")
-	if err := os.MkdirAll(leaf, 0o755); err != nil {
+	if err := os.MkdirAll(leaf, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	rootMenu := filepath.Join(root, farMenuFileName)
 	midMenu := filepath.Join(mid, farMenuFileName)
-	if err := os.WriteFile(rootMenu, []byte("r:  R\r\n"), 0o644); err != nil {
+	if err := os.WriteFile(rootMenu, []byte("r:  R\r\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(midMenu, []byte("m:  M\r\n"), 0o644); err != nil {
+	if err := os.WriteFile(midMenu, []byte("m:  M\r\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := findLocalFarMenu(leaf)
@@ -205,7 +205,7 @@ func TestUserMenu_ExecuteCommands(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pty := pf.pty.(*mockPty)
@@ -251,7 +251,7 @@ func TestUserMenu_ExecuteMultipleCommands(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 	pty := pf.pty.(*mockPty)
@@ -320,7 +320,7 @@ func TestUserMenu_InteractiveEdit(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -374,7 +374,7 @@ func TestUserMenu_EditItemMultilineCommand(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 
@@ -439,7 +439,7 @@ func TestUserMenu_EditItemStripsBlankLines(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
 

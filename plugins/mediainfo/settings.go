@@ -127,7 +127,7 @@ func (store *settingsStore) save(settings Settings) error {
 		return fmt.Errorf("encode MediaInfo settings: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.MkdirAll(filepath.Dir(store.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(store.path), 0o700); err != nil {
 		return fmt.Errorf("create MediaInfo settings directory: %w", err)
 	}
 	temporary, err := os.CreateTemp(filepath.Dir(store.path), ".mediainfo-*.json")

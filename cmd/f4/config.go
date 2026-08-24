@@ -39,11 +39,13 @@ func GetF4ConfigDir() string {
 
 		// Ищем Far.exe.ini (имя_бинарника.ini) или f4.ini в папке программы
 		iniPath := exe + ".ini"
+		// #nosec G703 -- iniPath is the executable path plus ".ini", not an untrusted path component.
 		if _, err := os.Stat(iniPath); os.IsNotExist(err) {
 			iniPath = filepath.Join(exeDir, "f4.ini")
 		}
 
 		useSystemProfiles := true
+		// #nosec G703 -- iniPath is either executable.ini or the fixed f4.ini name in the executable directory.
 		if _, err := os.Stat(iniPath); err == nil {
 			ini := ParseIni(bytesReader(iniPath))
 			if ini.GetString("General", "UseSystemProfiles", "1") == "0" {
@@ -54,7 +56,7 @@ func GetF4ConfigDir() string {
 		if !useSystemProfiles {
 			cachedF4Portable = true
 			cachedF4ConfigDir = filepath.Join(exeDir, "Profile")
-			_ = os.MkdirAll(cachedF4ConfigDir, 0755)
+			_ = os.MkdirAll(cachedF4ConfigDir, 0700)
 		} else {
 			sysDir, _ := userConfigDir()
 			cachedF4ConfigDir = filepath.Join(sysDir, "f4")
@@ -217,6 +219,7 @@ type F4Config struct {
 	PathHintSource         int  // 0 = active panel, 1 = passive panel, 2 = both
 	PathHintMaxVisible     int  // visible rows cap in the hint list
 	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
+	DialogAutoComplete     bool // drop-down while typing in fields that have history
 	SlideShowDelay         int
 	ImageX11Overlay        bool
 	VideoPauseOnFocusLoss  bool
@@ -357,6 +360,7 @@ var AppConfig = F4Config{
 	PathHintSource:           2,
 	PathHintMaxVisible:       5,
 	PathHintPerCategory:      true,
+	DialogAutoComplete:       true,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageX11Overlay:          true,
 	TTYXKeys:                 true,
@@ -625,6 +629,7 @@ func LoadConfig() {
 		AppConfig.PathHintMaxVisible = 1
 	}
 	AppConfig.PathHintPerCategory = ini.GetString("PathHints", "PerCategory", "1") == "1"
+	AppConfig.DialogAutoComplete = ini.GetString("PathHints", "DialogAutoComplete", "1") == "1"
 	AppConfig.SlideShowDelay = defaultSlideShowDelay
 	fmt.Sscanf(ini.GetString("Images", "SlideShowDelay", "5"), "%d", &AppConfig.SlideShowDelay)
 	if AppConfig.SlideShowDelay <= 0 {
@@ -832,6 +837,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "Source = %d\n", AppConfig.PathHintSource)
 	fmt.Fprintf(&sb, "MaxVisible = %d\n", AppConfig.PathHintMaxVisible)
 	fmt.Fprintf(&sb, "PerCategory = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintPerCategory])
+	fmt.Fprintf(&sb, "DialogAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DialogAutoComplete])
 	sb.WriteString("\n[Images]\n")
 	fmt.Fprintf(&sb, "SlideShowDelay = %d\n", AppConfig.SlideShowDelay)
 	fmt.Fprintf(&sb, "ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout)
@@ -863,7 +869,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 		fmt.Fprintf(&sb, "%s=%s\n", k, layoutKeys[k])
 	}
 
-	err := writeFileAtomically(path, []byte(sb.String()), 0644)
+	err := writeFileAtomically(path, []byte(sb.String()), 0600)
 	if err != nil {
 		vtui.DebugLog("CONFIG: Failed to save application settings: %v", err)
 		return
@@ -895,7 +901,10 @@ func persistedGuiWindowSize() (int, int) {
 // unrelated settings and unknown keys in an existing settings.ini.
 func saveGuiWindowSize() {
 	path := getUserConfigIniPath()
-	os.MkdirAll(filepath.Dir(path), 0755)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		vtui.DebugLog("CONFIG: Failed to create settings directory: %v", err)
+		return
+	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		for _, source := range getConfigIniPaths() {
@@ -904,8 +913,10 @@ func saveGuiWindowSize() {
 			}
 			if inherited, readErr := os.ReadFile(source); readErr == nil {
 				updated := updateIniValues(inherited, "Appearance", guiWindowValues())
-				if writeErr := os.WriteFile(path, updated, 0644); writeErr != nil {
+				if writeErr := os.WriteFile(path, updated, 0600); writeErr != nil {
 					vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
+				} else if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+					vtui.DebugLog("CONFIG: Failed to restrict GUI settings permissions: %v", chmodErr)
 				}
 				return
 			}
@@ -914,8 +925,10 @@ func saveGuiWindowSize() {
 		if AppConfig.GuiPositionSaved {
 			data = append(data, []byte(fmt.Sprintf("GuiPosX = %d\nGuiPosY = %d\n", AppConfig.GuiPosX, AppConfig.GuiPosY))...)
 		}
-		if writeErr := os.WriteFile(path, data, 0644); writeErr != nil {
+		if writeErr := os.WriteFile(path, data, 0600); writeErr != nil {
 			vtui.DebugLog("CONFIG: Failed to save GUI size: %v", writeErr)
+		} else if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+			vtui.DebugLog("CONFIG: Failed to restrict GUI settings permissions: %v", chmodErr)
 		}
 		return
 	}
@@ -924,8 +937,10 @@ func saveGuiWindowSize() {
 		return
 	}
 	updated := updateIniValues(data, "Appearance", guiWindowValues())
-	if err := os.WriteFile(path, updated, 0644); err != nil {
+	if err := os.WriteFile(path, updated, 0600); err != nil {
 		vtui.DebugLog("CONFIG: Failed to save GUI size: %v", err)
+	} else if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+		vtui.DebugLog("CONFIG: Failed to restrict GUI settings permissions: %v", chmodErr)
 	}
 }
 
@@ -1107,7 +1122,8 @@ func createDefaultHighlightIni(path string) {
 # you specifically want to override the theme's colors.
 
 `
-	_ = os.WriteFile(path, []byte(content), 0644)
+	_ = os.WriteFile(path, []byte(content), 0600)
+	_ = os.Chmod(path, 0600)
 }
 
 // ApplyProxySettings publishes the configured proxy to netproxy, which is

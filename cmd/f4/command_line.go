@@ -23,6 +23,12 @@ func NewCommandLine(prompt string) *CommandLine {
 	cl.Edit.DeduplicateHistory = true
 	cl.Edit.HistoryLimit = 100
 	cl.Edit.PathHintsEnabled = AppConfig.CommandLineAutoComplete
+	// CommandLine.ProcessKey drives the completion menu itself, under
+	// gating that vtui knows nothing about: CommandLineAutoComplete,
+	// AutoCompleteSuppressed, and whether history browsing is in progress.
+	// Leaving vtui's own trigger on would open the menu from inside
+	// Edit.ProcessKey, one call before any of that is consulted.
+	cl.Edit.NoAutoComplete = true
 	cl.Edit.ColorTextIdx = ColCommandLineText
 	cl.Edit.ColorUnchangedIdx = ColCommandLineText
 	cl.Edit.ColorSelectedIdx = ColCommandLineSelectedText

@@ -68,7 +68,7 @@ CommandLine.Prompt = foreground:#00FF00
 CommandLine.UserScreen = foreground:#D0D0D0 | background:#010203
 Editor.Text = foreground:#A0A0A0 | background:#232323
 `
-	if err := os.WriteFile(iniPath, []byte(iniContent), 0644); err != nil {
+	if err := os.WriteFile(iniPath, []byte(iniContent), 0600); err != nil {
 		t.Fatalf("Failed to write mock INI: %v", err)
 	}
 
@@ -230,7 +230,7 @@ func TestColors_AliasesAndCanonicalPrecedence(t *testing.T) {
 CommandLine.Prompt = foreground:#FF0000
 CommandLine.Prefix = foreground:#00FF00
 `
-	if err := os.WriteFile(iniPath, []byte(iniContent), 0644); err != nil {
+	if err := os.WriteFile(iniPath, []byte(iniContent), 0600); err != nil {
 		t.Fatalf("Failed to write mock INI: %v", err)
 	}
 
@@ -279,7 +279,7 @@ func TestColors_GenerateDocumentation(t *testing.T) {
 	if os.Getenv("F4_GENERATE_DOCS") != "1" {
 		targetPath = filepath.Join(t.TempDir(), "COLORS.md")
 	}
-	_ = os.WriteFile(targetPath, []byte(sb.String()), 0644)
+	_ = os.WriteFile(targetPath, []byte(sb.String()), 0600)
 }
 func TestColors_ContrastCorrection(t *testing.T) {
 	// Dark grey on black is well below the ΔE2000 floor far2l enforces, so the

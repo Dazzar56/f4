@@ -164,7 +164,7 @@ func TestHostConsole_PanelToggleAction(t *testing.T) {
 }
 
 func TestHostConsole_InputForwardingWhenIdle(t *testing.T) {
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.shellMode = ShellModeHost
 	pf.showPanels = false
@@ -276,7 +276,7 @@ func TestHostConsole_FarStylePTYSizing(t *testing.T) {
 	AppConfig.ConsoleMode = "host"
 	AppConfig.ConsoleOverlayUI = true
 
-	pf := setupMockPanelsFrame()
+	pf := setupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.shellMode = ShellModeHost
 	pf.showKeyBar = true
