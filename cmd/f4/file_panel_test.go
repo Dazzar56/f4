@@ -2878,6 +2878,9 @@ func TestFileSystemPanel_ForkDuplication(t *testing.T) {
 	}
 }
 func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	fp.fastFindMode = true
