@@ -173,7 +173,9 @@ func TestCancelDuringInProgressReadKeepsSession(t *testing.T) {
 		// Answer only after a delay, so the client is already mid-read when
 		// the cancellation lands.
 		time.Sleep(50 * time.Millisecond)
-		fmt.Fprintf(w, ".%s %s ok\n", token, req.ID)
+		if _, err := fmt.Fprintf(w, ".%s %s ok\n", token, req.ID); err != nil {
+			t.Errorf("write answer: %v", err)
+		}
 	})
 	if err := sess.Handshake(context.Background()); err != nil {
 		t.Fatalf("handshake: %v", err)

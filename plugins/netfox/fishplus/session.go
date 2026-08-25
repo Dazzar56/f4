@@ -139,7 +139,7 @@ type Session struct {
 	token       string
 	seq         uint64
 	feats       Features
-	broken      bool
+	broken      atomic.Bool
 	lastUse     time.Time
 	closing     atomic.Bool
 	closeOnce   sync.Once
@@ -228,7 +228,7 @@ func (s *Session) Broken() bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.broken
+	return s.broken.Load()
 }
 
 // IdleFor is how long it has been since the session last carried a request.
@@ -257,7 +257,7 @@ func (s *Session) HandshakeWithOptions(ctx context.Context, opts HandshakeOption
 	defer s.releaseRequest()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return ErrBroken
 	}
 	if err := ctx.Err(); err != nil {
@@ -266,19 +266,19 @@ func (s *Session) HandshakeWithOptions(ctx context.Context, opts HandshakeOption
 	switch opts.Bootstrap {
 	case BootstrapScriptLines:
 		if _, err := io.WriteString(s.w, BootstrapLine(s.token)); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return err
 		}
 		if err := s.waitForReady(ctx); err != nil {
 			return err
 		}
 		if _, err := io.WriteString(s.w, HelperScript(s.token)+HelperEndMarker+"\n"); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return err
 		}
 	case BootstrapBase64Line:
 		if _, err := io.WriteString(s.w, Base64BootstrapLine(s.token)); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return err
 		}
 		if err := s.waitForReady(ctx); err != nil {
@@ -286,7 +286,7 @@ func (s *Session) HandshakeWithOptions(ctx context.Context, opts HandshakeOption
 		}
 	case BootstrapBase64LinePwsh:
 		if _, err := io.WriteString(s.w, Base64BootstrapLinePwsh(s.token)); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return err
 		}
 		if err := s.waitForReady(ctx); err != nil {
@@ -300,16 +300,16 @@ func (s *Session) HandshakeWithOptions(ctx context.Context, opts HandshakeOption
 		return err
 	}
 	if !resp.OK() {
-		s.broken = true
+		s.broken.Store(true)
 		return &RemoteError{Cmd: "handshake", Msg: resp.Msg}
 	}
 	feats, err := parseBanner(resp.Msg)
 	if err != nil {
-		s.broken = true
+		s.broken.Store(true)
 		return err
 	}
 	if feats.Proto != ProtocolVersion {
-		s.broken = true
+		s.broken.Store(true)
 		return fmt.Errorf("fishplus: remote speaks protocol %d, expected %d", feats.Proto, ProtocolVersion)
 	}
 	s.featuresMu.Lock()
@@ -373,19 +373,19 @@ func (s *Session) waitForReady(ctx context.Context) error {
 	marker := ReadyMarker(s.token)
 	for i := 0; i < maxBootstrapLines; i++ {
 		if err := ctx.Err(); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return err
 		}
 		line, err := s.readLineWithin(ctx, ReadyTimeout)
 		if err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return err
 		}
 		if strings.Contains(line, marker) {
 			return nil
 		}
 	}
-	s.broken = true
+	s.broken.Store(true)
 	return fmt.Errorf("fishplus: the remote shell never reported being ready")
 }
 
@@ -486,7 +486,7 @@ func (s *Session) MarkBroken() {
 		return
 	}
 	s.mu.Lock()
-	s.broken = true
+	s.broken.Store(true)
 	s.mu.Unlock()
 }
 
@@ -509,7 +509,7 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 	defer s.releaseRequest()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return nil, ErrBroken
 	}
 	// The idle clock is refreshed when the request is done rather than when it
@@ -542,7 +542,7 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 		req.WriteByte('\n')
 	}
 	if _, err := s.writeCtx(ctx, []byte(req.String())); err != nil {
-		s.broken = true
+		s.broken.Store(true)
 		return nil, err
 	}
 	if !encoded && len(payload) > 0 {
@@ -551,7 +551,7 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 		// a stray newline here would end up at the head of the next
 		// request.
 		if _, err := s.writeCtx(ctx, payload); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return nil, err
 		}
 	}
@@ -561,7 +561,7 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 		// Route the body through the session writer so a frozen transport
 		// cannot hang the patch and cancellation is honoured.
 		if err := body(&sessionWriter{s: s, ctx: ctx}); err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return nil, err
 		}
 	}
@@ -578,13 +578,13 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 			// expects it, which costs the rest of one answer and saves a
 			// whole reconnect.
 			if drainErr := s.drainToTerminator(ctx, prefix, binary); drainErr != nil {
-				s.broken = true
+				s.broken.Store(true)
 			}
 			return nil, err
 		}
 		line, err := s.readLineCtx(ctx)
 		if err != nil {
-			s.broken = true
+			s.broken.Store(true)
 			return nil, err
 		}
 		// The request may have been cancelled while this line was in flight.
@@ -594,7 +594,7 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 		if ctx.Err() != nil {
 			if !strings.HasPrefix(line, prefix) {
 				if derr := s.drainToTerminator(ctx, prefix, binary); derr != nil {
-					s.broken = true
+					s.broken.Store(true)
 				}
 			}
 			return nil, ctx.Err()
@@ -612,7 +612,7 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 		if strings.HasPrefix(line, prefix) {
 			status, msg, _ := strings.Cut(strings.TrimSpace(line[len(prefix):]), " ")
 			if status != "ok" && status != "err" {
-				s.broken = true
+				s.broken.Store(true)
 				return nil, fmt.Errorf("fishplus: bad terminator %q", line)
 			}
 			resp.Status = status
@@ -626,12 +626,12 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 		if binary && strings.HasPrefix(line, "#") {
 			n, convErr := strconv.Atoi(line[1:])
 			if convErr != nil || n < 0 || n > MaxFrameLen {
-				s.broken = true
+				s.broken.Store(true)
 				return nil, fmt.Errorf("fishplus: bad data frame header %q", line)
 			}
 			buf := make([]byte, n)
 			if err := s.readFullCtx(ctx, buf); err != nil {
-				s.broken = true
+				s.broken.Store(true)
 				return nil, err
 			}
 			resp.Data = append(resp.Data, buf...)
@@ -756,7 +756,7 @@ func (s *Session) readLine() (string, error) {
 func (s *Session) readLineCtx(ctx context.Context) (string, error) {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return "", ErrBroken
 	}
 	rctx, rcancel, own := withIOTimeout(ctx)
@@ -806,7 +806,7 @@ func (s *Session) readLineCtx(ctx context.Context) (string, error) {
 func (s *Session) readFullCtx(ctx context.Context, buf []byte) error {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return ErrBroken
 	}
 	rctx, rcancel, own := withIOTimeout(ctx)
@@ -838,7 +838,7 @@ func (s *Session) readFullCtx(ctx context.Context, buf []byte) error {
 func (s *Session) writeCtx(ctx context.Context, p []byte) (int, error) {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return 0, ErrBroken
 	}
 	rctx, rcancel, _ := withIOTimeout(ctx)
@@ -867,7 +867,7 @@ func (s *Session) writeCtx(ctx context.Context, p []byte) (int, error) {
 func (s *Session) copyNCtx(ctx context.Context, n int64) error {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return ErrBroken
 	}
 	rctx, rcancel, own := withIOTimeout(ctx)
@@ -978,7 +978,7 @@ func (s *Session) TryNoop(ctx context.Context) (attempted bool, err error) {
 // noopLocked is the specialized request path used by TryNoop after it has
 // acquired s.mu with TryLock. Calling Exec here would attempt to lock it again.
 func (s *Session) noopLocked(ctx context.Context) error {
-	if s.closing.Load() || s.broken {
+	if s.closing.Load() || s.broken.Load() {
 		return ErrBroken
 	}
 	defer func() { s.lastUse = time.Now() }()
@@ -988,7 +988,7 @@ func (s *Session) noopLocked(ctx context.Context) error {
 	s.seq++
 	id := s.seq
 	if _, err := s.writeCtx(ctx, []byte(strconv.FormatUint(id, 10)+" noop\n")); err != nil {
-		s.broken = true
+		s.broken.Store(true)
 		return err
 	}
 	resp, err := s.readResponse(ctx, id, false)
@@ -1019,7 +1019,7 @@ func (w *sessionWriter) Write(p []byte) (int, error) {
 // s.broken is set directly; the closeOnce guard makes it safe to call more
 // than once and keeps it in sync with Close.
 func (s *Session) poisonAndClose() {
-	s.broken = true
+	s.broken.Store(true)
 	s.closeOnce.Do(func() {
 		close(s.closeCh)
 		if s.closer != nil {
@@ -1030,7 +1030,7 @@ func (s *Session) poisonAndClose() {
 
 func (s *Session) Close() error {
 	s.closing.Store(true)
-	s.broken = true
+	s.broken.Store(true)
 	s.closeOnce.Do(func() {
 		// Wake requests waiting for the protocol gate even if the transport has
 		// no closer (or its Close cannot interrupt a currently blocked read).
