@@ -298,11 +298,13 @@ under the glyphs — see the entry in section 8, which is the same blocker as
 kitty's negative `z` — or the receiver has to keep per row slices and erase
 them as cells are written, which is what `ImageSlice` does in Windows Terminal.
 
-**14. A full colour sixel encoder in vtui.** `graphics_sixel.go` quantises to a
-median cut palette of 255 colours for the whole picture. Redefining registers
-between bands would lift that limit entirely, and f4's receiver already honours
-it — the two halves of the protocol are asymmetric until this is done. Note
-that this is the vtui repository, not f4.
+**14. A full colour sixel encoder in vtui.** Done, twice over: per-band
+register redefinition everywhere it is honoured, and a stack of transparent
+single-palette layers in Windows Terminal, which does not honour it. One thing
+is left, and it is on f4's side of the fence: **f4's own sixel receiver has to
+composite overlapping transparent placements**, or f4 inside f4 in Windows
+Terminal will show the last layer alone instead of the picture. Note that the
+encoder is the vtui repository, not f4.
 
 Konsole's sixel decoder is not compatible with that full-colour form: it keeps
 indexed pixels and mutates the shared palette when a later band redefines a
@@ -310,14 +312,23 @@ register, recolouring bands that were already decoded. f4 therefore selects
 vtui's existing kitty transport for Konsole 22.04 and later, where the terminal
 supports the raw RGB/RGBA subset used by the image viewer. The same transport
 is preferred when the environment identifies another Kitty-capable terminal
-(kitty, Ghostty, WezTerm, Contour, wayst, Rio, or Warp). Windows Terminal has
-a different version of the same boundary: its parser keeps indexed pixels
-until it flushes a raster, so a fast stream of per-band redefinitions can
-recolour earlier bands or leave a large image waiting in ConPTY. f4 selects
-vtui's adaptive single-palette mode there. It uses median-cut colours without
-Floyd-Steinberg dithering, and a valid `VTUI_SIXEL_PALETTE` override still takes
-precedence. Terminals without a known Kitty path keep the full-colour sixel
-path.
+(kitty, Ghostty, WezTerm, Contour, wayst, Rio, or Warp). Terminals without a
+known Kitty path keep the full-colour sixel path.
+
+Windows Terminal has the same boundary and no kitty path to fall back to, and
+**that case is no longer f4's**. f4 used to set `VTUI_SIXEL_PALETTE=adaptive`
+there — a single median-cut palette, which is banding on any photograph, and
+chosen by writing an environment variable into its own process to configure a
+library it links. vtui now sends several transparent DCS layers at one cell
+instead, each with a palette of its own, and picks that itself from
+`WT_SESSION` beside the check that already picks the raster cell geometry for
+the same terminal. See `../vtui/GRAPHICS.md`. The division that came out of
+it is worth keeping: **vtui knows terminals, f4 knows the user.**
+
+`graphics_compat.go` is still on the wrong side of that line — the table of
+Konsole, Ghostty, Contour, wayst, Rio and Warp is knowledge about terminals
+living in an application — and moving it into vtui's protocol detection, with
+only the override left here, is queued rather than done.
 
 **15. Nothing.** The device attributes answer used to be swallowed when a
 chunk ended on its final byte, which kept every client from ever asking for a
@@ -401,11 +412,12 @@ the other way round.
   redefine one between bands and paint an unlimited number of colours through
   256 registers. That is the full-colour form used by f4's own receiver and by
   terminals that preserve those changes as they arrive. Windows Terminal's
-  indexed raster buffer does not make that promise, so f4 uses one adaptive
-  palette there instead of sending a stream that can recolour itself while it
-  is being consumed. Reporting a larger number through `XTSMGRAPHICS` would be
-  true of our decoder — the palette grows on demand — but it would invite an
-  encoder to quantise to a palette of that size for no gain.
+  indexed raster buffer does not make that promise, and the answer there is
+  now layering rather than a smaller palette: several transparent images at
+  one cell, 255 colours each. Reporting a larger number through
+  `XTSMGRAPHICS` would be true of our decoder — the palette grows on demand —
+  but it would invite an encoder to quantise to a palette of that size for no
+  gain.
 - **The receiver uses the real cell size, not the VT340's 10x20.** Windows
   Terminal rasterises sixel into a fixed virtual cell to emulate the hardware.
   We cannot: `CSI 16 t` already tells the child what our cell really is, and a

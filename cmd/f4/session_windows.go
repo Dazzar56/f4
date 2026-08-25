@@ -32,7 +32,6 @@ func ManageSessions() {
 	stopWindowAppearanceManager := startWindowsConsoleWindowAppearanceManager()
 	defer stopWindowAppearanceManager()
 
-	configureWindowsTerminalSixel()
 	scr := InitCore()
 	PreferCompatibleGraphicsProtocol(scr)
 
