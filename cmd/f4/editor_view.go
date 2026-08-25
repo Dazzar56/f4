@@ -175,6 +175,11 @@ type EditorView struct {
 	// one of the two is ever set.
 	targetOffset int
 	Codepage     int
+	// codepageRaw is the byte stream that codepage switching reinterprets.
+	// The piece table stores decoded UTF-8 text, so encoding that text through
+	// every intermediate codepage makes a cycle lossy (especially UTF-8 ->
+	// ANSI -> OEM -> UTF-8). Keep one source snapshot until the buffer changes.
+	codepageRaw []byte
 	// DisplayTitle overrides the temporary filename in frame and top-bar
 	// titles. It is used by internal editor round-trip workflows.
 	DisplayTitle string
@@ -556,6 +561,7 @@ func (ev *EditorView) SetText(text string) {
 	ev.cancelIndexing()
 	ev.edited = true
 	ev.retireEditSession()
+	ev.codepageRaw = nil
 
 	ev.pt = piecetable.New([]byte(text))
 	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
@@ -615,6 +621,7 @@ func (ev *EditorView) Undo() {
 	}
 
 	ev.edited = true
+	ev.codepageRaw = nil
 	ev.cancelIndexing()
 	ev.retireEditSession()
 
@@ -650,6 +657,7 @@ func (ev *EditorView) Redo() {
 	}
 
 	ev.edited = true
+	ev.codepageRaw = nil
 	ev.cancelIndexing()
 	ev.retireEditSession()
 
@@ -3974,6 +3982,7 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 // line indexer is canceled and every editSession fence held by an in-flight
 // task goes stale.
 func (ev *EditorView) noteBufferEdit() {
+	ev.codepageRaw = nil
 	// A position waiting on the scan describes the text as it was; typing has
 	// since moved it, and the cursor is where the user put it.
 	ev.targetOffset = -1
@@ -4426,14 +4435,22 @@ func (ev *EditorView) ReloadWithCodepage(cpID int) {
 		return
 	}
 
-	bytes, err := ev.pt.Bytes()
-	if err != nil {
-		return
-	}
+	// The piece table contains decoded text, not the original file bytes.
+	// Build the source stream once and reinterpret that same stream on every
+	// subsequent switch. Re-encoding the result of the previous switch loses
+	// information when the intermediate codepage cannot represent all glyphs.
+	rawData := ev.codepageRaw
+	if rawData == nil {
+		bytes, err := ev.pt.Bytes()
+		if err != nil {
+			return
+		}
 
-	rawData, err := vfs.EncodeBytes(bytes, ev.Codepage)
-	if err != nil {
-		rawData = bytes // Fallback
+		rawData, err = vfs.EncodeBytes(bytes, ev.Codepage)
+		if err != nil {
+			rawData = bytes // Fallback
+		}
+		ev.codepageRaw = append([]byte(nil), rawData...)
 	}
 
 	decoded, err := vfs.DecodeBytes(rawData, cpID)
@@ -4451,6 +4468,10 @@ func (ev *EditorView) ReloadWithCodepage(cpID int) {
 	oldVirtualSpaces := ev.CursorVirtualSpaces
 
 	ev.SetText(string(decoded))
+	// SetText invalidates edit-derived snapshots. Restore the source snapshot
+	// because this wholesale replacement is the codepage view itself, not a
+	// user edit.
+	ev.codepageRaw = rawData
 
 	ev.CursorLine = oldLine
 	if ev.CursorLine >= ev.li.LineCount() {
@@ -4575,6 +4596,7 @@ func (ev *EditorView) showConvertCodepageDialog() {
 		menu.Close()
 		if idx >= 0 && idx < len(menu.Items) {
 			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				ev.codepageRaw = nil
 				ev.Codepage = cpID
 				ev.modified = true
 				vtui.ShowToast(fmt.Sprintf("Will be saved as: %s", vfs.DisplayCodepageName(cpID)), 2*time.Second)
@@ -5119,6 +5141,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				}
 				ev.mapped = newMapped
 				ev.pt = newPt
+				ev.codepageRaw = nil
 				ev.cleanState = newPt.GetState()
 				ev.engine = newEngine
 				ev.retireEditSession()
@@ -5143,6 +5166,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.unsavedBaseline = false
 				ev.createNewTarget = false
 				ev.cleanState = ev.pt.GetState()
+				ev.codepageRaw = nil
 				ev.edited = false
 				vtui.ShowMessage(" Warning ", fmt.Sprintf("File content was saved, but the file could not be reopened:\n%v", err), []string{"&Ok"})
 			}
