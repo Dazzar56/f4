@@ -4692,8 +4692,32 @@ func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
 		t.Errorf("PTY did not receive expected mouse sequence. Got: %q, want to contain: %q", pty.String(), expected)
 	}
 
-	// X11/Wayland report a hover move with KeyDown=false and no button.
-	// It must remain a motion event (final byte M), not a release (m).
+	// Normal tracking mode (1000), which htop selects, does not request
+	// hover motion from the terminal.
+	move := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          12,
+		MouseY:          11,
+		MouseEventFlags: vtinput.MouseMoved,
+	}
+	beforeMove := pty.String()
+	if pf.ProcessMouse(move) {
+		t.Fatal("Normal mouse tracking must not capture hover motion")
+	}
+	if got := pty.String(); got != beforeMove {
+		t.Errorf("PTY received hover motion in normal tracking mode: got %q, want %q", got, beforeMove)
+	}
+}
+
+func TestPanelsFrame_MouseForwarding_AnyEventTracking(t *testing.T) {
+	pf := setupMockPanelsFrame(t)
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
+
+	pf.showPanels = false
+	pf.termView.MouseTrackingMode = 1003
+	pf.termView.MouseSGRMode = true
+
 	move := &vtinput.InputEvent{
 		Type:            vtinput.MouseEventType,
 		MouseX:          12,
@@ -4701,7 +4725,7 @@ func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
 		MouseEventFlags: vtinput.MouseMoved,
 	}
 	if !pf.ProcessMouse(move) {
-		t.Fatal("Mouse move should be handled by PanelsFrame when panels are hidden")
+		t.Fatal("Any-event mouse tracking must capture hover motion")
 	}
 	moveExpected := "\x1b[<35;13;12M"
 	if !strings.Contains(pty.String(), moveExpected) {

@@ -2796,6 +2796,17 @@ func (pf *PanelsFrame) processMiddleMouseGesture(e *vtinput.InputEvent) (handled
 	return false, false
 }
 
+// terminalWantsMouseEvent applies the DEC mouse-tracking mode selected by
+// the terminal application. SGR (1006) chooses the wire format; it does not
+// itself request mouse events. In normal tracking mode (1000), applications
+// receive button presses and releases only, not hover motion.
+func terminalWantsMouseEvent(mode int, e *vtinput.InputEvent) bool {
+	if mode == 0 || e == nil {
+		return false
+	}
+	return mode != 1000 || e.MouseEventFlags&vtinput.MouseMoved == 0
+}
+
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
@@ -2812,7 +2823,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 		}
 		active := pf.getActivePTY()
-		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
+		if active != nil && terminalWantsMouseEvent(pf.termView.MouseTrackingMode, e) {
 			seq := TranslateMouseInput(e)
 			pf.writePTY(active, []byte(seq))
 			return true
