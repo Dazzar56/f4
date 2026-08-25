@@ -120,3 +120,25 @@ black rectangle on the screen means the request reached the pump thread and
 something below it went wrong. `[Images] X11Overlay=0` turns the overlay off
 altogether — the same setting serves both platforms — which is how to tell an
 overlay fault from anything else.
+
+Beside them is a summary line, at most one a second and only for a second in
+which something happened:
+
+    WINCON: 1.0s frames=57 new=2 scale=812ms/406ms window=3ms \
+            pump=6 move=2 rgn=2 inval=4 paint=4 blank=1 gaveup=0
+
+`frames` is how many times a frame reached the overlay and `new` how many of
+them were not the frame before, so `frames` high with `new` low is a console
+redrawing under a still picture and costs nothing, while the two rising
+together is a picture being rescaled sixty times a second. `scale` is the
+total and then the worst single scale of the period, on the thread that holds
+the screen lock: a camera JPEG is tens of megapixels and the resampler is
+plain Go, so a frozen f4 with a large number here is frozen *there* and
+nowhere near a window call. `paint` and `blank` come from the pump thread —
+`blank` counts the paints that found no frame buffer, which is what a black
+rectangle looks like from inside. `gaveup` names the reason the last frame
+was abandoned.
+
+The pump thread counts rather than logs, deliberately: its input queue is
+attached to conhost's, so a write to a file on that thread is one more way of
+stopping the console it is drawing over. See `internal/wincon/stats.go`.

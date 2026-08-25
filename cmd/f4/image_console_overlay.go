@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unxed/f4/internal/wincon"
 	"github.com/unxed/vtui"
@@ -27,6 +28,10 @@ type consoleImageOverlay struct {
 	// key is what was last drawn, so a frame nobody is touching is not
 	// rescaled and repainted.
 	key string
+
+	// st is the cost of all this, printed once a second; see
+	// image_console_stats.go.
+	st consoleOverlayStats
 }
 
 var (
@@ -91,13 +96,16 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 	if c == nil {
 		return
 	}
+	c.st.frame()
+	defer c.st.flush(c.ov.Stats())
+
 	if len(list) == 0 || cellW <= 0 || cellH <= 0 {
-		c.hide()
+		c.hide("no placements")
 		return
 	}
 	clientW, clientH, ok := c.ov.ClientSize()
 	if !ok {
-		c.hide()
+		c.hide("no client size")
 		return
 	}
 
@@ -120,13 +128,13 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 		rects = append(rects, r)
 	}
 	if len(pieces) == 0 {
-		c.hide()
+		c.hide("nothing on the client area")
 		return
 	}
 
 	frame, ok := wincon.Union(rects)
 	if !ok {
-		c.hide()
+		c.hide("no frame")
 		return
 	}
 
@@ -134,11 +142,14 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 	if key == c.key && c.ov.Visible() {
 		return
 	}
+	c.st.change()
+	started := time.Now()
 	if err := c.ov.Place(frame); err != nil {
 		vtui.DebugLog("WINCON: %v", err)
-		c.hide()
+		c.hide("place: " + err.Error())
 		return
 	}
+	c.st.placed(time.Since(started))
 
 	buf := make([]byte, frame.W*frame.H*4)
 	bounds := make([]wincon.Rect, 0, len(pieces))
@@ -155,7 +166,13 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 		if sx != 0 || sy != 0 || sw != src.Width || sh != src.Height {
 			src = src.Crop(sx, sy, sw, sh)
 		}
+		// The one expensive thing on this path, and it runs on the
+		// thread that holds the screen lock: a camera JPEG is tens of
+		// megapixels and the resampler is plain Go. If a frozen f4 is
+		// sitting anywhere in here, this is the number that says so.
+		scaleStarted := time.Now()
 		scaled := vtui.ScaleSurface(src, sub.W, sub.H)
+		c.st.scaled(time.Since(scaleStarted))
 		if !scaled.Valid() {
 			continue
 		}
@@ -163,12 +180,13 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 		bounds = append(bounds, sub)
 	}
 	if len(bounds) == 0 {
-		c.hide()
+		c.hide("nothing scaled")
 		return
 	}
 
 	// The gaps go back to the console, so the captions between a grid of
 	// thumbnails stay readable.
+	handed := time.Now()
 	if len(bounds) == 1 && bounds[0] == (wincon.Rect{X: 0, Y: 0, W: frame.W, H: frame.H}) {
 		c.ov.SetBounds(nil)
 	} else {
@@ -177,9 +195,10 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 
 	if err := c.ov.Draw(buf, frame.W, frame.H, frame.W*4); err != nil {
 		vtui.DebugLog("WINCON: %v", err)
-		c.hide()
+		c.hide("draw: " + err.Error())
 		return
 	}
+	c.st.placed(time.Since(handed))
 	// One line per frame that actually changed, which is what the guard on
 	// the key above buys: a still picture logs once. Anything that reaches
 	// here has asked the pump thread to show the window, so a black area
@@ -190,13 +209,14 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 	c.key = key
 }
 
-func (c *consoleImageOverlay) hide() {
+func (c *consoleImageOverlay) hide(reason string) {
 	if c == nil {
 		return
 	}
 	if c.key != "" {
-		vtui.DebugLog("WINCON: nothing to show")
+		vtui.DebugLog("WINCON: nothing to show: %s", reason)
 	}
+	c.st.gaveUp(reason)
 	c.ov.Hide()
 	c.key = ""
 }
