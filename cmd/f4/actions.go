@@ -836,6 +836,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		editor = NewEditorView(pt, v, path)
 	}
 	editor.Codepage = cpID
+	editor.binaryFile = binary
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
 		editor.HexMode = true
@@ -1269,6 +1270,7 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	editor.asyncBuf = buf
 	editor.mapped = mapped
 	editor.Codepage = cpID
+	editor.binaryFile = vv.HexMode
 	editor.WordWrap = vv.WrapMode
 	editor.HexMode = vv.HexMode
 	editor.DecodeMode = vv.DecodeMode

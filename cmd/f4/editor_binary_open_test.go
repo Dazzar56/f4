@@ -105,6 +105,21 @@ func TestEditorHexRenderSkipsTextLayout(t *testing.T) {
 	}
 }
 
+func TestBinaryEditorSkipsColorer(t *testing.T) {
+	oldHighlighter := AppConfig.EditorHighlighter
+	AppConfig.EditorHighlighter = "Colorer"
+	t.Cleanup(func() { AppConfig.EditorHighlighter = oldHighlighter })
+
+	ev := newEditorView(piecetable.New([]byte{0, 1, 2, 3}), nil, "sample.bin", false, true)
+	defer ev.Close()
+	if !ev.binaryFile {
+		t.Fatal("binary buffer was not detected")
+	}
+	if ev.highlighter != nil {
+		t.Fatalf("binary editor initialized %T; Colorer must be skipped", ev.highlighter)
+	}
+}
+
 func TestAwaitOffsetAsyncDoesNotReadOnUIThread(t *testing.T) {
 	buffer := &editorRenderTrackingBuffer{data: bytes.Repeat([]byte("x"), 1024*1024)}
 	ev := newEditorView(piecetable.NewWithBuffer(buffer), nil, "", false, true)
@@ -203,6 +218,9 @@ func TestShowEditorBinaryOpensInHex(t *testing.T) {
 	t.Cleanup(ev.Close)
 	if !ev.HexMode || ev.Codepage != 65001 {
 		t.Errorf("binary file must open in hex with codepage 65001, got hex=%v cp=%d", ev.HexMode, ev.Codepage)
+	}
+	if !ev.binaryFile {
+		t.Error("binary file must disable syntax parsing without disabling text editing")
 	}
 	if ev.indexing || ev.indexIsComplete() {
 		t.Error("binary file in hex mode must not run the line-index scan")

@@ -65,6 +65,7 @@ type EditorView struct {
 
 	WordWrap           bool
 	wordWrapSuppressed bool // Unsafe binary/long-line content forbids re-enabling wrapping.
+	binaryFile         bool // Binary files stay editable as text, but syntax parsers must not scan them.
 	HexMode            bool
 	DecodeMode         bool
 	HexTopOffset       int
@@ -363,6 +364,18 @@ func NewEditorViewIndexedLater(pt *piecetable.PieceTable, v vfs.VFS, path string
 	return newEditorView(pt, v, path, true, false)
 }
 
+// editorBufferHasNUL is the cheap constructor-time binary hint. The opener's
+// 16 KiB probe remains authoritative for files loaded from disk; this probe
+// also covers editors constructed directly in tests or by plugins.
+func editorBufferHasNUL(pt *piecetable.PieceTable) bool {
+	if pt == nil || pt.Size() == 0 {
+		return false
+	}
+	take := min(16*1024, pt.Size())
+	data, err := pt.GetRange(0, take)
+	return err == nil && bytes.IndexByte(data, 0) >= 0
+}
+
 func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig, buildIndex bool) *EditorView {
 	li := piecetable.NewLineIndex()
 	if buildIndex {
@@ -388,6 +401,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		CursorBeyondEOL: AppConfig.EditorCursorBeyondEOL,
 		UseEditorConfig: useEditorConfig && AppConfig.EditorUseEditorConfig,
 		Codepage:        65001,
+		binaryFile:      editorBufferHasNUL(pt),
 	}
 	if ev.TabSize <= 0 {
 		ev.TabSize = 8
@@ -413,6 +427,10 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	}
 	switch {
 	case strings.EqualFold(AppConfig.EditorHighlighter, "None"):
+		ev.highlighter = nil
+	case strings.EqualFold(AppConfig.EditorHighlighter, "Colorer") && ev.binaryFile:
+		// A binary remains editable in text mode, but feeding its bytes to a
+		// syntax parser can turn one long line into an unbounded CPU task.
 		ev.highlighter = nil
 	case strings.EqualFold(AppConfig.EditorHighlighter, "Colorer") && SchemasExist():
 		firstLine := ""
@@ -1467,73 +1485,75 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 		// Stateful Highlighting
 		var lineSyntax []uint64
-		if ch, isColorer := ev.highlighter.(*ColorerHighlighter); isColorer {
-			// Colorer is addressed by line number: its parser state cannot
-			// be carried in ev.lineStates, so it keeps its own anchor near
-			// the viewport instead. See HIGHLIGHT.md, phase 5.
-			if text, ok := ev.lineTextForHighlight(logIdx); ok {
-				lineSyntax = ch.HighlightLine(logIdx, text, bgAttr)
-			}
-		} else if ev.highlighter != nil {
-			// Catch up synchronously only if the uncomputed gap is small (<= 50 lines).
-			// For large jumps, render unhighlighted immediately and compute in background.
-			const syncHighlightGapLimit = 50
-			if logIdx >= len(ev.lineStates)+syncHighlightGapLimit {
-				ev.startHighlighting()
-
-				// Allow stateless highlighters (like Chroma) to provide instant colors
-				if _, isColorer := ev.highlighter.(*ColorerHighlighter); !isColorer {
-					lStart := ev.li.GetLineOffset(logIdx)
-					highlightLen := lineLen
-					if highlightLen > 64*1024 {
-						highlightLen = 64 * 1024
-					}
-					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
-					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
+		if !ev.binaryFile {
+			if ch, isColorer := ev.highlighter.(*ColorerHighlighter); isColorer {
+				// Colorer is addressed by line number: its parser state cannot
+				// be carried in ev.lineStates, so it keeps its own anchor near
+				// the viewport instead. See HIGHLIGHT.md, phase 5.
+				if text, ok := ev.lineTextForHighlight(logIdx); ok {
+					lineSyntax = ch.HighlightLine(logIdx, text, bgAttr)
 				}
-			} else {
-				for len(ev.lineStates) <= logIdx {
-					currIdx := len(ev.lineStates)
-					lStart := ev.li.GetLineOffset(currIdx)
-					lEnd := ev.pt.Size()
-					if currIdx+1 < ev.li.LineCount() {
-						lEnd = ev.li.GetLineOffset(currIdx + 1)
-					}
-					// Prevent highlighter from crashing on huge binary lines
-					if lEnd-lStart > 64*1024 {
-						lEnd = lStart + 64*1024
-					}
+			} else if ev.highlighter != nil {
+				// Catch up synchronously only if the uncomputed gap is small (<= 50 lines).
+				// For large jumps, render unhighlighted immediately and compute in background.
+				const syncHighlightGapLimit = 50
+				if logIdx >= len(ev.lineStates)+syncHighlightGapLimit {
+					ev.startHighlighting()
 
-					var prevState any
-					if currIdx > 0 {
-						prevState = ev.lineStates[currIdx-1]
+					// Allow stateless highlighters (like Chroma) to provide instant colors
+					if _, isColorer := ev.highlighter.(*ColorerHighlighter); !isColorer {
+						lStart := ev.li.GetLineOffset(logIdx)
+						highlightLen := lineLen
+						if highlightLen > 64*1024 {
+							highlightLen = 64 * 1024
+						}
+						lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+						lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
 					}
+				} else {
+					for len(ev.lineStates) <= logIdx {
+						currIdx := len(ev.lineStates)
+						lStart := ev.li.GetLineOffset(currIdx)
+						lEnd := ev.pt.Size()
+						if currIdx+1 < ev.li.LineCount() {
+							lEnd = ev.li.GetLineOffset(currIdx + 1)
+						}
+						// Prevent highlighter from crashing on huge binary lines
+						if lEnd-lStart > 64*1024 {
+							lEnd = lStart + 64*1024
+						}
 
-					lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
-					if err == piecetable.ErrLoading {
-						break // Wait for data
-					}
+						var prevState any
+						if currIdx > 0 {
+							prevState = ev.lineStates[currIdx-1]
+						}
 
-					attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
-					ev.lineStates = append(ev.lineStates, nextState)
-					if currIdx == logIdx {
-						lineSyntax = attrs
+						lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
+						if err == piecetable.ErrLoading {
+							break // Wait for data
+						}
+
+						attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+						ev.lineStates = append(ev.lineStates, nextState)
+						if currIdx == logIdx {
+							lineSyntax = attrs
+						}
 					}
-				}
-				if logIdx < len(ev.lineStates) && lineSyntax == nil {
-					// State was already cached, but we need the actual attributes for the current visible line
-					lStart := ev.li.GetLineOffset(logIdx)
-					// Re-apply highlighter OOM protection for the rendering path
-					highlightLen := lineLen
-					if highlightLen > 64*1024 {
-						highlightLen = 64 * 1024
+					if logIdx < len(ev.lineStates) && lineSyntax == nil {
+						// State was already cached, but we need the actual attributes for the current visible line
+						lStart := ev.li.GetLineOffset(logIdx)
+						// Re-apply highlighter OOM protection for the rendering path
+						highlightLen := lineLen
+						if highlightLen > 64*1024 {
+							highlightLen = 64 * 1024
+						}
+						lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+						var prevState any
+						if logIdx > 0 {
+							prevState = ev.lineStates[logIdx-1]
+						}
+						lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 					}
-					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
-					var prevState any
-					if logIdx > 0 {
-						prevState = ev.lineStates[logIdx-1]
-					}
-					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 				}
 			}
 		}
