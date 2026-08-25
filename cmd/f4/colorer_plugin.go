@@ -571,12 +571,6 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 	return nil, nil
 }
 
-// attrsFor turns the regions of one parsed line into cell attributes, and
-// reports the background the line carries past its last character.
-func (ch *ColorerHighlighter) attrsFor(line string, regions []colorer.Region, baseAttr uint64) ([]uint64, uint64) {
-	return ch.attrsForSyntax(line, regions, baseAttr, AppConfig.EditorColorerSyntax)
-}
-
 func (ch *ColorerHighlighter) attrsForSyntax(line string, regions []colorer.Region, baseAttr uint64, syntax bool) ([]uint64, uint64) {
 	lineRunes := colorerLineRuneCount(line)
 	attrs := make([]uint64, lineRunes)
