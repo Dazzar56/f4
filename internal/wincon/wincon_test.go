@@ -104,7 +104,12 @@ func TestBlitIntoTurnsThePictureOverAndSwapsChannels(t *testing.T) {
 // Anything past the edge is dropped rather than wrapping onto the next row.
 func TestBlitIntoClips(t *testing.T) {
 	dst := make([]byte, 4*4*4)
-	src := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	// Two opaque pixels whose channels are their own labels. The alpha has
+	// to be a real 255 rather than another label: blitInto composes now, so
+	// a pixel with alpha 4 lands as a twentieth of itself over the black
+	// buffer, which is nothing, and this test would then be measuring the
+	// blend instead of the clipping.
+	src := []byte{1, 2, 3, 255, 5, 6, 7, 255}
 	blitInto(dst, 4, 4, src, 2, 1, 8, 3, 3)
 	// Only the first of the two pixels is inside.
 	if dst[0*4+3*4+2] != 1 {

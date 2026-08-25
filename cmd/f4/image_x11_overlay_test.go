@@ -90,7 +90,12 @@ func TestOverlayFrameKey(t *testing.T) {
 // picture has to land at its own offset inside the frame buffer.
 func TestBlitIntoPlacesAndClips(t *testing.T) {
 	dst := make([]byte, 4*4*4)
-	src := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	// Two opaque pixels whose channels are their own labels. The alpha has
+	// to be a real 255 rather than another label: blitInto composes now, so
+	// a pixel with alpha 4 lands as a twentieth of itself over the empty
+	// buffer, which is nothing, and this test would then be measuring the
+	// blend instead of the offsets.
+	src := []byte{1, 2, 3, 255, 5, 6, 7, 255}
 
 	blitInto(dst, 4, 4, src, 2, 1, 8, 1, 1)
 	if dst[(1*4+1)*4] != 1 || dst[(1*4+2)*4] != 5 {
