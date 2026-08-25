@@ -298,13 +298,25 @@ under the glyphs — see the entry in section 8, which is the same blocker as
 kitty's negative `z` — or the receiver has to keep per row slices and erase
 them as cells are written, which is what `ImageSlice` does in Windows Terminal.
 
-**14. A full colour sixel encoder in vtui.** Done, twice over: per-band
-register redefinition everywhere it is honoured, and a stack of transparent
-single-palette layers in Windows Terminal, which does not honour it. One thing
-is left, and it is on f4's side of the fence: **f4's own sixel receiver has to
-composite overlapping transparent placements**, or f4 inside f4 in Windows
-Terminal will show the last layer alone instead of the picture. Note that the
-encoder is the vtui repository, not f4.
+**14. Full colour over sixel, both halves.** Done. The sender is vtui's, and
+it has two forms: a register redefined between bands, which every decoder that
+resolves registers as it reads them honours, and a stack of transparent
+single-palette images at one cell, for Windows Terminal, which does not.
+
+f4's receiver takes both. The redefinition was always immediate — see
+`TestSixelRegisterRedefinitionIsImmediate` — and the stack needed the
+placements to compose rather than replace. Two things carry it: the decoder
+already leaves an unpainted pixel at zero alpha under `P2=1`, and overlapping
+placements are kept in arrival order by `kittyAddPlacement`, which only
+replaces on a matching kitty image and placement id and a sixel has neither.
+What had to change was the composing: both overlay frame buffers copied the
+source bytes, so a layer erased the one under it and only the last one
+survived. They compose now, source over destination.
+
+This matters more than it looks: f4 running inside f4 inside Windows Terminal
+is a stack of layers arriving at f4's own built-in terminal, so the two halves
+of the protocol are asymmetric until the receiver takes what the sender emits.
+Note that the encoder is the vtui repository, not f4.
 
 Konsole's sixel decoder is not compatible with that full-colour form: it keeps
 indexed pixels and mutates the shared palette when a later band redefines a

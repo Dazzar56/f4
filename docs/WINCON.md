@@ -98,9 +98,12 @@ by terminals that do not answer; Windows answers.
 
 `geometry.go` is arithmetic and policy, has no system calls in it, and is
 tested on every platform: cell rectangles, clipping, the union that decides
-which window one frame goes into, and the copy into a device independent
+which window one frame goes into, and the composing into a device independent
 bitmap — which is bottom-up with its channels the other way round, and both
-mistakes look like a picture rather than an error.
+mistakes look like a picture rather than an error. Composing and not copying:
+a picture can arrive as overlapping pieces, which is what a stack of
+transparent sixel layers from a program in the built-in terminal is, and a
+copy leaves the top layer alone on the screen.
 
 `overlay_state.go` is the same kind of file as `geometry.go`: what was asked
 for, what is on the screen, and what the pump thread therefore has to do, with
