@@ -197,6 +197,16 @@ now written into `wincon/overlay_state.go` and applied on the pump thread after
 one `PostMessageW`; see `WINCON.md` section 2 for the invariant and the rule
 that keeps it.
 
+The black rectangle was the second half and did not go with the first. A frame
+places the window, reshapes it, and only then hands over the pixels, so the
+pump thread could show a window with nothing in it — and `WM_ERASEBKGND` is
+refused, so an unpainted window keeps whatever it last held, which the first
+time is black. It stayed that way for as long as scaling the photograph took.
+`overlayState.take` now holds the move back until the frame buffer has been
+replaced, so the window is shown, or resized, in the same wake-up that paints
+it; a resize needed the same rule because `paint` blits at the frame buffer's
+size and leaves the rest of a larger window alone.
+
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
 see the entry in section 8.
@@ -240,7 +250,9 @@ capabilities do not claim it.
 **12b. A window over the Windows console.** Done for conhost, where `cmd.exe`
 lives and no image protocol exists; see `WINCON.md`. Windows Terminal is
 deliberately not covered, because it renders sixel and that is the better
-answer. Written but not yet run on Windows.
+answer. It has now been run on Windows once, by the reporter of issue #805,
+and both faults that run found are fixed; nothing since has come back from a
+real console.
 
 **12a. Done.** The overlay is installed as vtui's external graphics renderer,
 so quick view, the thumbnail grid, the file viewer and the pictures a program

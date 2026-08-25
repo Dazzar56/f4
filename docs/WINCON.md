@@ -63,6 +63,18 @@ calls that touch the overlay window live in `wndProc`, `paint` and `apply`, and
 nowhere else.** `GetClientRect` on the parent is the one exception and is safe:
 it reads window data and sends nothing.
 
+**And the window is never shown or moved except in the wake-up that paints
+it.** The report had two halves and the threading is only the first of them:
+`WM_ERASEBKGND` is answered so the background never flashes, which also means
+an unpainted window shows whatever it last held — black, the first time. A
+frame places the window, then reshapes it, then hands over the pixels, so the
+pump thread could show an empty window and keep it there for as long as
+scaling a photograph takes. `take` therefore holds a move back until the frame
+buffer has been replaced; the `Draw` that follows is at most one wake-up away,
+and the two then happen together. The same rule covers a resize, because
+`paint` blits the frame buffer at its own size and leaves the rest of a larger
+window alone.
+
 `New` bounds its own wait too. Creating the window is the call that performs
 the attach, so it is the one place at startup a wedged conhost could hold f4
 up; after five seconds f4 goes on without an overlay, which is a perfectly good
@@ -94,7 +106,8 @@ mistakes look like a picture rather than an error.
 for, what is on the screen, and what the pump thread therefore has to do, with
 no system calls in it. It is tested everywhere — coalescing, a change arriving
 while the pump thread is busy, placing twice in the same spot, hiding, showing
-again, clearing the region, and refusing to record anything once closed.
+again, clearing the region, refusing to record anything once closed, and the
+move that waits for its pixels while the region and the repaint do not.
 
 `overlay_windows.go` is the part that calls `user32` and `gdi32`. It compiles
 for `windows/amd64` and `windows/arm64`, the shape of it is the same as the X
