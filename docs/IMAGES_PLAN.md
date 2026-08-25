@@ -276,9 +276,16 @@ Konsole's sixel decoder is not compatible with that full-colour form: it keeps
 indexed pixels and mutates the shared palette when a later band redefines a
 register, recolouring bands that were already decoded. f4 therefore selects
 vtui's existing kitty transport for Konsole 22.04 and later, where the terminal
-supports the raw RGB/RGBA subset used by the image viewer. This leaves the
-full-colour sixel path unchanged for terminals that handle it correctly, and a
-valid `VTUI_GRAPHICS` override still takes precedence.
+supports the raw RGB/RGBA subset used by the image viewer. The same transport
+is preferred when the environment identifies another Kitty-capable terminal
+(kitty, Ghostty, WezTerm, Contour, wayst, Rio, or Warp). Windows Terminal has
+a different version of the same boundary: its parser keeps indexed pixels
+until it flushes a raster, so a fast stream of per-band redefinitions can
+recolour earlier bands or leave a large image waiting in ConPTY. f4 selects
+vtui's adaptive single-palette mode there. It uses median-cut colours without
+Floyd-Steinberg dithering, and a valid `VTUI_SIXEL_PALETTE` override still takes
+precedence. Terminals without a known Kitty path keep the full-colour sixel
+path.
 
 **15. Nothing.** The device attributes answer used to be swallowed when a
 chunk ended on its final byte, which kept every client from ever asking for a
@@ -358,13 +365,15 @@ the other way round.
   their own algorithms, and they do not agree with each other either. A client
   that wants the text below the image sends a line feed.
 - **256 colour registers are reported, and that is what full colour needs.**
-  The decoder resolves a register at the moment it is used, so redefining one
-  between bands gives every band the colour it was drawn with. An encoder can
-  therefore paint an unlimited number of colours through 256 registers, which
-  is how full colour over sixel actually works and what Windows Terminal does.
-  Reporting a larger number through `XTSMGRAPHICS` would be true of our
-  decoder — the palette grows on demand — but it would invite an encoder to
-  quantise to a palette of that size for no gain.
+  A decoder that resolves a register at the moment it is used lets an encoder
+  redefine one between bands and paint an unlimited number of colours through
+  256 registers. That is the full-colour form used by f4's own receiver and by
+  terminals that preserve those changes as they arrive. Windows Terminal's
+  indexed raster buffer does not make that promise, so f4 uses one adaptive
+  palette there instead of sending a stream that can recolour itself while it
+  is being consumed. Reporting a larger number through `XTSMGRAPHICS` would be
+  true of our decoder — the palette grows on demand — but it would invite an
+  encoder to quantise to a palette of that size for no gain.
 - **The receiver uses the real cell size, not the VT340's 10x20.** Windows
   Terminal rasterises sixel into a fixed virtual cell to emulate the hardware.
   We cannot: `CSI 16 t` already tells the child what our cell really is, and a
