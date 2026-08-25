@@ -144,6 +144,7 @@ type Session struct {
 	closing     atomic.Bool
 	closeOnce   sync.Once
 	closeErr    error
+	ioMu        sync.Mutex
 }
 
 // NewSession wires a session to the remote shell's stdin and stdout. closer
@@ -540,7 +541,7 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 		req.WriteString(base64.StdEncoding.EncodeToString(payload))
 		req.WriteByte('\n')
 	}
-	if _, err := io.WriteString(s.w, req.String()); err != nil {
+	if _, err := s.writeCtx(ctx, []byte(req.String())); err != nil {
 		s.broken = true
 		return nil, err
 	}
@@ -549,7 +550,7 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 		// helper reads exactly as many bytes as the request announced, so
 		// a stray newline here would end up at the head of the next
 		// request.
-		if _, err := s.w.Write(payload); err != nil {
+		if _, err := s.writeCtx(ctx, payload); err != nil {
 			s.broken = true
 			return nil, err
 		}
@@ -557,7 +558,9 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 	if body != nil {
 		// A body that stops halfway leaves the remote host waiting for
 		// bytes that will never come, so there is no recovering the stream.
-		if err := body(s.w); err != nil {
+		// Route the body through the session writer so a frozen transport
+		// cannot hang the patch and cancellation is honoured.
+		if err := body(&sessionWriter{s: s, ctx: ctx}); err != nil {
 			s.broken = true
 			return nil, err
 		}
@@ -574,15 +577,27 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 			// terminator puts the stream back where the next request
 			// expects it, which costs the rest of one answer and saves a
 			// whole reconnect.
-			if drainErr := s.drainToTerminator(prefix, binary); drainErr != nil {
+			if drainErr := s.drainToTerminator(ctx, prefix, binary); drainErr != nil {
 				s.broken = true
 			}
 			return nil, err
 		}
-		line, err := s.readLine()
+		line, err := s.readLineCtx(ctx)
 		if err != nil {
 			s.broken = true
 			return nil, err
+		}
+		// The request may have been cancelled while this line was in flight.
+		// Abandon the rest of the answer (draining to the terminator keeps
+		// the stream at a request boundary) and report the cancellation; the
+		// session survives and can be reused for the next request.
+		if ctx.Err() != nil {
+			if !strings.HasPrefix(line, prefix) {
+				if derr := s.drainToTerminator(ctx, prefix, binary); derr != nil {
+					s.broken = true
+				}
+			}
+			return nil, ctx.Err()
 		}
 		// The handshake is the one place where the terminator may not start
 		// its line: a motd, a shell warning or the echo of the uploaded
@@ -615,7 +630,7 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 				return nil, fmt.Errorf("fishplus: bad data frame header %q", line)
 			}
 			buf := make([]byte, n)
-			if _, err := io.ReadFull(s.r, buf); err != nil {
+			if err := s.readFullCtx(ctx, buf); err != nil {
 				s.broken = true
 				return nil, err
 			}
@@ -631,6 +646,32 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 // wait, and a reconnect is the cheaper answer.
 var DrainAfterCancelTimeout = 10 * time.Second
 
+// sessionIOTimeout is the backstop applied to every blocking read and write on
+// the transport. The SSH session pipes are not net.Conns and so cannot carry a
+// deadline of their own; without a backstop a request whose context lacks a
+// deadline (a directory read that simply blocks) would hang forever on a
+// silently frozen connection -- a suspended VM, say, whose TCP link stays
+// ESTABLISHED and never returns an error. A request context that already
+// carries an earlier deadline wins over this one.
+const sessionIOTimeout = 90 * time.Second
+
+// withIOTimeout returns a context that carries at least sessionIOTimeout. A
+// caller that already bounded its context keeps its (tighter) deadline; one
+// that did not gets the backstop so a frozen transport cannot hang it.
+// withIOTimeout returns a context that carries at least sessionIOTimeout. A
+// caller that already bounded its context keeps its (tighter) deadline; one
+// that did not gets the backstop so a frozen transport cannot hang it. The
+// ownTimeout result reports whether the backstop (and not a caller deadline)
+// is what will fire, which is how the caller tells a frozen transport from a
+// caller-initiated timeout.
+func withIOTimeout(ctx context.Context) (context.Context, context.CancelFunc, bool) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}, false
+	}
+	c, cancel := context.WithTimeout(ctx, sessionIOTimeout)
+	return c, cancel, true
+}
+
 // drainToTerminator reads and discards the rest of a response. It is what
 // makes cancelling a request survivable: the terminator is unforgeable, so
 // finding it means the stream is back at a request boundary no matter what
@@ -639,14 +680,25 @@ var DrainAfterCancelTimeout = 10 * time.Second
 // It cannot interrupt a read that is already blocked — nothing here can, and
 // the ordinary path has the same property — so the deadline is checked
 // between lines rather than during one.
-func (s *Session) drainToTerminator(prefix string, binary bool) error {
-	deadline := time.Now().Add(DrainAfterCancelTimeout)
+// drainToTerminator reads and discards the rest of a response. It is what
+// makes cancelling a request survivable: the terminator is unforgeable, so
+// finding it means the stream is back at a request boundary no matter what
+// the remote tools printed on the way.
+//
+// It cannot interrupt a read that is already blocked — nothing here can, and
+// the ordinary path has the same property — so the deadline is checked
+// between lines rather than during one. Crucially it uses its OWN timeout
+// context, never the (already cancelled) request context, otherwise the drain
+// would give up instantly and poison a session that could have been saved.
+func (s *Session) drainToTerminator(ctx context.Context, prefix string, binary bool) error {
+	dctx, dcancel := context.WithTimeout(context.Background(), DrainAfterCancelTimeout)
+	defer dcancel()
 	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("fishplus: the remote host did not finish a cancelled answer within %s", DrainAfterCancelTimeout)
-		}
-		line, err := s.readLine()
+		line, err := s.readLineCtx(dctx)
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return ErrBroken
+			}
 			return err
 		}
 		if strings.HasPrefix(line, prefix) {
@@ -662,7 +714,10 @@ func (s *Session) drainToTerminator(prefix string, binary bool) error {
 		if convErr != nil || n < 0 || n > MaxFrameLen {
 			return fmt.Errorf("fishplus: bad data frame header %q while draining", line)
 		}
-		if _, err := io.CopyN(io.Discard, s.r, int64(n)); err != nil {
+		if err := s.copyNCtx(dctx, int64(n)); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return ErrBroken
+			}
 			return err
 		}
 	}
@@ -684,6 +739,156 @@ func (s *Session) readLine() (string, error) {
 		break
 	}
 	return strings.TrimRight(string(buf), "\r\n"), nil
+}
+
+// The SSH session pipes are not net.Conns and cannot be given a deadline, so a
+// read that blocks on a silently frozen connection would never return and the
+// context could not interrupt it. readLineCtx races the read against the
+// context and is the ONLY place that touches s.r, so the bufio.Reader is never
+// read by two goroutines at once.
+//
+// When the context fires the in-flight read goroutine is always settled before
+// this call returns: a cancellation tries to preserve the session (the peer is
+// usually still responsive, so the line is collected and the caller drains to
+// the terminator), while a deadline means the peer will not answer and the
+// transport is closed. Either way the caller gets a deterministic error and no
+// goroutine is left owning s.r.
+func (s *Session) readLineCtx(ctx context.Context) (string, error) {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+	if s.closing.Load() || s.broken {
+		return "", ErrBroken
+	}
+	rctx, rcancel, own := withIOTimeout(ctx)
+	defer rcancel()
+	type out struct {
+		line string
+		err  error
+	}
+	ch := make(chan out, 1)
+	go func() {
+		line, err := s.readLine()
+		ch <- out{line, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.line, r.err
+	case <-rctx.Done():
+		if rctx.Err() == context.Canceled {
+			// Try to preserve the session: let the in-flight read finish if
+			// the peer is still responsive, then let the caller drain.
+			timer := time.NewTimer(DrainAfterCancelTimeout)
+			defer timer.Stop()
+			select {
+			case r := <-ch:
+				return r.line, r.err
+			case <-timer.C:
+				s.poisonAndClose()
+				<-ch
+				return "", ErrBroken
+			case <-s.closeCh:
+				<-ch
+				return "", ErrBroken
+			}
+		}
+		// Deadline: the peer is not answering (frozen transport, or the
+		// caller gave up). The session can no longer be trusted.
+		s.poisonAndClose()
+		<-ch
+		if own {
+			return "", ErrBroken
+		}
+		return "", context.DeadlineExceeded
+	}
+}
+
+// readFullCtx is readLineCtx's counterpart for the binary data frames.
+func (s *Session) readFullCtx(ctx context.Context, buf []byte) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+	if s.closing.Load() || s.broken {
+		return ErrBroken
+	}
+	rctx, rcancel, own := withIOTimeout(ctx)
+	defer rcancel()
+	type out struct{ err error }
+	ch := make(chan out, 1)
+	go func() {
+		_, err := io.ReadFull(s.r, buf)
+		ch <- out{err}
+	}()
+	select {
+	case r := <-ch:
+		return r.err
+	case <-rctx.Done():
+		s.poisonAndClose()
+		<-ch
+		if rctx.Err() == context.Canceled || own {
+			return ErrBroken
+		}
+		return context.DeadlineExceeded
+	}
+}
+
+// writeCtx bounds a write to the context the same way readLineCtx bounds a read.
+// A frozen transport may let a write fill the local buffer and then block until
+// the remote reads again, which never happens; the race makes that recoverable.
+// A write can never be "drained", so any interruption closes the transport and
+// returns ErrBroken.
+func (s *Session) writeCtx(ctx context.Context, p []byte) (int, error) {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+	if s.closing.Load() || s.broken {
+		return 0, ErrBroken
+	}
+	rctx, rcancel, _ := withIOTimeout(ctx)
+	defer rcancel()
+	type out struct {
+		n   int
+		err error
+	}
+	ch := make(chan out, 1)
+	go func() {
+		n, err := s.w.Write(p)
+		ch <- out{n, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.n, r.err
+	case <-rctx.Done():
+		s.poisonAndClose()
+		<-ch
+		return 0, ErrBroken
+	}
+}
+
+// copyNCtx bounds io.CopyN the same way, used while discarding a frame during
+// a cancelled drain.
+func (s *Session) copyNCtx(ctx context.Context, n int64) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+	if s.closing.Load() || s.broken {
+		return ErrBroken
+	}
+	rctx, rcancel, own := withIOTimeout(ctx)
+	defer rcancel()
+	type out struct{ err error }
+	ch := make(chan out, 1)
+	go func() {
+		_, err := io.CopyN(io.Discard, s.r, n)
+		ch <- out{err}
+	}()
+	select {
+	case r := <-ch:
+		return r.err
+	case <-rctx.Done():
+		s.poisonAndClose()
+		<-ch
+		if rctx.Err() == context.Canceled || own {
+			return ErrBroken
+		}
+		return context.DeadlineExceeded
+	}
 }
 
 // Ping asks the remote helper to echo the payload back. It doubles as a
@@ -782,7 +987,7 @@ func (s *Session) noopLocked(ctx context.Context) error {
 	}
 	s.seq++
 	id := s.seq
-	if _, err := io.WriteString(s.w, strconv.FormatUint(id, 10)+" noop\n"); err != nil {
+	if _, err := s.writeCtx(ctx, []byte(strconv.FormatUint(id, 10)+" noop\n")); err != nil {
 		s.broken = true
 		return err
 	}
@@ -796,8 +1001,36 @@ func (s *Session) noopLocked(ctx context.Context) error {
 // Close tears the session down. The remote helper terminates on its own once
 // its stdin reaches EOF, so no farewell command is sent: a stuck remote must
 // never be able to block the UI thread inside Close.
+// sessionWriter adapts the session's cancellable, single-owner write path to
+// io.Writer so callers such as ExecStream can stream a request body without
+// ever touching s.w directly (and therefore without hanging on a frozen
+// transport).
+type sessionWriter struct {
+	s   *Session
+	ctx context.Context
+}
+
+func (w *sessionWriter) Write(p []byte) (int, error) {
+	return w.s.writeCtx(w.ctx, p)
+}
+
+// poisonAndClose marks the session broken and tears the transport down. It is
+// called from inside request-processing goroutines that already hold s.mu, so
+// s.broken is set directly; the closeOnce guard makes it safe to call more
+// than once and keeps it in sync with Close.
+func (s *Session) poisonAndClose() {
+	s.broken = true
+	s.closeOnce.Do(func() {
+		close(s.closeCh)
+		if s.closer != nil {
+			_ = s.closer.Close()
+		}
+	})
+}
+
 func (s *Session) Close() error {
 	s.closing.Store(true)
+	s.broken = true
 	s.closeOnce.Do(func() {
 		// Wake requests waiting for the protocol gate even if the transport has
 		// no closer (or its Close cannot interrupt a currently blocked read).
@@ -809,14 +1042,6 @@ func (s *Session) Close() error {
 		// cannot wait for a farewell from a stuck remote.
 		if s.closer != nil {
 			s.closeErr = s.closer.Close()
-		}
-		// A Session may deliberately have no closer. Then a peer can leave a
-		// read blocked forever and there is nothing here that can wake it.
-		// closing is authoritative; update the lock-protected flag only when
-		// doing so cannot make Close wait for that peer.
-		if s.mu.TryLock() {
-			s.broken = true
-			s.mu.Unlock()
 		}
 	})
 	return s.closeErr
