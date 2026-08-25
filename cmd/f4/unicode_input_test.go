@@ -119,3 +119,35 @@ func TestEditorUnicodeInputDeleteKeepsLogicalDirectionInBidiMode(t *testing.T) {
 		t.Fatalf("delete in BidiFull mode = %q, want %q", got, want)
 	}
 }
+
+func TestEditorUnicodeInputBidiLeftLeavesRTLRun(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "abc אבג def"
+	ev := NewEditorView(piecetable.New([]byte(text)), nil, "mixed-bidi.txt")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 12)
+	ev.CursorPos = len([]byte("abc אבג"))
+	ev.SetFocus(true)
+
+	ev.ProcessKey(unicodeKey(vtinput.VK_LEFT, 0))
+	if got, want := ev.CursorPos, len([]byte("abc")); got != want {
+		t.Fatalf("left from the end of the RTL run moved to byte %d, want %d", got, want)
+	}
+
+	ev.CursorPos = len([]byte("abc אבג"))
+	ev.selActive = false
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_LEFT,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+	min, max := ev.getSelectionRange()
+	data, _ := ev.pt.Bytes()
+	if got, want := string(data[min:max]), " אבג"; got != want {
+		t.Fatalf("shift-left from the end of the RTL run selected %q, want %q", got, want)
+	}
+}
