@@ -182,7 +182,8 @@ theoretical — `tryOpenImageViewer` refuses to open the viewer when nothing can
 show a picture, and until it learned to ask about the overlay, F3 on a PNG in
 gnome-terminal opened the hex viewer.
 
-Switched off with `[Images] X11Overlay=0`. On by default, because it only ever
+Switched off with `[Images] Overlay=0` — `X11Overlay` is the old name for the
+same setting and still works. On by default, because it only ever
 runs where the alternative is an apology.
 
 ## 4. The event loop

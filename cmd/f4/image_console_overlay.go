@@ -47,7 +47,7 @@ var (
 // one asks whether the screen supports graphics before it tries, and the
 // answer has to be right by then.
 func InstallConsoleOverlay() {
-	if !AppConfig.ImageX11Overlay {
+	if !AppConfig.ImageOverlay {
 		return
 	}
 	scr := vtui.FrameManager.Screen()

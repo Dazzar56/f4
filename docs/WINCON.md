@@ -117,9 +117,10 @@ When a picture does not appear, `VTUI_DEBUG=1` gives one `WINCON:` line per
 frame that changed: the size and corner of the window and how many pictures
 went into it. No lines means the frame never reached the overlay; lines with a
 black rectangle on the screen means the request reached the pump thread and
-something below it went wrong. `[Images] X11Overlay=0` turns the overlay off
-altogether — the same setting serves both platforms — which is how to tell an
-overlay fault from anything else.
+something below it went wrong. `[Images] Overlay=0` turns the overlay off
+altogether — the same setting serves both platforms, and `X11Overlay` is the
+name it had when the X side was the only one — which is how to tell an overlay
+fault from anything else.
 
 Beside them is a summary line, at most one a second and only for a second in
 which something happened:

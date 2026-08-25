@@ -79,7 +79,7 @@ func InstallX11Overlay() {
 // there is nothing to connect to, when the terminal window could not be
 // identified, or when the option is off.
 func newX11ImageOverlay() *x11ImageOverlay {
-	if !AppConfig.ImageX11Overlay {
+	if !AppConfig.ImageOverlay {
 		return nil
 	}
 	sess := sharedTTYXSession()
