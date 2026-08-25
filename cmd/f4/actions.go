@@ -3329,7 +3329,7 @@ func actionPanelAdditionalSettings(pf *PanelsFrame) {
 	// panel/navigation controls. Keep it below 25 rows even when the host
 	// console notice needs a separate line.
 	consoleModeUnavailable := probeGUIBackend() != "" || !probeHostTTY()
-	dlg := vtui.NewCenteredDialog(60, 23, Msg("PanelSettings.AdvancedTitle"))
+	dlg := vtui.NewCenteredDialog(60, 24, Msg("PanelSettings.AdvancedTitle"))
 	dlg.ShowClose = true
 
 	chkSync := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SyncPanelLoad"), false)
@@ -3354,6 +3354,10 @@ func actionPanelAdditionalSettings(pf *PanelsFrame) {
 	chkTerminalCtrlN := vtui.NewCheckbox(0, 0, Msg("PanelSettings.TerminalCtrlNWorkspace"), false)
 	if AppConfig.TerminalCtrlNWorkspace {
 		chkTerminalCtrlN.State = 1
+	}
+	chkExactSearch := vtui.NewCheckbox(0, 0, Msg("PanelSettings.SearchExactOnHit"), false)
+	if AppConfig.SearchExactOnHit {
+		chkExactSearch.State = 1
 	}
 
 	lblConsoleMode := vtui.NewText(0, 0, Msg("PanelSettings.ConsoleMode"), 0)
@@ -3408,7 +3412,7 @@ func actionPanelAdditionalSettings(pf *PanelsFrame) {
 
 	for _, item := range []vtui.UIElement{
 		chkSync, lblApplyWorkers, editApplyWorkers, chkAlwaysMenu, chkCPUGPU,
-		chkEscToggle, chkTerminalCtrlN, lblConsoleMode, radioConsoleMode,
+		chkEscToggle, chkTerminalCtrlN, chkExactSearch, lblConsoleMode, radioConsoleMode,
 		chkOverlay, lblConsoleNote, lblMode, comboMode, lblPath, comboPath,
 		lblMacro, comboMacro, btnOk, btnCancel,
 	} {
@@ -3418,7 +3422,7 @@ func actionPanelAdditionalSettings(pf *PanelsFrame) {
 		dlg.AddItem(lblConsoleUnavailable)
 	}
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 19)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 20)
 	vbox.Add(chkSync, vtui.Margins{}, vtui.AlignLeft)
 	rowApplyWorkers := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowApplyWorkers.Add(lblApplyWorkers, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -3428,6 +3432,7 @@ func actionPanelAdditionalSettings(pf *PanelsFrame) {
 	vbox.Add(chkCPUGPU, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkEscToggle, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkTerminalCtrlN, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(chkExactSearch, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(lblConsoleMode, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(radioConsoleMode, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkOverlay, vtui.Margins{Left: 2}, vtui.AlignLeft)
@@ -3469,6 +3474,7 @@ func actionPanelAdditionalSettings(pf *PanelsFrame) {
 		AppConfig.InfoPanelCPUGPU = chkCPUGPU.State == 1
 		AppConfig.EscTogglePanels = chkEscToggle.State == 1
 		AppConfig.TerminalCtrlNWorkspace = chkTerminalCtrlN.State == 1
+		AppConfig.SearchExactOnHit = chkExactSearch.State == 1
 		if radioConsoleMode.Selected == 1 {
 			AppConfig.ConsoleMode = "host"
 		} else {

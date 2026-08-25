@@ -1721,6 +1721,47 @@ func TestActionPanelSettings_ConsoleModes(t *testing.T) {
 		vtui.FrameManager.Pop()
 	}
 }
+
+func TestActionPanelAdditionalSettings_SearchExactOnHit(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.SearchExactOnHit = false
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	actionPanelAdditionalSettings(pf)
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil {
+		t.Fatal("Additional panel settings dialog not shown")
+	}
+	dlg := top.(vtui.Container)
+
+	var chkExact *vtui.Checkbox
+	for _, child := range dlg.GetChildren() {
+		if c, ok := child.(*vtui.Checkbox); ok && strings.Contains(c.GetText(), "uick Search") {
+			chkExact = c
+		}
+	}
+	if chkExact == nil {
+		t.Fatal("SearchExactOnHit checkbox not found in Additional panel settings")
+	}
+	chkExact.State = 1
+
+	clickDialogButton(t, dlg, "Ok")
+	if !AppConfig.SearchExactOnHit {
+		t.Error("AppConfig.SearchExactOnHit = false, want true after OK")
+	}
+	if top = vtui.FrameManager.GetTopFrame(); top != nil {
+		top.SetExitCode(-1)
+		vtui.FrameManager.Pop()
+	}
+}
+
 func TestActionLanguage_Flow(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

@@ -189,7 +189,8 @@ type F4Config struct {
 	NavigationMode           PanelNavigationMode
 	SearchCommandStayFocused bool
 	SyncPanelLoad            bool
-	ApplyCommandParallelism  int // 0 = unlimited; absent config defaults to runtime.NumCPU()
+	SearchExactOnHit         bool // QuickSearch keeps only exact matches when at least one exists
+	ApplyCommandParallelism  int  // 0 = unlimited; absent config defaults to runtime.NumCPU()
 	EditorAutoComplete       bool
 	EditorAutoCompleteMask   string
 	EditorExpandTabs         int
@@ -340,6 +341,7 @@ var AppConfig = F4Config{
 	NavigationMode:           NavigationClassic,
 	SearchCommandStayFocused: false,
 	SyncPanelLoad:            false,
+	SearchExactOnHit:         false,
 	ApplyCommandParallelism:  runtime.NumCPU(),
 	EditorAutoComplete:       true,
 	EditorAutoCompleteMask:   "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json",
@@ -528,6 +530,7 @@ func LoadConfig() {
 	}
 	AppConfig.SearchCommandStayFocused = ini.GetString("Panel", "SearchCommandStayFocused", "0") == "1"
 	AppConfig.SyncPanelLoad = ini.GetString("Panel", "SyncPanelLoad", "0") == "1"
+	AppConfig.SearchExactOnHit = ini.GetString("Panel", "SearchExactOnHit", "0") == "1"
 	AppConfig.ApplyCommandParallelism = runtime.NumCPU()
 	fmt.Sscanf(ini.GetString("Panel", "ApplyCommandParallelism", fmt.Sprintf("%d", runtime.NumCPU())), "%d", &AppConfig.ApplyCommandParallelism)
 	if AppConfig.ApplyCommandParallelism < 0 {
@@ -775,6 +778,7 @@ func saveConfigWithWindowSize(windowSize bool) {
 	// Keep the legacy key synchronized for older f4 versions and shared configs.
 	fmt.Fprintf(&sb, "VimHotkeys = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.NavigationMode == NavigationVim])
 	fmt.Fprintf(&sb, "SyncPanelLoad = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SyncPanelLoad])
+	fmt.Fprintf(&sb, "SearchExactOnHit = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.SearchExactOnHit])
 	fmt.Fprintf(&sb, "ApplyCommandParallelism = %d\n", AppConfig.ApplyCommandParallelism)
 	fmt.Fprintf(&sb, "DefaultFileOpMode = %d\n", AppConfig.DefaultFileOpMode)
 	fmt.Fprintf(&sb, "FileOpPathDisplay = %d\n", AppConfig.FileOpPathDisplay)
