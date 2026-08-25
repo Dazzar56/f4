@@ -244,6 +244,10 @@ func currentWindowTitle() string {
 	return title
 }
 
+var copyWindowTitleToClipboard = func(title string) {
+	go vtui.SetClipboard(title)
+}
+
 func actionCopyWindowTitle() bool {
 	title := currentFrameTitle()
 	if title == "" {
@@ -251,7 +255,7 @@ func actionCopyWindowTitle() bool {
 		// briefly be empty. Normal UI operation always has a top frame.
 		title = currentWindowTitle()
 	}
-	go vtui.SetClipboard(title)
+	copyWindowTitleToClipboard(title)
 	return true
 }
 
