@@ -257,7 +257,7 @@ func (g *GrabberFrame) copyAndExit() {
 		// the write off the UI goroutine so the grabber closes
 		// instantly and the app stays responsive; the clipboard
 		// eventually settles in the background.
-		go vtui.SetClipboard(text)
+		setClipboardAsync(text)
 	}
 	g.SetExitCode(1)
 }

@@ -64,6 +64,10 @@ func waitForToastExpiry(t *testing.T, timeout time.Duration) {
 // but lets queued UI work escape from one test into the next.
 func swapFrameManager(t *testing.T) func() {
 	t.Helper()
+	// Clipboard writes run asynchronously because they may wait for far2l IPC.
+	// SetClipboard reads vtui.FrameManager, so finish those workers before
+	// replacing the global manager.
+	waitForAsyncClipboard()
 	// A directory-load worker left running by an earlier test reads the
 	// manager this is about to replace, which the race detector reports
 	// against whichever test is unlucky enough to do the replacing. Joining
@@ -75,6 +79,7 @@ func swapFrameManager(t *testing.T) func() {
 	vtui.FrameManager = vtui.NewFrameManager()
 
 	return func() {
+		waitForAsyncClipboard()
 		waitForDirectoryLoads(t)
 		vtui.FrameManager = old
 		vreactive.GlobalUpdateQueue = oldUpdateQueue

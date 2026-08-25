@@ -216,7 +216,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
 		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
-			go vtui.SetClipboard(path)
+			setClipboardAsync(path)
 			return true
 		}
 		return false
@@ -384,7 +384,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 
 		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
 		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
-			go vtui.SetClipboard(rec.Name)
+			setClipboardAsync(rec.Name)
 			return true
 		}
 		return false

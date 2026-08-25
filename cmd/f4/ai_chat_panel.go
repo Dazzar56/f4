@@ -175,7 +175,7 @@ func (cp *AIChatPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		turns := session.Turns()
 		for i := len(turns) - 1; i >= 0; i-- {
 			if turns[i].Role != "user" && turns[i].Text != "RCtrl+A to hide" {
-				go vtui.SetClipboard(turns[i].Text)
+				setClipboardAsync(turns[i].Text)
 				vtui.ShowToast("Copied last response to clipboard", 2*time.Second)
 				break
 			}
