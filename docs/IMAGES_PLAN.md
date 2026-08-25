@@ -187,8 +187,10 @@ placement gives it. The new `X11_GFX` line prints the rectangle drawn beside
 the rectangle asked for and settles it.
 
 **B2. Windows console: black rectangle and a frozen interface.** Issue #805,
-fixed. The console overlay had never been run on Windows, and the first report
-found the threading. `Place`, `Hide` and `SetBounds` made their window calls on
+**open**. Two faults have been found and fixed and neither of them was the
+whole of it: the reporter came back on the build that carries both and said
+nothing had changed. The console overlay had never been run on Windows, and
+the first report found the threading. `Place`, `Hide` and `SetBounds` made their window calls on
 the calling thread; on a window owned by another thread those calls wait for
 that thread, and the overlay's pump thread shares an input queue with conhost.
 `RenderExternal` runs with the screen locked, so f4 waited on conhost while
@@ -196,6 +198,34 @@ conhost was what f4 needed to draw and to read keys. The window operations are
 now written into `wincon/overlay_state.go` and applied on the pump thread after
 one `PostMessageW`; see `WINCON.md` section 2 for the invariant and the rule
 that keeps it.
+
+The black rectangle was the second half and did not go with the first. A frame
+places the window, reshapes it, and only then hands over the pixels, so the
+pump thread could show a window with nothing in it — and `WM_ERASEBKGND` is
+refused, so an unpainted window keeps whatever it last held, which the first
+time is black. It stayed that way for as long as scaling the photograph took.
+`overlayState.take` now holds the move back until the frame buffer has been
+replaced, so the window is shown, or resized, in the same wake-up that paints
+it; a resize needed the same rule because `paint` blits at the frame buffer's
+size and leaves the rest of a larger window alone.
+
+What the thread says now, and what has to be told apart before anything else
+is written, is that the three reports do not describe one fault:
+
+- Windows 10, conhost: black and wedged, unchanged by either fix.
+- Windows 11, console: black, but `Esc` comes straight back, and quick view is
+  black too. f4-gui shows the same files, so nothing is wrong with the decode.
+  The default terminal there is Windows Terminal, where the overlay is
+  deliberately never installed — so this is very likely the sixel path and not
+  this entry at all.
+- Some pictures show, and after a few of them the machine runs hot and `Esc`
+  is not answered until the process is killed.
+
+The instrumentation for that is in place: `WINCON:` summary lines, one a
+second, described in `WINCON.md` section 4. The three readings that separate
+these are `scale` (time on the thread holding the screen lock), `frames`
+against `new` (a rescale storm), and `blank` (paints that found no frame
+buffer). Nothing further should be guessed until one of those logs arrives.
 
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
@@ -240,7 +270,9 @@ capabilities do not claim it.
 **12b. A window over the Windows console.** Done for conhost, where `cmd.exe`
 lives and no image protocol exists; see `WINCON.md`. Windows Terminal is
 deliberately not covered, because it renders sixel and that is the better
-answer. Written but not yet run on Windows.
+answer. It has now been run on Windows once, by the reporter of issue #805,
+and both faults that run found are fixed; nothing since has come back from a
+real console.
 
 **12a. Done.** The overlay is installed as vtui's external graphics renderer,
 so quick view, the thumbnail grid, the file viewer and the pictures a program

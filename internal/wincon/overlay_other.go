@@ -28,3 +28,4 @@ func (o *Overlay) Hide()                            {}
 func (o *Overlay) Visible() bool                    { return false }
 func (o *Overlay) ClientSize() (int, int, bool)     { return 0, 0, false }
 func (o *Overlay) Close()                           {}
+func (o *Overlay) Stats() Stats                     { return Stats{} }

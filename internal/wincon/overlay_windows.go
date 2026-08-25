@@ -255,6 +255,18 @@ type Overlay struct {
 	pix    []byte
 	pixW   int
 	pixH   int
+
+	// stats is what the pump thread did; see stats.go for why it counts
+	// rather than logs.
+	stats counters
+}
+
+// Stats reads the counters. Safe from any thread.
+func (o *Overlay) Stats() Stats {
+	if o == nil {
+		return Stats{}
+	}
+	return o.stats.snapshot()
 }
 
 var (
@@ -435,10 +447,17 @@ func (o *Overlay) paint(hwnd uintptr) {
 	}
 	defer procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 
+	o.stats.paints.Add(1)
+
 	o.mu.Lock()
 	pix, w, h := o.pix, o.pixW, o.pixH
 	o.mu.Unlock()
 	if len(pix) == 0 || w <= 0 || h <= 0 {
+		// Nothing to paint, and WM_ERASEBKGND is refused, so the window
+		// keeps whatever it held. This is what the reported black
+		// rectangle is from in here, and it is worth counting even now
+		// that take() holds the move back until the pixels are here.
+		o.stats.blank.Add(1)
 		return
 	}
 
@@ -500,20 +519,24 @@ func (o *Overlay) apply(hwnd uintptr) {
 	if ops.Empty() {
 		return
 	}
+	o.stats.applies.Add(1)
 	if ops.Hide {
 		procShowWindow.Call(hwnd, swHide)
 		return
 	}
 	if ops.SetRegion {
+		o.stats.regions.Add(1)
 		applyRegion(hwnd, ops.Region)
 	}
 	if ops.Move {
+		o.stats.moves.Add(1)
 		procSetWindowPos.Call(hwnd, 0,
 			uintptr(int32(ops.Rect.X)), uintptr(int32(ops.Rect.Y)),
 			uintptr(int32(ops.Rect.W)), uintptr(int32(ops.Rect.H)),
 			swpNoActivate|swpNoZOrder|swpShowWindow)
 	}
 	if ops.Invalidate {
+		o.stats.invalidates.Add(1)
 		procInvalidateRect.Call(hwnd, 0, 0)
 	}
 }
