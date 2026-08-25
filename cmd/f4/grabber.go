@@ -37,6 +37,11 @@ type GrabberFrame struct {
 	shiftHeld bool
 	ctrlHeld  bool
 	altHeld   bool
+
+	// mouseSelecting is true while the left button is held after a
+	// press inside the grabber, so motion events extend the
+	// rectangular selection until the button is released.
+	mouseSelecting bool
 }
 
 // NewGrabberFrame constructs an empty grabber. The screen snapshot is
@@ -361,8 +366,55 @@ func (g *GrabberFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	return true
 }
 
+// ProcessMouse drives the grabber's rectangular selection with the
+// pointer. Pressing the left button anchors the selection, dragging
+// with the button held extends the rectangle, and releasing the left
+// button stops the selection, leaving the highlighted rectangle in
+// place so it can be copied with Enter / Ctrl+Ins like any
+// keyboard-driven selection.
 func (g *GrabberFrame) ProcessMouse(e *vtinput.InputEvent) bool {
-	// Consume everything — mouse-driven grabber selection is a follow-up.
+	if e.Type != vtinput.MouseEventType {
+		return true
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Wheel events are not used by the grabber.
+	if e.WheelDirection != 0 {
+		return true
+	}
+	if g.snapW == 0 || g.snapH == 0 {
+		return true
+	}
+
+	x, y := int(e.MouseX), int(e.MouseY)
+	leftDown := e.ButtonState&vtinput.FromLeft1stButtonPressed != 0
+
+	// While selecting, pointer motion extends the rectangle. Check
+	// this before the release test so a drag reported without the
+	// button bit (some backends) still extends instead of ending.
+	if g.mouseSelecting && e.MouseEventFlags&vtinput.MouseMoved != 0 {
+		g.jump(x, y, true)
+		vtui.FrameManager.Redraw()
+		return true
+	}
+
+	// Releasing the left button — or any event without the button
+	// held — stops the selection, freezing the highlighted rectangle
+	// until the next press. This makes the area stay fixed through
+	// any later mouse movement.
+	if g.mouseSelecting && (!e.KeyDown || !leftDown) {
+		g.mouseSelecting = false
+		vtui.FrameManager.Redraw()
+		return true
+	}
+
+	// Button press: anchor the selection (or extend on re-press).
+	if leftDown {
+		g.jump(x, y, g.mouseSelecting)
+		g.mouseSelecting = true
+		vtui.FrameManager.Redraw()
+	}
 	return true
 }
 
