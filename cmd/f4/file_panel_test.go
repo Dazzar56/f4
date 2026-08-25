@@ -1051,7 +1051,10 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 }
 
 func TestFileSystemPanel_SelectName(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 

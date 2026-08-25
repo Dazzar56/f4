@@ -355,6 +355,9 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 	t.Cleanup(arkFrame.Close)
 }
 func TestPanelsFrame_SelectionByMask(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -3475,6 +3478,9 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 }
 
 func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	// Mock exit behavior to check F10
