@@ -17,6 +17,7 @@ type menuHistoryItemKey string
 var menuHistory = struct {
 	sync.Mutex
 	lastByTitle map[string]string
+	lastMenu    string
 	hooked      map[*vtui.VMenu]bool
 	userMenus   map[*vtui.VMenu]bool
 }{
@@ -47,6 +48,12 @@ func isUserMenu(menu *vtui.VMenu) bool {
 	return marked
 }
 
+func menuHistoryTitleKey(title string) string {
+	title = strings.TrimSpace(title)
+	title, _, _ = vtui.ParseAmpersandString(title)
+	return strings.TrimSpace(title)
+}
+
 func menuItemHistoryKey(item vtui.MenuItem) string {
 	if key, ok := item.UserData.(menuHistoryItemKey); ok {
 		return string(key)
@@ -75,7 +82,9 @@ func recordMenuHistory(menu *vtui.VMenu, index int) {
 	}
 
 	menuHistory.Lock()
-	menuHistory.lastByTitle[menu.GetTitle()] = menuItemHistoryKey(item)
+	title := menuHistoryTitleKey(menu.GetTitle())
+	menuHistory.lastByTitle[title] = menuItemHistoryKey(item)
+	menuHistory.lastMenu = title
 	menuHistory.Unlock()
 }
 
@@ -110,7 +119,7 @@ func selectLastMenuItem(menu *vtui.VMenu) bool {
 	}
 
 	menuHistory.Lock()
-	key, ok := menuHistory.lastByTitle[menu.GetTitle()]
+	key, ok := menuHistory.lastByTitle[menuHistoryTitleKey(menu.GetTitle())]
 	menuHistory.Unlock()
 	if !ok {
 		return true
@@ -126,43 +135,57 @@ func selectLastMenuItem(menu *vtui.VMenu) bool {
 	return true
 }
 
-func isSelectLastMenuItemKey(e *vtinput.InputEvent) bool {
-	if e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode != vtinput.VK_F10 {
-		return false
+func lastMainMenuPosition(menu *vtui.MenuBar) int {
+	if menu == nil {
+		return -1
 	}
-	mods := e.ControlKeyState
-	return mods&vtinput.ShiftPressed != 0 &&
-		mods&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) == 0
+
+	menuHistory.Lock()
+	lastTitle := menuHistory.lastMenu
+	menuHistory.Unlock()
+	if lastTitle == "" {
+		return -1
+	}
+
+	for i, item := range menu.Items {
+		if menuHistoryTitleKey(item.Label) == lastTitle {
+			return i
+		}
+	}
+	return -1
 }
 
-// handleMenuHistoryEvent is installed in FrameManager.EventFilter. It both
-// observes normal menu activations and handles Shift+F10 before vtui's
-// default F10 handler can close the menu.
+// actionSelectLastMenuItem is the configurable Shift+F10 action. It is kept
+// separate from the observer below so an explicit user unbind really silences
+// the key instead of being bypassed by a physical-key fallback.
+func actionSelectLastMenuItem() bool {
+	if vtui.FrameManager == nil {
+		return false
+	}
+	if menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu); ok {
+		hookMenuHistory(menu)
+		return selectLastMenuItem(menu)
+	}
+
+	menuBar := vtui.FrameManager.GetActiveMenuBar()
+	if !activateMainMenuAt(lastMainMenuPosition(menuBar)) {
+		return false
+	}
+	if menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu); ok {
+		hookMenuHistory(menu)
+		selectLastMenuItem(menu)
+	}
+	return true
+}
+
+// handleMenuHistoryEvent is installed in FrameManager.EventFilter to observe
+// ordinary menu activations. Shift+F10 itself is dispatched through the
+// configurable action registry, so an explicit user unbind is respected.
 func handleMenuHistoryEvent(e *vtinput.InputEvent) bool {
 	if vtui.FrameManager == nil {
 		return false
 	}
 	menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
-	if isSelectLastMenuItemKey(e) {
-		if ok && menu != nil {
-			hookMenuHistory(menu)
-			return selectLastMenuItem(menu)
-		}
-
-		// With no submenu open, Shift+F10 has the same entry point as F9:
-		// activate the current screen's main menu, then restore its last item.
-		// User menus are handled above by their own VMenu behavior and are not
-		// routed through this branch.
-		if !actionActivateMainMenu() {
-			return false
-		}
-		if menu, ok = vtui.FrameManager.GetTopFrame().(*vtui.VMenu); ok {
-			hookMenuHistory(menu)
-			selectLastMenuItem(menu)
-		}
-		return true
-	}
-
 	if ok && menu != nil {
 		hookMenuHistory(menu)
 	}
@@ -174,6 +197,7 @@ func handleMenuHistoryEvent(e *vtinput.InputEvent) bool {
 func clearMenuHistory() {
 	menuHistory.Lock()
 	menuHistory.lastByTitle = make(map[string]string)
+	menuHistory.lastMenu = ""
 	menuHistory.hooked = make(map[*vtui.VMenu]bool)
 	menuHistory.userMenus = make(map[*vtui.VMenu]bool)
 	menuHistory.Unlock()

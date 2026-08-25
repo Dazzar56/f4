@@ -51,6 +51,23 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	// Publishing the PTY is not the same as having received cmd.exe's first
+	// prompt. Starting the command in between those events races the prompt
+	// driven completion guard: the startup prompt may be delivered after the
+	// command has armed ignoreNextPrompt. That ordering is covered by the
+	// state-machine tests; this integration test focuses on batch completion.
+	promptDeadline := time.Now().Add(5 * time.Second)
+	for !pf.shellPromptReady {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+		}
+		if time.Now().After(promptDeadline) {
+			t.Fatal("local ConPTY startup prompt did not arrive")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	dir := t.TempDir()
 	finished := filepath.Join(dir, "finished.marker")
@@ -62,24 +79,27 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 
 	actionExecute(pf, vfs.NewOSVFS(dir), dir, filepath.Base(script), script)
 	start := time.Now()
-	for pf.showPanels {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
+	drainTasks := func() {
+		for {
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			default:
+				return
+			}
 		}
+	}
+	for pf.showPanels {
+		drainTasks()
 		if time.Since(start) > 5*time.Second {
 			t.Fatal("actionExecute did not hide panels")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	panelsReturned := time.Duration(0)
-	for time.Since(start) < 10*time.Second {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-		}
+	completionDeadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(completionDeadline) {
+		drainTasks()
 		if pf.showPanels {
 			panelsReturned = time.Since(start)
 			break
@@ -87,6 +107,9 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if panelsReturned == 0 {
+		if _, err := os.Stat(finished); err == nil {
+			t.Fatal("batch finished but panels did not return")
+		}
 		t.Fatal("panels did not return after batch completion")
 	}
 	if _, err := os.Stat(finished); err != nil {

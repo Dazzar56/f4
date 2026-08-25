@@ -32,7 +32,9 @@ func ManageSessions() {
 	stopWindowAppearanceManager := startWindowsConsoleWindowAppearanceManager()
 	defer stopWindowAppearanceManager()
 
-	InitCore()
+	configureWindowsTerminalSixel()
+	scr := InitCore()
+	PreferCompatibleGraphicsProtocol(scr)
 
 	restore, err := vtui.PrepareTerminal()
 	if err != nil {

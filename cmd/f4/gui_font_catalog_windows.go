@@ -12,6 +12,7 @@ import (
 func init() {
 	platformGuiFontDisplayChoices = windowsGuiFontDisplayChoices
 	platformGuiFontDisplayName = windowsGuiFontDisplayName
+	platformGuiFontDisplayNameFromInstalled = windowsGuiFontDisplayNameFromInstalled
 }
 
 func windowsFontEntries() []fontEntry {
@@ -68,22 +69,16 @@ func platformGuiFontFiles(language string) []string {
 // windowsGuiFontDisplayChoices returns the font family names to show in the
 // picker (e.g. "Cascadia Mono") instead of file paths.
 func windowsGuiFontDisplayChoices(language, current string) []string {
+	installed := discoverInstalledGuiFonts(language)
 	entries := windowsFontEntries()
 	pathToName := make(map[string]string)
 	nameNormToName := make(map[string]string)
-	seenName := make(map[string]struct{})
-	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		pathToName[strings.ToLower(fontFilePath(e.file))] = e.base
 		nameNormToName[normalizeFontName(e.base)] = e.base
-		if _, ok := seenName[strings.ToLower(e.base)]; ok {
-			continue
-		}
-		seenName[strings.ToLower(e.base)] = struct{}{}
-		names = append(names, e.base)
 	}
 
-	choices := make([]string, 0, len(names)+1)
+	choices := make([]string, 0, len(installed)+1)
 	appendUnique := func(value string) {
 		value = strings.TrimSpace(value)
 		if value == "" {
@@ -97,24 +92,6 @@ func windowsGuiFontDisplayChoices(language, current string) []string {
 		choices = append(choices, value)
 	}
 
-	// Sort the catalog with CJK fonts first when relevant, but keep the
-	// current value pinned at the top so it stays selectable as the active
-	// choice (mirrors the old guiFontChoices ordering).
-	if isCJKLanguage(language) {
-		sort.SliceStable(names, func(i, j int) bool {
-			iCJK := looksLikeCJKFontName(names[i])
-			jCJK := looksLikeCJKFontName(names[j])
-			if iCJK != jCJK {
-				return iCJK
-			}
-			return strings.ToLower(names[i]) < strings.ToLower(names[j])
-		})
-	} else {
-		sort.SliceStable(names, func(i, j int) bool {
-			return strings.ToLower(names[i]) < strings.ToLower(names[j])
-		})
-	}
-
 	// Show the current value by its family name when it resolves, otherwise
 	// keep it verbatim (a manual path or custom family the catalog lacks).
 	if current != "" {
@@ -126,8 +103,14 @@ func windowsGuiFontDisplayChoices(language, current string) []string {
 			appendUnique(current)
 		}
 	}
-	for _, name := range names {
-		appendUnique(name)
+	for _, path := range installed {
+		if name, ok := pathToName[strings.ToLower(fontFilePath(path))]; ok {
+			appendUnique(name)
+			continue
+		}
+		// Keep the discovery seam useful even when a test or an embedding
+		// application supplies paths that are not present in the registry.
+		appendUnique(defaultGuiFontDisplayName(path))
 	}
 
 	return choices
@@ -146,6 +129,24 @@ func windowsGuiFontDisplayName(value string) string {
 		}
 		if normalizeFontName(e.base) == normalizeFontName(value) {
 			return e.base
+		}
+	}
+	return value
+}
+
+func windowsGuiFontDisplayNameFromInstalled(value string, installed []string) string {
+	entries := windowsFontEntries()
+	for _, e := range entries {
+		if strings.EqualFold(fontFilePath(e.file), fontFilePath(value)) {
+			return e.base
+		}
+		if normalizeFontName(e.base) == normalizeFontName(value) {
+			return e.base
+		}
+	}
+	for _, path := range installed {
+		if sameGuiFontValue(value, path) {
+			return defaultGuiFontDisplayName(value)
 		}
 	}
 	return value

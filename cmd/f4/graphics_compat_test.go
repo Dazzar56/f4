@@ -30,6 +30,34 @@ func TestPreferCompatibleGraphicsProtocolUsesKittyInKonsole(t *testing.T) {
 	}
 }
 
+func TestPreferCompatibleGraphicsProtocolUsesKittyForKnownTerminals(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		from vtui.GraphicsProtocol
+	}{
+		{name: "kitty", env: map[string]string{"TERM": "xterm-kitty"}, from: vtui.GraphicsSixel},
+		{name: "ghostty", env: map[string]string{"TERM_PROGRAM": "ghostty"}, from: vtui.GraphicsSixel},
+		{name: "contour", env: map[string]string{"TERM_PROGRAM": "contour"}, from: vtui.GraphicsSixel},
+		{name: "wayst", env: map[string]string{"TERM": "wayst"}, from: vtui.GraphicsSixel},
+		{name: "rio", env: map[string]string{"TERM": "rio"}, from: vtui.GraphicsNone},
+		{name: "warp", env: map[string]string{"TERM_PROGRAM": "WarpTerminal"}, from: vtui.GraphicsNone},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scr := newGraphicsCompatScreen()
+			scr.Graphics().SetProtocol(tc.from)
+
+			preferCompatibleGraphicsProtocol(scr, graphicsCompatEnv(tc.env))
+
+			if got := scr.Graphics().Protocol(); got != vtui.GraphicsKitty {
+				t.Fatalf("protocol: got %v, want kitty", got)
+			}
+		})
+	}
+}
+
 func TestPreferCompatibleGraphicsProtocolKeepsExplicitProtocol(t *testing.T) {
 	for _, forced := range []string{"sixel", "kitty", "none"} {
 		t.Run(forced, func(t *testing.T) {
@@ -62,6 +90,18 @@ func TestPreferCompatibleGraphicsProtocolLeavesOtherTerminalsAlone(t *testing.T)
 
 	if got := scr.Graphics().Protocol(); got != vtui.GraphicsNone {
 		t.Fatalf("non-Konsole protocol: got %v, want none", got)
+	}
+}
+
+func TestPreferCompatibleGraphicsProtocolLeavesWindowsTerminalOnSixel(t *testing.T) {
+	scr := newGraphicsCompatScreen()
+	scr.Graphics().SetProtocol(vtui.GraphicsSixel)
+	env := graphicsCompatEnv(map[string]string{"WT_SESSION": "session"})
+
+	preferCompatibleGraphicsProtocol(scr, env)
+
+	if got := scr.Graphics().Protocol(); got != vtui.GraphicsSixel {
+		t.Fatalf("Windows Terminal protocol: got %v, want sixel", got)
 	}
 }
 

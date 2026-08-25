@@ -350,6 +350,33 @@ func TestQuickView_BinaryDetection(t *testing.T) {
 	}
 }
 
+func TestQuickView_CodepageAndHexToggle(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	raw, err := vfs.EncodeBytes([]byte("Привет\n"), 866)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := &QuickViewPanel{cacheRaw: raw, cacheCodepage: 866, cacheLines: nil}
+	if !q.applyPreviewCodepage(866, false) {
+		t.Fatal("applyPreviewCodepage failed")
+	}
+	if got := strings.Join(q.cacheLines, "\n"); got != "Привет" {
+		t.Fatalf("decoded quick view = %q", got)
+	}
+	if !q.toggleHexMode() || !q.hexMode {
+		t.Fatal("F4 should switch Quick View to hex mode")
+	}
+	if len(q.cacheLines) == 0 || !strings.Contains(q.cacheLines[0], "8F") {
+		t.Fatalf("hex preview = %v", q.cacheLines)
+	}
+	if !q.toggleHexMode() || q.hexMode {
+		t.Fatal("F4 should switch Quick View back to text mode")
+	}
+	if got := strings.Join(q.cacheLines, "\n"); got != "Привет" {
+		t.Fatalf("text after hex toggle = %q", got)
+	}
+}
+
 // TestQuickView_DirScan_PopulatesRecursive builds a small tree and
 // checks that the async scan settles on the right recursive counts.
 // The scan runs in a goroutine, so we wait on scanDoneCh with a

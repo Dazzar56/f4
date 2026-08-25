@@ -31,18 +31,21 @@ type QuickViewPanel struct {
 
 	// Cache the last-computed preview so we don't re-read the file /
 	// re-scan the directory on every redraw.
-	cacheKey     quickViewSelectionKey
-	cacheValid   bool
-	cacheDir     bool // whether cache is for a directory or file
-	cacheBinary  bool
-	cacheImage   bool // whether cache is an image
-	cacheLoading bool
-	cacheLabel   string
-	imageSurf    *vtui.ImageSurface
-	imageLoadGen uint64
-	gfxKey       string
-	cacheLines   []string // raw preview lines (source lines or hex rows)
-	cacheReadErr error
+	cacheKey        quickViewSelectionKey
+	cacheValid      bool
+	cacheDir        bool // whether cache is for a directory or file
+	cacheBinary     bool
+	cacheImage      bool // whether cache is an image
+	cacheLoading    bool
+	cacheLabel      string
+	imageSurf       *vtui.ImageSurface
+	imageLoadGen    uint64
+	gfxKey          string
+	cacheLines      []string // raw preview lines (source lines or hex rows)
+	cacheRaw        []byte   // raw bytes for the default text/hex preview
+	cacheCodepage   int
+	cacheAutoDetect bool
+	cacheReadErr    error
 
 	// Specialized providers may inspect an entire media/container header, so
 	// they run away from the UI thread. previewGen rejects a late result after
@@ -71,9 +74,13 @@ type QuickViewPanel struct {
 	scanDoneCh      chan struct{}
 
 	// Display state driven by the keyboard while the panel is focused.
-	wrap    bool
-	scrollY int
-	scrollX int
+	wrap             bool
+	scrollY          int
+	scrollX          int
+	hexMode          bool
+	lastSearch       string
+	lastSearchSource int
+	codepages        map[quickViewSelectionKey]int
 
 	// F2 (wrap toggle) sets these to re-anchor scrollY on the source
 	// line the user was reading, so the new re-flow doesn't move the
@@ -106,7 +113,7 @@ type quickViewSelectionKey struct {
 // NewQuickViewPanel creates a quick-view panel over src's slot.
 func NewQuickViewPanel(src *FileSystemPanel) *QuickViewPanel {
 	x1, y1, x2, y2 := src.GetPosition()
-	q := &QuickViewPanel{src: src, wrap: true}
+	q := &QuickViewPanel{src: src, wrap: true, lastSearchSource: -1, codepages: make(map[quickViewSelectionKey]int)}
 	q.SetVisible(true)
 	q.frame = vtui.NewBorderedFrame(x1, y1, x2, y2, vtui.SingleBox, Msg("QuickView.Title"))
 	q.frame.ColorBoxIdx = ColPanelBox
@@ -148,9 +155,12 @@ func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown || !q.focused {
 		return false
 	}
-	// Ignore anything with modifiers — Ctrl+Q / Ctrl+L etc. need
-	// to reach the global handler chain unchanged.
-	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
+	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
+	alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+	shift := e.ControlKeyState&vtinput.ShiftPressed != 0
+	// Ctrl+Q / Ctrl+L / Alt+F8 and the other global combinations need
+	// to reach the panel frame unchanged.
+	if ctrl || alt {
 		return false
 	}
 	switch e.VirtualKeyCode {
@@ -188,6 +198,25 @@ func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		q.displayLines = nil // force re-flow on next Show
 		q.pinSourceOnNextShow = pinnedSrc
 		q.hasPin = true
+	case vtinput.VK_F3:
+		return q.openSelectedInViewer()
+	case vtinput.VK_F4:
+		if !q.toggleHexMode() {
+			return false
+		}
+	case vtinput.VK_F7:
+		if shift {
+			return q.repeatSearch(true)
+		}
+		q.showSearchDialog()
+		return true
+	case vtinput.VK_F8:
+		if shift {
+			q.showCodepageDialog()
+		} else {
+			q.switchToCodepage(vfs.GetNextFastSwitchCodepage(q.cacheCodepage))
+		}
+		return true
 	default:
 		return false
 	}
@@ -199,6 +228,223 @@ func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	vtui.FrameManager.HardRefresh()
 	return true
+}
+
+func (q *QuickViewPanel) selectedFile() (string, *fileEntry, bool) {
+	if q.src == nil || q.src.vfs == nil {
+		return "", nil, false
+	}
+	idx := q.src.GetCursorIndex()
+	if idx < 0 || idx >= len(q.src.entries) {
+		return "", nil, false
+	}
+	item := q.src.entries[idx]
+	if item == nil || item.IsDir || item.Name == ".." {
+		return "", nil, false
+	}
+	return q.src.vfs.Join(q.src.vfs.GetPath(), item.Name), item, true
+}
+
+func (q *QuickViewPanel) openSelectedInViewer() bool {
+	path, _, ok := q.selectedFile()
+	if !ok || q.src == nil || q.src.vfs == nil {
+		return false
+	}
+	if pf := findPanelsFrameAnyScreen(); pf != nil {
+		openViewerInternal(pf, q.src.vfs, path)
+		return true
+	}
+	return false
+}
+
+func quickViewTextLines(data []byte) []string {
+	lines := splitTextLines(string(data))
+	if n := len(lines); n > 0 && lines[n-1] == "" {
+		lines = lines[:n-1]
+	}
+	return lines
+}
+
+func (q *QuickViewPanel) applyPreviewCodepage(cpID int, autoDetect bool) bool {
+	if q.cacheRaw == nil {
+		return false
+	}
+	decoded, err := vfs.DecodeBytes(q.cacheRaw, cpID)
+	if err != nil {
+		q.cacheReadErr = err
+		return false
+	}
+	q.cacheCodepage = cpID
+	q.cacheAutoDetect = autoDetect
+	q.cacheBinary = looksBinary(decoded)
+	if q.hexMode {
+		q.cacheLines = hexDumpLines(q.cacheRaw)
+	} else {
+		q.cacheLines = quickViewTextLines(decoded)
+	}
+	q.displayLines = nil
+	q.displayToSource = nil
+	q.updateFrameTitle()
+	return true
+}
+
+func (q *QuickViewPanel) switchToCodepage(cpID int) bool {
+	if q.cacheRaw == nil {
+		return false
+	}
+	if !q.applyPreviewCodepage(cpID, false) {
+		return false
+	}
+	if q.codepages == nil {
+		q.codepages = make(map[quickViewSelectionKey]int)
+	}
+	q.codepages[q.cacheKey] = cpID
+	vtui.FrameManager.HardRefresh()
+	return true
+}
+
+func (q *QuickViewPanel) showCodepageDialog() {
+	if q.cacheRaw == nil {
+		return
+	}
+	items, currIdx := vfs.BuildCodepageMenuItems(q.cacheCodepage, q.cacheAutoDetect)
+	menu := vtui.NewVMenu(Msg("Codepage.Title"))
+	for _, item := range items {
+		menu.AddItem(item)
+	}
+	w, h := 45, len(items)+2
+	scrW := vtui.FrameManager.GetScreenSize()
+	scrH := vtui.FrameManager.GetScreenHeight()
+	maxH := scrH - 2
+	if maxH < 5 {
+		maxH = 5
+	}
+	if h > maxH {
+		h = maxH
+	}
+	x := (scrW - w) / 2
+	y := (scrH - h) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+	menu.OnAction = func(idx int) {
+		menu.Close()
+		if idx < 0 || idx >= len(menu.Items) {
+			return
+		}
+		cpID, ok := menu.Items[idx].UserData.(int)
+		if !ok {
+			return
+		}
+		if cpID == -1 {
+			delete(q.codepages, q.cacheKey)
+			q.applyPreviewCodepage(vfs.DetectEncoding(q.cacheRaw, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage), true)
+			vtui.FrameManager.HardRefresh()
+			return
+		}
+		q.switchToCodepage(cpID)
+	}
+	menu.SetSelectPos(currIdx)
+	vtui.FrameManager.Push(menu)
+}
+
+func (q *QuickViewPanel) toggleHexMode() bool {
+	if q.cacheRaw == nil {
+		return false
+	}
+	q.hexMode = !q.hexMode
+	if q.hexMode {
+		q.cacheLines = hexDumpLines(q.cacheRaw)
+	} else {
+		if !q.applyPreviewCodepage(q.cacheCodepage, q.cacheAutoDetect) {
+			return false
+		}
+	}
+	q.displayLines = nil
+	q.displayToSource = nil
+	vtui.FrameManager.HardRefresh()
+	return true
+}
+
+func (q *QuickViewPanel) showSearchDialog() {
+	if q.cacheLoading || len(q.cacheLines) == 0 {
+		return
+	}
+	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", q.lastSearch, func(pattern string) {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			return
+		}
+		q.lastSearch = pattern
+		q.lastSearchSource = -1
+		q.repeatSearch(false)
+	})
+}
+
+func (q *QuickViewPanel) repeatSearch(reverse bool) bool {
+	if q.lastSearch == "" || len(q.cacheLines) == 0 {
+		return false
+	}
+	start := 0
+	if reverse {
+		start = len(q.cacheLines) - 1
+		if q.lastSearchSource >= 0 {
+			start = q.lastSearchSource - 1
+		}
+	} else if q.lastSearchSource >= 0 {
+		start = q.lastSearchSource + 1
+	}
+	if start < 0 {
+		start = len(q.cacheLines) - 1
+	}
+	if start >= len(q.cacheLines) {
+		start = 0
+	}
+	needle := strings.ToLower(q.lastSearch)
+	for n := 0; n < len(q.cacheLines); n++ {
+		idx := start + n
+		if reverse {
+			idx = start - n
+		}
+		for idx < 0 {
+			idx += len(q.cacheLines)
+		}
+		idx %= len(q.cacheLines)
+		if strings.Contains(strings.ToLower(q.cacheLines[idx]), needle) {
+			q.lastSearchSource = idx
+			q.scrollToSource(idx)
+			vtui.FrameManager.HardRefresh()
+			return true
+		}
+	}
+	return true
+}
+
+func (q *QuickViewPanel) scrollToSource(source int) {
+	innerW := q.X2 - q.X1 - 1
+	if innerW < 1 {
+		return
+	}
+	q.displayLines, q.displayToSource = q.buildDisplayLines(innerW)
+	q.displayWrap = q.wrap
+	q.displayWidth = innerW
+	q.scrollY = firstDisplayForSource(q.displayToSource, source)
+	q.hasPin = false
+}
+
+func (q *QuickViewPanel) updateFrameTitle() {
+	if q.frame == nil {
+		return
+	}
+	title := Msg("QuickView.Title")
+	if !q.cacheDir && q.cacheCodepage > 0 {
+		title = fmt.Sprintf("%s │ %s", title, vfs.DisplayCodepageName(q.cacheCodepage))
+	}
+	q.frame.SetTitle(title)
 }
 
 // ProcessMouse handles the wheel over the panel. Uses WheelDirection
@@ -290,6 +536,9 @@ func (q *QuickViewPanel) Show(scr *vtui.ScreenBuf) {
 		q.cancelFilePreview()
 		q.imageLoadGen++
 		q.cacheValid = false
+		q.cacheDir = false
+		q.cacheCodepage = 0
+		q.updateFrameTitle()
 		writeLine(" " + Msg("QuickView.NoSelection"))
 		return
 	}
@@ -514,21 +763,20 @@ func (q *QuickViewPanel) Close() {
 }
 
 func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(string), attr uint64, scr *vtui.ScreenBuf) {
-	// Header block (name + size + optional binary note). Two rows.
-	writeLine(" " + item.Name)
-	writeLine(fmt.Sprintf(" %s: %s", Msg("QuickView.Size"), formatBytes(nonNegativeUint64(item.Size))))
 	if q.cacheReadErr != nil {
-		writeLine("")
 		writeLine(" " + Msg("QuickView.ReadError") + ": " + q.cacheReadErr.Error())
 		return
 	}
+	// The file name and size are already visible in the source panel. Keep
+	// Quick View's header for the mode/encoding only, so the codepage remains
+	// visible even for long names and never shifts with the panel selection.
 	if q.cacheLoading {
 		writeLine(" " + Msg("QuickView.Loading"))
 	} else if q.cacheLabel != "" {
 		writeLine(" " + q.cacheLabel)
 	} else if q.cacheImage {
 		writeLine(" " + Msg("QuickView.Image"))
-	} else if q.cacheBinary {
+	} else if q.hexMode {
 		writeLine(" " + Msg("QuickView.Binary"))
 	} else {
 		writeLine("")
@@ -555,7 +803,7 @@ func (q *QuickViewPanel) renderFile(item *fileEntry, innerW int, writeLine func(
 	}
 
 	// Clamp scroll offsets against fresh display.
-	viewH := (q.Y2 - 1) - (q.Y1 + 1 + 4) + 1 // rows left after the 4-line header
+	viewH := (q.Y2 - 1) - (q.Y1 + 1 + 2) + 1 // rows left after the 2-line header
 	if viewH < 0 {
 		viewH = 0
 	}
@@ -591,7 +839,7 @@ func (q *QuickViewPanel) renderImage(innerW int, writeLine func(string), attr ui
 	}
 
 	x1, y1, x2, y2 := q.GetPosition()
-	top := y1 + 1 + 4 // Below the 4-line header
+	top := y1 + 1 + 2 // Below the mode/encoding header and separator
 	cols := x2 - x1 - 1
 	rows := y2 - top
 
@@ -721,9 +969,15 @@ func (q *QuickViewPanel) refreshCache(key quickViewSelectionKey, path string, it
 	q.cacheImage = false
 	q.cacheLoading = false
 	q.cacheLabel = ""
+	q.cacheRaw = nil
+	q.cacheCodepage = 0
+	q.cacheAutoDetect = false
+	q.hexMode = false
 	q.imageSurf = nil
 	q.cacheLines = nil
 	q.cacheReadErr = nil
+	q.lastSearchSource = -1
+	q.updateFrameTitle()
 
 	if item.IsDir {
 		q.startDirScan(path)
@@ -768,10 +1022,13 @@ func (q *QuickViewPanel) refreshCache(key quickViewSelectionKey, path string, it
 }
 
 type quickViewFileResult struct {
-	label  string
-	lines  []string
-	binary bool
-	err    error
+	label      string
+	lines      []string
+	raw        []byte
+	codepage   int
+	autoDetect bool
+	binary     bool
+	err        error
 }
 
 func makeQuickViewSelectionKey(filesystem vfs.VFS, path string, item vfs.VFSItem) quickViewSelectionKey {
@@ -847,10 +1104,18 @@ func (q *QuickViewPanel) applyFilePreview(result quickViewFileResult) {
 	q.cacheLoading = false
 	q.cacheLabel = result.label
 	q.cacheBinary = result.binary
+	q.cacheRaw = append(q.cacheRaw[:0], result.raw...)
+	q.cacheCodepage = result.codepage
+	q.cacheAutoDetect = result.autoDetect
 	q.cacheLines = append(q.cacheLines[:0], result.lines...)
 	q.cacheReadErr = result.err
+	q.hexMode = result.binary
+	if remembered, ok := q.codepages[q.cacheKey]; ok && q.cacheRaw != nil {
+		q.applyPreviewCodepage(remembered, false)
+	}
 	q.displayLines = nil
 	q.displayToSource = nil
+	q.updateFrameTitle()
 }
 
 // loadDefaultQuickView preserves the existing 16 KiB/500 ms text-or-hex
@@ -871,7 +1136,8 @@ func loadDefaultQuickView(parent context.Context, filesystem vfs.VFS, path strin
 	}
 	buf = buf[:n]
 
-	cpID := vfs.DetectEncoding(buf, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
+	autoDetect := AppConfig.ViewerAutodetectCodePage
+	cpID := vfs.DetectEncoding(buf, autoDetect, AppConfig.ViewerDefaultCodePage)
 	decodedBuf := buf
 	if cpID != 65001 {
 		if decoded, decodeErr := vfs.DecodeBytes(buf, cpID); decodeErr == nil {
@@ -880,13 +1146,14 @@ func loadDefaultQuickView(parent context.Context, filesystem vfs.VFS, path strin
 	}
 
 	if looksBinary(decodedBuf) {
-		return quickViewFileResult{binary: true, lines: hexDumpLines(buf)}
+		return quickViewFileResult{raw: append([]byte{}, buf...), codepage: cpID, autoDetect: autoDetect, binary: true, lines: hexDumpLines(buf)}
 	}
-	lines := splitTextLines(string(decodedBuf))
-	if n := len(lines); n > 0 && lines[n-1] == "" {
-		lines = lines[:n-1]
+	return quickViewFileResult{
+		raw:        append([]byte{}, buf...),
+		codepage:   cpID,
+		autoDetect: autoDetect,
+		lines:      quickViewTextLines(decodedBuf),
 	}
-	return quickViewFileResult{lines: lines}
 }
 
 const previewMax = 16 * 1024
