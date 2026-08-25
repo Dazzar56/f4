@@ -607,6 +607,70 @@ type archiveReadWrapper struct {
 	readPos    int64
 }
 
+// reopenAfterPassword replaces the member handle after the archive backend
+// reports an encrypted payload while reading it. Some formats validate the
+// password lazily, so Open may succeed and the first Read may be the point at
+// which the password is actually needed.
+func (w *archiveReadWrapper) reopenAfterPassword(ctx context.Context, cause error) error {
+	if !archive.IsPasswordError(cause) || w.v == nil {
+		return cause
+	}
+	if err := w.v.openWithPassword(ctx, cause); err != nil {
+		return err
+	}
+
+	w.v.mu.Lock()
+	fsys := w.v.fsys
+	w.v.mu.Unlock()
+	if fsys == nil {
+		return errors.New("archive filesystem is unavailable after password entry")
+	}
+
+	replacement, err := fsys.Open(w.fsPath)
+	if err != nil {
+		return err
+	}
+
+	w.mu.Lock()
+	old := w.f
+	w.f = replacement
+	w.mu.Unlock()
+	if old != nil {
+		_ = old.Close() // The replaced archive member was read-only.
+	}
+	return nil
+}
+
+func seekArchiveFile(file fs.File, offset int64) error {
+	if offset <= 0 {
+		return nil
+	}
+	if seeker, ok := file.(io.Seeker); ok {
+		_, err := seeker.Seek(offset, io.SeekStart)
+		return err
+	}
+
+	discard := make([]byte, 32*1024)
+	for offset > 0 {
+		want := int64(len(discard))
+		if want > offset {
+			want = offset
+		}
+		n, err := file.Read(discard[:want])
+		offset -= int64(n)
+		if err != nil {
+			if err == io.EOF && offset > 0 {
+				return io.ErrUnexpectedEOF
+			}
+			return err
+		}
+		if n == 0 {
+			return io.ErrUnexpectedEOF
+		}
+	}
+	return nil
+}
+
 func (w *archiveReadWrapper) Size() int64 {
 	return w.size
 }
@@ -699,6 +763,7 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 
 	buf := make([]byte, 128*1024)
 	var loopErr error
+	passwordRetried := false
 
 	for {
 		if ctx.Err() != nil {
@@ -713,7 +778,37 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 			}
 		}
 		if errRead != nil {
-			if errRead != io.EOF {
+			if errRead != io.EOF && archive.IsPasswordError(errRead) && !passwordRetried {
+				passwordRetried = true
+				if srcCloser != nil {
+					_ = srcCloser.Close() // The fallback archive member was read-only.
+					srcCloser = nil
+				}
+				if retryErr := w.reopenAfterPassword(ctx, errRead); retryErr == nil {
+					w.mu.Lock()
+					src = w.f
+					w.mu.Unlock()
+					if seeker, ok := src.(io.Seeker); ok {
+						if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+							loopErr = err
+							break
+						}
+					}
+					if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+						loopErr = err
+						break
+					}
+					if err := tmp.Truncate(0); err != nil {
+						loopErr = err
+						break
+					}
+					continue
+				} else {
+					loopErr = retryErr
+					break
+				}
+			}
+			if errRead != io.EOF && loopErr == nil {
 				loopErr = errRead
 			}
 			break
@@ -838,6 +933,29 @@ func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
 		w.mu.Lock()
 		w.readPos += int64(n)
 		w.mu.Unlock()
+	}
+	if err != nil && archive.IsPasswordError(err) {
+		if n > 0 {
+			w.mu.Lock()
+			w.readPos -= int64(n)
+			w.mu.Unlock()
+		}
+		if retryErr := w.reopenAfterPassword(ctx, err); retryErr != nil {
+			return 0, retryErr
+		}
+		w.mu.Lock()
+		f = w.f
+		position := w.readPos
+		w.mu.Unlock()
+		if err := seekArchiveFile(f, position); err != nil {
+			return 0, err
+		}
+		n, err = f.Read(p)
+		if n > 0 {
+			w.mu.Lock()
+			w.readPos += int64(n)
+			w.mu.Unlock()
+		}
 	}
 	return n, err
 }
@@ -1114,6 +1232,13 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 			_ = tmp.Close()        // The incomplete private materialization will be removed.
 			_ = os.Remove(tmpName) // Removing the unusable private materialization is best-effort cleanup.
 			v.decrementActive()
+			if archive.IsPasswordError(errExtract) {
+				if retryErr := v.openWithPassword(ctx, errExtract); retryErr == nil {
+					return v.Open(ctx, path)
+				} else {
+					return nil, retryErr
+				}
+			}
 			return nil, errExtract
 		}
 
