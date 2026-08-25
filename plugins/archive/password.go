@@ -102,7 +102,26 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 		return cause
 	}
 
-	password, err := archivePasswordPrompt(ctx, v.displayName)
+	v.mu.Lock()
+	localPath := v.activePath()
+	displayName := v.displayName
+	password := v.password
+	v.mu.Unlock()
+
+	// A password may already have been entered while opening the archive. In
+	// that case, retry with it first: some formats report an encrypted payload
+	// only on the first read even though the archive was opened successfully.
+	if password != "" {
+		fsys, _, err := openArchiveFSWithContext(ctx, localPath, displayName, nil, password)
+		if err == nil {
+			return v.installPasswordFS(fsys, password)
+		}
+		if !zipperarchive.IsPasswordError(err) {
+			return err
+		}
+	}
+
+	password, err := archivePasswordPrompt(ctx, displayName)
 	if err != nil {
 		return err
 	}
@@ -110,15 +129,14 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 		return cause
 	}
 
-	v.mu.Lock()
-	localPath := v.activePath()
-	displayName := v.displayName
-	v.mu.Unlock()
 	fsys, _, err := openArchiveFSWithContext(ctx, localPath, displayName, nil, password)
 	if err != nil {
 		return err
 	}
+	return v.installPasswordFS(fsys, password)
+}
 
+func (v *ArchiveVFS) installPasswordFS(fsys zipperarchive.FileSystem, password string) error {
 	v.mu.Lock()
 	if v.isClosed {
 		v.mu.Unlock()
