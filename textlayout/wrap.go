@@ -3,11 +3,9 @@ package textlayout
 import (
 	"math"
 	"sort"
-	"unicode/utf8"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/vtui"
-	"golang.org/x/text/unicode/bidi"
 )
 
 // LineFragment описывает один визуальный кусок логической строки после свертки.
@@ -97,61 +95,31 @@ func logicalTextClusters(text string) []visualCluster {
 	return logical
 }
 
+// layoutLine runs the bidi algorithm (UAX #9) over the editor's own cluster
+// boundaries: the virama joined clusters of VisualClusters, not the UAX #29
+// ones vtui's string helpers would segment on their own, so that wrapping,
+// painting, hit testing and caret movement all agree on one set of units.
+func layoutLine(text string, logical []visualCluster) vtui.BidiLayout {
+	spans := make([]vtui.ClusterSpan, len(logical))
+	for i, cluster := range logical {
+		spans[i] = vtui.ClusterSpan{Start: cluster.byteStart, End: cluster.byteEnd}
+	}
+	return vtui.LayoutBidi(text, spans, vtui.DefaultBidiParagraph)
+}
+
+// visualClusters returns the clusters of text in the order they are drawn,
+// with mirrored glyphs substituted where a cluster reads right to left.
 func visualClusters(text string) []visualCluster {
 	logical := logicalTextClusters(text)
 	if vtui.DefaultBidiMode != vtui.BidiFull || !vtui.HasRTL(text) {
 		return logical
 	}
-
+	layout := layoutLine(text, logical)
 	visual := make([]visualCluster, 0, len(logical))
-
-	// vtui.VisualStringWithRuneMap performs bidi reordering over the UAX #29
-	// clusters supplied by uniseg. VisualClusters deliberately has one extra
-	// terminal-facing rule for Indic conjuncts (for example, it joins the
-	// virama in स् to the following क), so consuming vtui's reordered string
-	// here loses or duplicates clusters when the two segmentations differ.
-	// Reorder the already-normalized clusters directly instead. This keeps the
-	// byte/rune boundaries used by wrapping, painting, hit testing, and caret
-	// movement identical.
-	p := bidi.Paragraph{}
-	if _, err := p.SetString(text); err != nil {
-		return logical
-	}
-	order, err := p.Order()
-	if err != nil {
-		return logical
-	}
-
-	for runIndex := 0; runIndex < order.NumRuns(); runIndex++ {
-		run := order.Run(runIndex)
-		start, end := run.Pos()
-		runClusters := make([]visualCluster, 0, len(logical))
-		for _, cluster := range logical {
-			if cluster.logicalPos >= start && cluster.logicalPos <= end {
-				runClusters = append(runClusters, cluster)
-			}
-		}
-		if len(runClusters) == 0 {
-			continue
-		}
-
-		if run.Direction() == bidi.RightToLeft {
-			for i, j := 0, len(runClusters)-1; i < j; i, j = i+1, j-1 {
-				runClusters[i], runClusters[j] = runClusters[j], runClusters[i]
-			}
-			for i := range runClusters {
-				if utf8.RuneCountInString(runClusters[i].text) == 1 {
-					runClusters[i].text = bidi.ReverseString(runClusters[i].text)
-				}
-			}
-		}
-		visual = append(visual, runClusters...)
-	}
-	if len(visual) != len(logical) {
-		// A bidi implementation must not make a text cluster disappear. Keep
-		// the safe logical layout if a future Unicode table creates a run
-		// boundary inside one of our extended clusters.
-		return logical
+	for _, index := range layout.VisualToLogical {
+		cluster := logical[index]
+		cluster.text = layout.Text(index, cluster.text)
+		visual = append(visual, cluster)
 	}
 	return visual
 }
@@ -174,11 +142,14 @@ func VisualClustersInVisualOrder(text string) []VisualCluster {
 	return result
 }
 
-// visualCaretMap is the caret equivalent of visualClusters. vtui's public
-// caret map is based on its UAX #29 clusters, while f4 extends those
-// boundaries for terminal-shaped Indic conjuncts; using the two maps
-// together lets a caret land at a different logical boundary than the one
-// that was painted.
+// visualCaretMap is the caret equivalent of visualClusters, over the same
+// cluster boundaries: LogicalToVisual[b] is the visual boundary the caret is
+// drawn at when it stands at logical boundary b (between clusters b-1 and
+// b), VisualToLogical[v] the logical boundary a click at visual boundary v
+// selects. The placement rule is vtui.BidiLayout.CaretVisual: the caret
+// stands at the trailing edge of the cluster it follows, so inside a right to
+// left word it walks leftwards while the logical position advances, as in
+// Notepad and the Windows edit controls.
 type visualCaretMap struct {
 	VisualToLogical []int
 	LogicalToVisual []int
@@ -187,78 +158,19 @@ type visualCaretMap struct {
 func buildVisualCaretMap(text string) visualCaretMap {
 	logical := logicalTextClusters(text)
 	n := len(logical)
-	identity := func() visualCaretMap {
-		visualToLogical := make([]int, n+1)
-		logicalToVisual := make([]int, n+1)
+	visualToLogical := make([]int, n+1)
+	logicalToVisual := make([]int, n+1)
+	if vtui.DefaultBidiMode != vtui.BidiFull || !vtui.HasRTL(text) || n == 0 {
 		for i := 0; i <= n; i++ {
 			visualToLogical[i] = i
 			logicalToVisual[i] = i
 		}
 		return visualCaretMap{VisualToLogical: visualToLogical, LogicalToVisual: logicalToVisual}
 	}
-	if vtui.DefaultBidiMode != vtui.BidiFull || !vtui.HasRTL(text) || n == 0 {
-		return identity()
-	}
-
-	p := bidi.Paragraph{}
-	if _, err := p.SetString(text); err != nil {
-		return identity()
-	}
-	order, err := p.Order()
-	if err != nil {
-		return identity()
-	}
-
-	logicalToVisual := make([]int, n+1)
-	assignedBoundary := make([]bool, n+1)
-	visualClusterIndex := 0
-	for runIndex := 0; runIndex < order.NumRuns(); runIndex++ {
-		run := order.Run(runIndex)
-		start, end := run.Pos()
-		runIndices := make([]int, 0, n)
-		for logicalIndex, cluster := range logical {
-			if cluster.logicalPos >= start && cluster.logicalPos <= end {
-				runIndices = append(runIndices, logicalIndex)
-			}
-		}
-		if len(runIndices) == 0 {
-			continue
-		}
-		runEnd := runIndices[len(runIndices)-1]
-		if run.Direction() == bidi.RightToLeft {
-			for i, logicalIndex := range runIndices {
-				logicalToVisual[logicalIndex] = visualClusterIndex + len(runIndices) - i
-				assignedBoundary[logicalIndex] = true
-			}
-			logicalToVisual[runEnd+1] = visualClusterIndex
-			assignedBoundary[runEnd+1] = true
-		} else {
-			for i, logicalIndex := range runIndices {
-				// A logical boundary shared by an RTL run and the following
-				// LTR run has two possible visual caret positions. Keep the
-				// position assigned to the RTL run's logical end; overwriting it
-				// with the LTR run's start makes Left re-enter the RTL run.
-				if i == 0 && assignedBoundary[logicalIndex] {
-					continue
-				}
-				logicalToVisual[logicalIndex] = visualClusterIndex + i
-				assignedBoundary[logicalIndex] = true
-			}
-			logicalToVisual[runEnd+1] = visualClusterIndex + len(runIndices)
-			assignedBoundary[runEnd+1] = true
-		}
-		visualClusterIndex += len(runIndices)
-	}
-	if visualClusterIndex != n {
-		return identity()
-	}
-
-	visualToLogical := make([]int, n+1)
-	for logicalIndex, visualIndex := range logicalToVisual {
-		if visualIndex < 0 || visualIndex > n {
-			return identity()
-		}
-		visualToLogical[visualIndex] = logicalIndex
+	layout := layoutLine(text, logical)
+	for i := 0; i <= n; i++ {
+		logicalToVisual[i] = layout.CaretVisual(i)
+		visualToLogical[i] = layout.CaretLogical(i)
 	}
 	return visualCaretMap{VisualToLogical: visualToLogical, LogicalToVisual: logicalToVisual}
 }

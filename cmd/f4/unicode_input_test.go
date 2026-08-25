@@ -53,7 +53,9 @@ func TestEditorUnicodeInputFollowsVisualCaret(t *testing.T) {
 	ev.SetPosition(0, 0, 80, 12)
 	ev.CursorPos = len([]byte("שלום"))
 	ev.SetFocus(true)
-	ev.ProcessKey(unicodeKey(vtinput.VK_RIGHT, 0))
+	// The editor moves the caret logically: Left from the end of the line
+	// steps back over the last letter, wherever it is drawn.
+	ev.ProcessKey(unicodeKey(vtinput.VK_LEFT, 0))
 	ev.ProcessKey(unicodeKey(0, 'X'))
 	data, _ := ev.pt.Bytes()
 	if got := string(data); got != "שלוXם" {
@@ -120,34 +122,45 @@ func TestEditorUnicodeInputDeleteKeepsLogicalDirectionInBidiMode(t *testing.T) {
 	}
 }
 
-func TestEditorUnicodeInputBidiLeftLeavesRTLRun(t *testing.T) {
+func TestEditorBidiArrowKeysMoveLogically(t *testing.T) {
 	oldMode := vtui.DefaultBidiMode
 	vtui.DefaultBidiMode = vtui.BidiFull
 	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
 
+	// Left and Right walk the text in logical order, as in Notepad
+	// (unxed/f4#546): entering the Hebrew word the caret jumps to its right
+	// edge and then moves left through it while the byte offset grows.
 	text := "abc אבג def"
 	ev := NewEditorView(piecetable.New([]byte(text)), nil, "mixed-bidi.txt")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 80, 12)
-	ev.CursorPos = len([]byte("abc אבג"))
+	ev.CursorPos = len([]byte("abc "))
 	ev.SetFocus(true)
 
-	ev.ProcessKey(unicodeKey(vtinput.VK_LEFT, 0))
-	if got, want := ev.CursorPos, len([]byte("abc")); got != want {
-		t.Fatalf("left from the end of the RTL run moved to byte %d, want %d", got, want)
+	type step struct{ pos, col int }
+	want := []step{
+		{len([]byte("abc א")), 6},
+		{len([]byte("abc אב")), 5},
+		{len([]byte("abc אבג")), 4},
+		{len([]byte("abc אבג ")), 8},
 	}
-
-	ev.CursorPos = len([]byte("abc אבג"))
-	ev.selActive = false
-	ev.ProcessKey(&vtinput.InputEvent{
-		Type:            vtinput.KeyEventType,
-		KeyDown:         true,
-		VirtualKeyCode:  vtinput.VK_LEFT,
-		ControlKeyState: vtinput.ShiftPressed,
-	})
-	min, max := ev.getSelectionRange()
-	data, _ := ev.pt.Bytes()
-	if got, want := string(data[min:max]), " אבג"; got != want {
-		t.Fatalf("shift-left from the end of the RTL run selected %q, want %q", got, want)
+	for i, w := range want {
+		ev.ProcessKey(unicodeKey(vtinput.VK_RIGHT, 0))
+		if ev.CursorPos != w.pos {
+			t.Fatalf("right %d: cursor at byte %d, want %d", i, ev.CursorPos, w.pos)
+		}
+		if _, col := ev.engine.LogicalToVisual(ev.CursorPos); col != w.col {
+			t.Fatalf("right %d: caret drawn at column %d, want %d", i, col, w.col)
+		}
+	}
+	for i := len(want) - 2; i >= 0; i-- {
+		ev.ProcessKey(unicodeKey(vtinput.VK_LEFT, 0))
+		if ev.CursorPos != want[i].pos {
+			t.Fatalf("left to %d: cursor at byte %d, want %d", i, ev.CursorPos, want[i].pos)
+		}
+	}
+	ev.ProcessKey(unicodeKey(vtinput.VK_LEFT, 0))
+	if got, w := ev.CursorPos, len([]byte("abc ")); got != w {
+		t.Fatalf("left out of the RTL run: cursor at byte %d, want %d", got, w)
 	}
 }

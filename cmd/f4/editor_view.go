@@ -186,14 +186,6 @@ type EditorView struct {
 	CursorVirtualSpaces int
 	UseEditorConfig     bool
 
-	// bidiCache avoids rescanning an unchanged long line on every cursor key.
-	// zoin-bot keys it by editSession and logical line, so edits and undo/redo
-	// invalidate the result without making the common LTR path line-sized.
-	bidiCacheSession int
-	bidiCacheLine    int
-	bidiCacheValue   bool
-	bidiCacheValid   bool
-
 	highlighting    bool
 	highlightCancel context.CancelFunc
 
@@ -2148,14 +2140,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
 			}
-		} else if ev.lineUsesVisualBidi() {
-			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-			newOffset := ev.engine.MoveVisual(currentOffset, -1)
-			if newOffset != currentOffset {
-				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-			}
 		} else {
+			// Left and Right move through the text in logical order, one
+			// cluster at a time, whatever direction the cluster is drawn in.
+			// Inside a right to left word the caret therefore walks
+			// leftwards on screen and turns back at the word's edges, as it
+			// does in Notepad (unxed/f4#546); the visual column comes from
+			// the caret map of textlayout.
 			if ev.CursorPos > 0 {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
 				ev.CursorPos = ev.previousGraphemeBoundaryInLine(lineStart, ev.CursorPos)
@@ -2239,16 +2230,6 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
 				ev.CursorLine++
 				ev.CursorPos = 0
-			}
-		} else if ev.lineUsesVisualBidi() {
-			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-			newOffset := ev.engine.MoveVisual(currentOffset, 1)
-			if newOffset != currentOffset {
-				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-				ev.CursorVirtualSpaces = 0
-			} else if ev.CursorBeyondEOL {
-				ev.CursorVirtualSpaces++
 			}
 		} else {
 			if ev.CursorPos < lineLen {

@@ -31,7 +31,7 @@ func VisualClusters(s string) []VisualCluster {
 			return
 		}
 		raw := s[start:end]
-		if len(clusters) > 0 && endsInIndicVirama(clusters[len(clusters)-1].Text) && startsWithLetter(raw) {
+		if len(clusters) > 0 && vtui.JoinsConjunct(clusters[len(clusters)-1].Text, raw) {
 			last := &clusters[len(clusters)-1]
 			last.Text = s[last.Start:end]
 			last.End = end
@@ -57,10 +57,10 @@ func VisualClusters(s string) []VisualCluster {
 
 // NextVisualCluster returns the next cluster as it is treated by a terminal
 // text editor. UAX #29 (which vtui implements) handles combining marks, emoji,
-// and bidi marks, while the extra virama join handles Indic conjuncts that
-// older versions of the Unicode grapheme tables split between the virama and
-// the following consonant. Keeping this rule here makes wrapping, cursor
-// movement, and deletion agree on the same byte boundaries.
+// and bidi marks, while vtui.JoinsConjunct adds rule GB9c the way the
+// terminal applies it, joining an Indic virama to the consonant that follows
+// it. Keeping one rule for wrapping, painting, cursor movement and deletion
+// makes them agree on the same byte boundaries.
 func NextVisualCluster(s string) (cluster string, width int, size int) {
 	clusters := VisualClusters(s)
 	if len(clusters) == 0 {
@@ -68,16 +68,6 @@ func NextVisualCluster(s string) (cluster string, width int, size int) {
 	}
 	first := clusters[0]
 	return first.Text, first.Width, first.End
-}
-
-func startsWithLetter(s string) bool {
-	r, _ := utf8.DecodeRuneInString(s)
-	return unicode.IsLetter(r)
-}
-
-func endsInIndicVirama(s string) bool {
-	r, _ := utf8.DecodeLastRuneInString(s)
-	return isIndicVirama(r)
 }
 
 func containsIndicVirama(s string) bool {

@@ -621,7 +621,10 @@ func TestVisualClustersInVisualOrderKeepsLeadingThaanaBeforeLatinText(t *testing
 		got.WriteString(cluster.Text)
 	}
 
-	want := " - ސްބަހިވެދިDivehi (Maldivian) - BiDi"
+	// A left to right line: the Thaana word is reversed in place, the rest
+	// of the line stays where it is (unxed/f4#546, "f4 changed the word
+	// order").
+	want := "ސްބަހިވެދި - Divehi (Maldivian) - BiDi"
 	if got.String() != want {
 		t.Fatalf("visual text = %q, want %q", got.String(), want)
 	}
