@@ -1263,6 +1263,8 @@ Archive.Command.Add=Add to archive
 Archive.Command.Add.Desc=Create an archive from the selected files
 Archive.Command.Extract=Extract files
 Archive.Command.Extract.Desc=Extract the selected archive to the passive panel
+Archive.PasswordTitle=Archive password
+Archive.Password=Password:
 
 Permissions.Title= Plugin Permissions
 Permissions.BtnRevoke=&Revoke

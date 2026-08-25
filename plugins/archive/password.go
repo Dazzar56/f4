@@ -38,18 +38,18 @@ func promptArchivePassword(ctx context.Context, archiveName string) (string, err
 }
 
 func showArchivePasswordDialog(archiveName string, result chan<- archivePasswordResult) {
-	dlg := vtui.NewCenteredDialog(52, 7, " Archive password ")
+	dlg := vtui.NewCenteredDialog(52, 7, vtui.Msg("Archive.PasswordTitle"))
 	dlg.ShowClose = true
 
 	x := dlg.X1 + 2
 	y := dlg.Y1 + 2
 	password := vtui.NewPasswordEdit(x+12, y, 34, "")
-	dlg.AddItem(vtui.NewLabel(x, y, "Password:", password))
+	dlg.AddItem(vtui.NewLabel(x, y, vtui.Msg("Archive.Password"), password))
 	dlg.AddItem(password)
 
-	ok := vtui.NewButton(dlg.X1+15, dlg.Y2-2, "&OK")
+	ok := vtui.NewButton(dlg.X1+15, dlg.Y2-2, vtui.Msg("vtui.Ok"))
 	ok.IsDefault = true
-	cancel := vtui.NewButton(dlg.X1+28, dlg.Y2-2, "&Cancel")
+	cancel := vtui.NewButton(dlg.X1+28, dlg.Y2-2, vtui.Msg("vtui.Cancel"))
 	dlg.AddItem(ok)
 	dlg.AddItem(cancel)
 
