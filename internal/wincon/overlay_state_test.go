@@ -152,6 +152,21 @@ func TestAClosedOverlayRecordsNothing(t *testing.T) {
 	}
 }
 
+// Closing also discards a wake-up that was already queued. The pump may see
+// that stale message before the quit message, but it must not touch a window
+// that Close has already declared dead.
+func TestAClosedOverlayDropsQueuedWork(t *testing.T) {
+	var s overlayState
+	s.place(Rect{W: 5, H: 5})
+	s.touchPixels()
+	if !s.close() {
+		t.Fatal("the first close is the one that counts")
+	}
+	if ops := s.take(); !ops.Empty() {
+		t.Errorf("got %+v, want no work after close", ops)
+	}
+}
+
 // A wake-up that could not be posted leaves the flag down, so the next change
 // tries again instead of waiting forever for a message that was never sent.
 func TestAFailedWakeUpIsTriedAgain(t *testing.T) {

@@ -57,8 +57,9 @@ The invariant is kept by splitting the overlay in two. `overlay_state.go` is
 what the window *should* look like — position, region, whether the frame buffer
 has changed, and one flag that keeps at most one wake-up outstanding no matter
 how many changes arrive. Callers write there and post a single `WM_APP+2` with
-`PostMessageW`, which does not wait. The pump thread answers that message and
-makes every window call there is. The rule to keep: **`user32` and `gdi32`
+`PostThreadMessageW`, which does not wait and does not route the wake-up through
+the cross-process child HWND. The pump thread answers that message and makes
+every window call there is. The rule to keep: **`user32` and `gdi32`
 calls that touch the overlay window live in `wndProc`, `paint` and `apply`, and
 nowhere else.** `GetClientRect` on the parent is the one exception and is safe:
 it reads window data and sends nothing.

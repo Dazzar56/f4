@@ -196,7 +196,7 @@ that thread, and the overlay's pump thread shares an input queue with conhost.
 `RenderExternal` runs with the screen locked, so f4 waited on conhost while
 conhost was what f4 needed to draw and to read keys. The window operations are
 now written into `wincon/overlay_state.go` and applied on the pump thread after
-one `PostMessageW`; see `WINCON.md` section 2 for the invariant and the rule
+one `PostThreadMessageW`; see `WINCON.md` section 2 for the invariant and the rule
 that keeps it.
 
 The black rectangle was the second half and did not go with the first. A frame

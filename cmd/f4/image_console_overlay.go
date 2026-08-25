@@ -29,6 +29,12 @@ type consoleImageOverlay struct {
 	// rescaled and repainted.
 	key string
 
+	// regionActive says that the pump thread currently has a clipped region.
+	// A single image fills its window, so avoid the cross-process SetWindowRgn
+	// call altogether in the common path. It is needed only after a gallery or
+	// another multi-piece frame has actually installed one.
+	regionActive bool
+
 	// st is the cost of all this, printed once a second; see
 	// image_console_stats.go.
 	st consoleOverlayStats
@@ -188,9 +194,13 @@ func (c *consoleImageOverlay) RenderExternal(list []vtui.ImagePlacement, cellW, 
 	// thumbnails stay readable.
 	handed := time.Now()
 	if len(bounds) == 1 && bounds[0] == (wincon.Rect{X: 0, Y: 0, W: frame.W, H: frame.H}) {
-		c.ov.SetBounds(nil)
+		if c.regionActive {
+			c.ov.SetBounds(nil)
+			c.regionActive = false
+		}
 	} else {
 		c.ov.SetBounds(bounds)
+		c.regionActive = true
 	}
 
 	if err := c.ov.Draw(buf, frame.W, frame.H, frame.W*4); err != nil {

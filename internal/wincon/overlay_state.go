@@ -10,8 +10,8 @@ package wincon
 // text and delivers its keys.
 //
 // So the caller does not call them. It records what it wants here, posts one
-// message, and returns; the pump thread reads this and does the work. The
-// split lives in its own file for the same reason geometry.go does: it is
+// thread message, and returns; the pump thread reads this and does the work.
+// The split lives in its own file for the same reason geometry.go does: it is
 // arithmetic and judgement, it has no system calls in it, and it is therefore
 // testable on a machine with no Windows console anywhere near it.
 
@@ -158,6 +158,14 @@ func (s *overlayState) take() overlayOps {
 	s.woken = false
 
 	var ops overlayOps
+	if s.closed {
+		s.wantShow = false
+		s.wantRect = Rect{}
+		s.wantRegion = nil
+		s.regionSet = false
+		s.pixDirty = false
+		return ops
+	}
 	if !s.wantShow {
 		if s.shown {
 			ops.Hide = true
