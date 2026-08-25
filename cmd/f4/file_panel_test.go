@@ -2137,7 +2137,7 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 }
 
 func TestFileSystemPanel_RightDragAppliesToSkippedRows(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 	fp.entries = []*fileEntry{
