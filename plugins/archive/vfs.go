@@ -70,8 +70,10 @@ type ArchiveVFS struct {
 	parent      vfs.VFS
 	arcPath     string
 	backingPath string
+	displayName string
 	format      string
 	innerPath   string
+	password    string
 
 	fsys   archive.FileSystem
 	closer io.Closer
@@ -103,7 +105,7 @@ func (v *ArchiveVFS) ensureFSLocked() error {
 	if v.cleanupTimer == nil || v.activePath() == "" {
 		return fmt.Errorf("archive VFS is closed")
 	}
-	reopened, err := archive.OpenFS(v.activePath(), archive.Options{})
+	reopened, err := archive.OpenFS(v.activePath(), archive.Options{Password: v.password})
 	if err != nil {
 		return err
 	}
@@ -162,7 +164,7 @@ func NewArchiveVFSContext(ctx context.Context, parent vfs.VFS, archivePath strin
 		closer = lease
 	}
 
-	fsys, cleanupTransferred, err := openArchiveFSWithContext(ctx, finalPath, displayName, closer)
+	fsys, password, cleanupTransferred, err := openArchiveFSWithPasswordPrompt(ctx, finalPath, displayName, closer)
 	if err != nil {
 		if closer != nil && !cleanupTransferred {
 			_ = closer.Close()
@@ -171,8 +173,8 @@ func NewArchiveVFSContext(ctx context.Context, parent vfs.VFS, archivePath strin
 	}
 
 	return &ArchiveVFS{
-		parent: parent, arcPath: canonicalPath, backingPath: finalPath, format: format,
-		innerPath: ".", fsys: fsys, closer: closer,
+		parent: parent, arcPath: canonicalPath, backingPath: finalPath, displayName: displayName,
+		format: format, password: password, innerPath: ".", fsys: fsys, closer: closer,
 	}, nil
 }
 
@@ -181,10 +183,10 @@ type archiveFSOpenResult struct {
 	err  error
 }
 
-func openArchiveFSWithContext(ctx context.Context, localPath, displayName string, backing io.Closer) (archive.FileSystem, bool, error) {
+func openArchiveFSWithContext(ctx context.Context, localPath, displayName string, backing io.Closer, password string) (archive.FileSystem, bool, error) {
 	result := make(chan archiveFSOpenResult, 1)
 	go func() {
-		fsys, err := archive.OpenFS(localPath, archive.Options{})
+		fsys, err := archive.OpenFS(localPath, archive.Options{Password: password})
 		result <- archiveFSOpenResult{fsys: fsys, err: err}
 	}()
 
@@ -416,29 +418,51 @@ func (v *ArchiveVFS) IsAbs(candidate string) bool {
 
 func (v *ArchiveVFS) SetPath(p string) error {
 	v.mu.Lock()
-	defer v.mu.Unlock()
-	defer v.finishNonHandleOperationLocked()
 	if err := v.ensureFSLocked(); err != nil {
+		v.finishNonHandleOperationLocked()
+		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(context.Background(), err); retryErr == nil {
+				return v.SetPath(p)
+			} else {
+				return retryErr
+			}
+		}
 		return err
 	}
 	v.cancelCleanupLocked()
 
 	newInner, err := v.resolveInnerPath(p)
 	if err != nil {
+		v.finishNonHandleOperationLocked()
+		v.mu.Unlock()
 		return err
 	}
 
 	if v.fsys != nil && newInner != "." {
 		info, err := fs.Stat(v.fsys, newInner)
 		if err != nil {
+			v.finishNonHandleOperationLocked()
+			v.mu.Unlock()
+			if archive.IsPasswordError(err) {
+				if retryErr := v.openWithPassword(context.Background(), err); retryErr == nil {
+					return v.SetPath(p)
+				} else {
+					return retryErr
+				}
+			}
 			return err
 		}
 		if !info.IsDir() {
+			v.finishNonHandleOperationLocked()
+			v.mu.Unlock()
 			return fmt.Errorf("not a directory: %s", newInner)
 		}
 	}
 
 	v.innerPath = newInner
+	v.finishNonHandleOperationLocked()
+	v.mu.Unlock()
 	return nil
 }
 
@@ -448,7 +472,15 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 	}
 	v.mu.Lock()
 	if err := v.ensureFSLocked(); err != nil {
+		v.finishNonHandleOperationLocked()
 		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.ReadDir(ctx, path, onChunk)
+			} else {
+				return retryErr
+			}
+		}
 		return err
 	}
 	v.cancelCleanupLocked()
@@ -464,6 +496,13 @@ func (v *ArchiveVFS) ReadDir(ctx context.Context, path string, onChunk func([]vf
 	if err != nil {
 		v.finishNonHandleOperationLocked()
 		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.ReadDir(ctx, path, onChunk)
+			} else {
+				return retryErr
+			}
+		}
 		return err
 	}
 
@@ -505,30 +544,51 @@ func (v *ArchiveVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error)
 		return vfs.VFSItem{}, err
 	}
 	v.mu.Lock()
-	defer v.mu.Unlock()
-	defer v.finishNonHandleOperationLocked()
 	if err := v.ensureFSLocked(); err != nil {
+		v.finishNonHandleOperationLocked()
+		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.Stat(ctx, path)
+			} else {
+				return vfs.VFSItem{}, retryErr
+			}
+		}
 		return vfs.VFSItem{}, err
 	}
 	v.cancelCleanupLocked()
 
 	fsPath, pathErr := v.resolveInnerPath(path)
 	if pathErr != nil {
+		v.finishNonHandleOperationLocked()
+		v.mu.Unlock()
 		return vfs.VFSItem{}, pathErr
 	}
 
 	info, err := fs.Stat(v.fsys, fsPath)
 	if err != nil {
+		v.finishNonHandleOperationLocked()
+		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.Stat(ctx, path)
+			} else {
+				return vfs.VFSItem{}, retryErr
+			}
+		}
 		return vfs.VFSItem{}, err
 	}
 
-	return vfs.VFSItem{
+	item := vfs.VFSItem{
 		Name:     info.Name(),
 		IsDir:    info.IsDir(),
 		Size:     info.Size(),
 		MTime:    info.ModTime(),
 		IsHidden: strings.HasPrefix(info.Name(), "."),
-	}, nil
+	}
+	v.finishNonHandleOperationLocked()
+	v.mu.Unlock()
+	return item, nil
 }
 
 type archiveReadWrapper struct {
@@ -902,6 +962,13 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 	v.mu.Lock()
 	if err := v.ensureFSLocked(); err != nil {
 		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.Open(ctx, path)
+			} else {
+				return nil, retryErr
+			}
+		}
 		return nil, err
 	}
 	v.cancelCleanupLocked()
@@ -986,6 +1053,13 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 			if err != nil {
 				close(openDone)
 				v.decrementActive()
+				if archive.IsPasswordError(err) {
+					if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+						return v.Open(ctx, path)
+					} else {
+						return nil, retryErr
+					}
+				}
 				return nil, err
 			}
 		case <-ctx.Done():
@@ -1300,7 +1374,7 @@ func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 }
 
 func (v *ArchiveVFS) reloadFS() error {
-	newFS, err := archive.OpenFS(v.activePath(), archive.Options{})
+	newFS, err := archive.OpenFS(v.activePath(), archive.Options{Password: v.password})
 	if err != nil {
 		return err
 	}
@@ -1444,12 +1518,20 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	v.mu.Lock()
 	if err := v.ensureFSLocked(); err != nil {
 		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.CopyBulk(ctx, srcPaths, dstVfs, dstDir, reporter)
+			} else {
+				return retryErr
+			}
+		}
 		return err
 	}
 	v.cancelCleanupLocked()
 	v.activeCount++
 	innerPath := v.innerPath
 	absPath := v.activePath()
+	password := v.password
 	v.mu.Unlock()
 	defer v.decrementActive()
 
@@ -1513,11 +1595,11 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	}
 	switch format {
 	case "zip":
-		return v.copyBulkZip(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
+		return v.copyBulkZip(ctx, archiveFile, selectedMap, innerPath, password, dstVfs, dstDir, reporter)
 	case "tar":
 		return v.copyBulkTar(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
 	}
-	return v.copyBulkFallback(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
+	return v.copyBulkFallback(ctx, archiveFile, selectedMap, innerPath, password, dstVfs, dstDir, reporter)
 }
 
 func (v *ArchiveVFS) openArchiveFile(ctx context.Context) (vfs.ReadAtCloser, error) {
@@ -1547,8 +1629,8 @@ func ensureArchiveExtractionDir(ctx context.Context, dstVfs vfs.VFS, dir string)
 	return nil
 }
 
-func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
-	zr, err := zip.NewReader(readerAtAdapter{r: f, ctx: ctx}, f.Size())
+func (v *ArchiveVFS) copyBulkZip(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath, password string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	zr, err := zip.NewReaderWithPassword(readerAtAdapter{r: f, ctx: ctx}, f.Size(), password)
 	if err != nil {
 		return err
 	}
@@ -1856,7 +1938,7 @@ func archiveProgressPercent(copied, total int64) int {
 	return int(float64(copied) * 100 / float64(total))
 }
 
-func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath, password string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
 	var localPath string
 	if temp, ok := f.(*vfs.TempFileWrapper); ok && temp.TempPath != "" {
 		localPath = temp.TempPath
@@ -1875,6 +1957,9 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 	format, _, err := archives.Identify(ctx, localPath, localF)
 	if err != nil {
 		return err
+	}
+	if passwordFormat, ok := archivePasswordFormat(format, password); ok {
+		format = passwordFormat
 	}
 
 	ex, ok := format.(archives.Extractor)

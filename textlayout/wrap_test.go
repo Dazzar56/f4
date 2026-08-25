@@ -610,6 +610,23 @@ func TestVisualClustersInVisualOrderPreservesTerminalClustersInBidiParagraph(t *
 	}
 }
 
+func TestVisualClustersInVisualOrderKeepsLeadingThaanaBeforeLatinText(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "ދިވެހިބަސް - Divehi (Maldivian) - BiDi"
+	var got strings.Builder
+	for _, cluster := range VisualClustersInVisualOrder(text) {
+		got.WriteString(cluster.Text)
+	}
+
+	want := " - ސްބަހިވެދިDivehi (Maldivian) - BiDi"
+	if got.String() != want {
+		t.Fatalf("visual text = %q, want %q", got.String(), want)
+	}
+}
+
 func TestWrapEngine_BidiVisualMoveLeavesRTLRunInVisualDirection(t *testing.T) {
 	oldMode := vtui.DefaultBidiMode
 	vtui.DefaultBidiMode = vtui.BidiFull
