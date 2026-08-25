@@ -4,12 +4,42 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+
+type editorRenderTrackingBuffer struct {
+	data    []byte
+	mu      sync.Mutex
+	maxRead int
+}
+
+func (b *editorRenderTrackingBuffer) Size() int { return len(b.data) }
+
+func (b *editorRenderTrackingBuffer) Read(offset, length int) ([]byte, error) {
+	b.mu.Lock()
+	if length > b.maxRead {
+		b.maxRead = length
+	}
+	b.mu.Unlock()
+	return b.data[offset : offset+length], nil
+}
+
+func (b *editorRenderTrackingBuffer) reset() {
+	b.mu.Lock()
+	b.maxRead = 0
+	b.mu.Unlock()
+}
+
+func (b *editorRenderTrackingBuffer) largestRead() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.maxRead
+}
 
 // NUL headers are binary; cp1251 text (invalid UTF-8 but NUL-free) and
 // UTF-16 text (NULs decoded away) are not.
@@ -50,6 +80,26 @@ func TestStartIndexingSkipsHexAndDecodeModes(t *testing.T) {
 		if ev.indexing || ev.indexIsComplete() {
 			t.Errorf("%s mode must not run the line-index scan", tc.mode)
 		}
+	}
+}
+
+func TestEditorHexRenderSkipsTextLayout(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	buffer := &editorRenderTrackingBuffer{data: make([]byte, 128*1024)}
+	ev := NewEditorViewIndexedLater(piecetable.NewWithBuffer(buffer), nil, "sample.bin")
+	defer ev.Close()
+	ev.HexMode = true
+	ev.SetPosition(0, 0, 80, 24)
+	buffer.reset()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	ev.Show(scr)
+
+	if got := buffer.largestRead(); got > 16 {
+		t.Fatalf("hex render read %d bytes from the text buffer, want at most 16", got)
 	}
 }
 

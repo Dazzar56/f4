@@ -210,6 +210,7 @@ func buildVisualCaretMap(text string) visualCaretMap {
 	}
 
 	logicalToVisual := make([]int, n+1)
+	assignedBoundary := make([]bool, n+1)
 	visualClusterIndex := 0
 	for runIndex := 0; runIndex < order.NumRuns(); runIndex++ {
 		run := order.Run(runIndex)
@@ -227,13 +228,24 @@ func buildVisualCaretMap(text string) visualCaretMap {
 		if run.Direction() == bidi.RightToLeft {
 			for i, logicalIndex := range runIndices {
 				logicalToVisual[logicalIndex] = visualClusterIndex + len(runIndices) - i
+				assignedBoundary[logicalIndex] = true
 			}
 			logicalToVisual[runEnd+1] = visualClusterIndex
+			assignedBoundary[runEnd+1] = true
 		} else {
 			for i, logicalIndex := range runIndices {
+				// A logical boundary shared by an RTL run and the following
+				// LTR run has two possible visual caret positions. Keep the
+				// position assigned to the RTL run's logical end; overwriting it
+				// with the LTR run's start makes Left re-enter the RTL run.
+				if i == 0 && assignedBoundary[logicalIndex] {
+					continue
+				}
 				logicalToVisual[logicalIndex] = visualClusterIndex + i
+				assignedBoundary[logicalIndex] = true
 			}
 			logicalToVisual[runEnd+1] = visualClusterIndex + len(runIndices)
+			assignedBoundary[runEnd+1] = true
 		}
 		visualClusterIndex += len(runIndices)
 	}
