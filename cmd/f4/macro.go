@@ -210,22 +210,16 @@ func configuredHotkeyAction(hm *HotkeyManager, area, key string) string {
 	return hm.GetAction(area, plainKey)
 }
 
-// configurableHotkeyOwnsPanelBookmark lets an explicit configurable binding
-// take the place of far2l's built-in Right Ctrl/Ctrl+Alt bookmark shortcuts.
-// Unmodified defaults keep their historical bookmark behavior, while a user
-// binding on either Ctrl spelling is honored without requiring both spellings.
+// configurableHotkeyOwnsPanelBookmark lets a configurable action take the
+// place of far2l's built-in Right Ctrl/Ctrl+Alt bookmark shortcuts. This also
+// covers ordinary default bindings such as Ctrl+1..4: the same action should
+// be reachable through Right Ctrl without requiring a duplicate RCtrl entry.
 func configurableHotkeyOwnsPanelBookmark(hm *HotkeyManager, area string, e *vtinput.InputEvent) bool {
 	if hm == nil || e == nil || !isPanelBookmarkHotkey(e) {
 		return false
 	}
 	key := EventToHotkeyString(e)
-	if hm.hasExplicitBinding(area, key) {
-		return true
-	}
-	if strings.HasPrefix(key, "RCtrl") {
-		return hm.hasExplicitBinding(area, "Ctrl"+strings.TrimPrefix(key, "RCtrl"))
-	}
-	return false
+	return configuredHotkeyAction(hm, area, key) != ""
 }
 
 func ParseFarKey(s string) *vtinput.InputEvent {

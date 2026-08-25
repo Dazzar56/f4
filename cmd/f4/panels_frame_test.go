@@ -5046,14 +5046,15 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 	oldHotkeys := GlobalHotkeysMgr
 	GlobalHotkeysMgr = NewHotkeyManager("")
 	defer func() { GlobalHotkeysMgr = oldHotkeys }()
-	macroFilter := &MacroManager{Macros: make(map[string]map[string][]*vtinput.InputEvent)}
+	oldMacroMgr := MacroMgr
+	MacroMgr = &MacroManager{Macros: make(map[string]map[string][]*vtinput.InputEvent)}
+	defer func() { MacroMgr = oldMacroMgr }()
 	rightCtrl3 := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '3', ControlKeyState: vtinput.RightCtrlPressed}
-	if macroFilter.Filter(rightCtrl3) {
-		t.Fatal("RightCtrl+3 was consumed by the configurable hotkey filter")
+	if !pressKey(pf, rightCtrl3) {
+		t.Fatal("RightCtrl+3 was not handled by the generic Ctrl3 binding")
 	}
-	pressKey(pf, rightCtrl3)
-	if fsp.viewMode != ViewModeMedium {
-		t.Fatalf("RightCtrl+3 changed panel mode to %v", fsp.viewMode)
+	if fsp.viewMode != ViewModeDetailed {
+		t.Fatalf("RightCtrl+3 set panel mode to %v, want %v", fsp.viewMode, ViewModeDetailed)
 	}
 
 	for _, tc := range []struct {
