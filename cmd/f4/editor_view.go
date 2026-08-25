@@ -1383,7 +1383,40 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	// Calculate crosshair parameters before usage
+	// Clear the entire editor text area
+	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+
+	// Hex/decode views are byte-addressed and do not need the text layout. In
+	// particular, an unindexed binary file looks like one very long text line
+	// to WrapEngine; asking it for the caret position here would read a large
+	// chunk before the hex view gets a chance to render.
+	if ev.HexMode {
+		ev.renderHex(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			maxOffset := int(ev.pt.Size())
+			contentHeight := ev.Y2 - ev.Y1
+			if contentHeight > 0 {
+				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
+				maxOffset = lastLineOffset - (contentHeight-1)*16
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
+			}
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
+			ev.scrollBar.Show(scr)
+		}
+		return
+	}
+	if ev.DecodeMode {
+		ev.renderDecode(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, ev.pt.Size())
+			ev.scrollBar.Show(scr)
+		}
+		return
+	}
+
+	// Text mode alone needs the text layout and crosshair coordinates.
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
 
@@ -1400,9 +1433,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	// Clear the entire editor text area
-	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
-
 	// Horizontal line
 	if crossVRow != -1 {
 		cy := ev.Y1 + 1 + crossVRow - ev.ScrollTopRow
@@ -1417,67 +1447,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		if cx >= ev.X1 && cx < ev.X1+width {
 			scr.FillRect(cx, ev.Y1+1, cx, ev.Y2, ' ', vertCrossAttr)
 		}
-	}
-
-	if ev.HexMode {
-		ev.renderHex(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			maxOffset := int(ev.pt.Size())
-			contentHeight := ev.Y2 - ev.Y1
-			if contentHeight > 0 {
-				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
-				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-			}
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
-			ev.scrollBar.Show(scr)
-		}
-		return
-	}
-
-	if ev.HexMode {
-		ev.renderHex(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			maxOffset := int(ev.pt.Size())
-			contentHeight := ev.Y2 - ev.Y1
-			if contentHeight > 0 {
-				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
-				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-			}
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
-			ev.scrollBar.Show(scr)
-		}
-		return
-	}
-
-	if ev.DecodeMode {
-		ev.renderDecode(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, ev.pt.Size())
-			ev.scrollBar.Show(scr)
-		}
-		return
-	} else if ev.HexMode {
-		ev.renderHex(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			maxOffset := ev.pt.Size()
-			contentHeight := ev.Y2 - ev.Y1
-			if contentHeight > 0 {
-				lastLineOffset := (ev.pt.Size() - 1) &^ 0xF
-				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-			}
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
-			ev.scrollBar.Show(scr)
-		}
-		return
 	}
 
 	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
