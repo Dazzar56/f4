@@ -90,6 +90,16 @@ func TestTranslateMouseInput(t *testing.T) {
 			"\x1b[<34;21;16M",
 		},
 		{
+			"X11/Wayland Move without Button",
+			&vtinput.InputEvent{KeyDown: false, MouseX: 20, MouseY: 15, MouseEventFlags: vtinput.MouseMoved},
+			"\x1b[<35;21;16M",
+		},
+		{
+			"Wayland Drag Move",
+			&vtinput.InputEvent{KeyDown: false, MouseX: 20, MouseY: 15, ButtonState: vtinput.FromLeft1stButtonPressed, MouseEventFlags: vtinput.MouseMoved},
+			"\x1b[<32;21;16M",
+		},
+		{
 			"Wheel Up with Shift",
 			&vtinput.InputEvent{WheelDirection: 1, MouseX: 0, MouseY: 0, ControlKeyState: vtinput.ShiftPressed},
 			"\x1b[<68;1;1M",

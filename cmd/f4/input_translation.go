@@ -32,6 +32,7 @@ func formatTilde(mod int, code int) string {
 func TranslateMouseInput(e *vtinput.InputEvent) string {
 	cb := 0
 	isRelease := false
+	isMove := e.MouseEventFlags&vtinput.MouseMoved != 0
 
 	if e.WheelDirection != 0 {
 		if e.WheelDirection > 0 {
@@ -39,6 +40,22 @@ func TranslateMouseInput(e *vtinput.InputEvent) string {
 		} else {
 			cb = 65 // Wheel down
 		}
+	} else if isMove {
+		// X11 and Wayland report motion with KeyDown=false. Motion is
+		// nevertheless an SGR mouse event ending in M; m denotes a button
+		// release. Wayland also keeps the held button in ButtonState, so
+		// preserve it for drag events.
+		switch e.ButtonState {
+		case vtinput.FromLeft1stButtonPressed:
+			cb = 0
+		case vtinput.FromLeft2ndButtonPressed:
+			cb = 1
+		case vtinput.RightmostButtonPressed:
+			cb = 2
+		default:
+			cb = 3 // Motion with no button pressed
+		}
+		cb += 32
 	} else {
 		if !e.KeyDown {
 			cb = 3 // Release
@@ -55,10 +72,6 @@ func TranslateMouseInput(e *vtinput.InputEvent) string {
 				cb = 3
 				isRelease = true
 			}
-		}
-
-		if (e.MouseEventFlags & vtinput.MouseMoved) != 0 {
-			cb += 32
 		}
 	}
 

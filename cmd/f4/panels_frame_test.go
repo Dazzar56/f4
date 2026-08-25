@@ -4685,6 +4685,22 @@ func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
 	if !strings.Contains(pty.String(), expected) {
 		t.Errorf("PTY did not receive expected mouse sequence. Got: %q, want to contain: %q", pty.String(), expected)
 	}
+
+	// X11/Wayland report a hover move with KeyDown=false and no button.
+	// It must remain a motion event (final byte M), not a release (m).
+	move := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          12,
+		MouseY:          11,
+		MouseEventFlags: vtinput.MouseMoved,
+	}
+	if !pf.ProcessMouse(move) {
+		t.Fatal("Mouse move should be handled by PanelsFrame when panels are hidden")
+	}
+	moveExpected := "\x1b[<35;13;12M"
+	if !strings.Contains(pty.String(), moveExpected) {
+		t.Errorf("PTY did not receive expected mouse move sequence. Got: %q, want to contain: %q", pty.String(), moveExpected)
+	}
 }
 func TestPanelsFrame_NoCtrlOInterception_InAltScreen(t *testing.T) {
 	pf := setupMockPanelsFrame(t)
