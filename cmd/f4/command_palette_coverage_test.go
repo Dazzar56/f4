@@ -200,6 +200,9 @@ var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
 	"cmd/f4/viewer_view.go:(*ViewerView).showCodepageDialog#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered viewer codepage action opens the runtime codepage list",
 	},
+	"cmd/f4/quick_view_panel.go:(*QuickViewPanel).showCodepageDialog#1": {
+		class: paletteAuditDynamicAction, rationale: "the focused Quick View codepage action opens the runtime codepage list",
+	},
 }
 
 func TestCommandPaletteResolvesEveryActionGeneratedMenuLeafByID(t *testing.T) {

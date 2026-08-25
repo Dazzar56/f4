@@ -129,12 +129,52 @@ func EventToFarString(e *vtinput.InputEvent) string {
 	return sb.String()
 }
 
+// vkSpelledHotkeys lists the punctuation keys that configurable hotkeys name
+// after their virtual-key code ("VK_DC" for backslash) rather than after the
+// character they type. It is the same set keyTokenDisplayNames renders back
+// into punctuation for the UI, and the set DefaultKeys already uses:
+// CtrlVK_DC (Panel.GoRoot), CtrlShiftVK_DC (Panel.Bookmarks), CtrlVK_DB and
+// CtrlVK_DD (bracket navigation).
+//
+// EventToFarString names a key after e.Char whenever the backend fills that
+// field in, and for these keys the character depends on Shift and on the
+// active layout. Under the kitty keyboard protocol, which f4 turns on with
+// its alternate-key reporting flag, Ctrl+\ arrives as VK_OEM_5 with Char '\'
+// and Ctrl+Shift+\ as the same VK_OEM_5 with Char '|', so the two produced
+// "Ctrl\" and "CtrlShift|" and missed every VK_DC binding. The far2l, Win32
+// and legacy-tty backends send no Char with Ctrl held and did match. Naming
+// these keys after the virtual key gives one spelling on every backend and
+// every layout.
+var vkSpelledHotkeys = map[uint16]bool{
+	vtinput.VK_OEM_1:      true, // ;
+	vtinput.VK_OEM_PLUS:   true, // =
+	vtinput.VK_OEM_COMMA:  true, // ,
+	vtinput.VK_OEM_MINUS:  true, // -
+	vtinput.VK_OEM_PERIOD: true, // .
+	vtinput.VK_OEM_2:      true, // /
+	vtinput.VK_OEM_3:      true, // `
+	vtinput.VK_OEM_4:      true, // [
+	vtinput.VK_OEM_5:      true, // \
+	vtinput.VK_OEM_6:      true, // ]
+	vtinput.VK_OEM_7:      true, // '
+	vtinput.VK_OEM_102:    true, // \ on 102-key keyboards
+}
+
 // EventToHotkeyString preserves an otherwise normalized Right Ctrl modifier
-// for configurable hotkeys. Macros intentionally keep treating Left Ctrl and
-// Right Ctrl as the same key, while actions such as AI.TogglePanel may be
-// rebound or explicitly unbound on the RCtrl spelling.
+// for configurable hotkeys, and spells the punctuation keys in
+// vkSpelledHotkeys after their virtual key. Macros intentionally keep
+// treating Left Ctrl and Right Ctrl as the same key and keep naming keys the
+// way Far does, while actions such as AI.TogglePanel may be rebound or
+// explicitly unbound on the RCtrl spelling.
 func EventToHotkeyString(e *vtinput.InputEvent) string {
 	key := EventToFarString(e)
+	if vkSpelledHotkeys[e.VirtualKeyCode] && e.Char != 0 {
+		// Re-run the naming without the character so the modifiers,
+		// and only the modifiers, keep coming from one place.
+		withoutChar := *e
+		withoutChar.Char = 0
+		key = EventToFarString(&withoutChar)
+	}
 	mods := e.ControlKeyState
 	if mods.Contains(vtinput.RightCtrlPressed) && !mods.Contains(vtinput.LeftCtrlPressed) && strings.HasPrefix(key, "Ctrl") {
 		return "RCtrl" + key[len("Ctrl"):]
@@ -142,15 +182,50 @@ func EventToHotkeyString(e *vtinput.InputEvent) string {
 	return key
 }
 
-// configuredHotkeyAction gives an explicit RCtrl binding precedence while
-// preserving the historical behavior that a plain Ctrl binding also responds
-// to the physical Right Ctrl key when no RCtrl-specific binding exists.
+// configuredHotkeyAction gives explicit user bindings precedence while
+// preserving built-in Right Ctrl shortcuts. In particular, a user override of
+// CtrlA must be able to replace the built-in RCtrlA AI shortcut without also
+// requiring a duplicate RCtrlA entry.
 func configuredHotkeyAction(hm *HotkeyManager, area, key string) string {
-	action := hm.GetAction(area, key)
-	if action == "" && strings.HasPrefix(key, "RCtrl") {
-		return hm.GetAction(area, "Ctrl"+strings.TrimPrefix(key, "RCtrl"))
+	if hm == nil {
+		return ""
 	}
-	return action
+	action := hm.GetAction(area, key)
+	if !strings.HasPrefix(key, "RCtrl") {
+		return action
+	}
+
+	plainKey := "Ctrl" + strings.TrimPrefix(key, "RCtrl")
+	if hm.hasExplicitBinding(area, key) {
+		return action
+	}
+	if hm.hasExplicitBinding(area, plainKey) {
+		if plainAction := hm.GetAction(area, plainKey); plainAction != "" {
+			return plainAction
+		}
+	}
+	if action != "" {
+		return action
+	}
+	return hm.GetAction(area, plainKey)
+}
+
+// configurableHotkeyOwnsPanelBookmark lets an explicit configurable binding
+// take the place of far2l's built-in Right Ctrl/Ctrl+Alt bookmark shortcuts.
+// Unmodified defaults keep their historical bookmark behavior, while a user
+// binding on either Ctrl spelling is honored without requiring both spellings.
+func configurableHotkeyOwnsPanelBookmark(hm *HotkeyManager, area string, e *vtinput.InputEvent) bool {
+	if hm == nil || e == nil || !isPanelBookmarkHotkey(e) {
+		return false
+	}
+	key := EventToHotkeyString(e)
+	if hm.hasExplicitBinding(area, key) {
+		return true
+	}
+	if strings.HasPrefix(key, "RCtrl") {
+		return hm.hasExplicitBinding(area, "Ctrl"+strings.TrimPrefix(key, "RCtrl"))
+	}
+	return false
 }
 
 func ParseFarKey(s string) *vtinput.InputEvent {
@@ -296,8 +371,10 @@ func (m *MacroManager) GetCurrentArea() string {
 }
 
 // isPanelBookmarkHotkey identifies far2l-compatible folder bookmark keys.
-// They must reach PanelsFrame before macro and configurable hotkey handling,
-// because EventToFarString intentionally normalizes left and right Ctrl.
+// Built-in bookmark combinations reach PanelsFrame before macro and
+// configurable hotkey handling, because EventToFarString intentionally
+// normalizes left and right Ctrl. Explicit configurable bindings are allowed
+// to reclaim the combination before this handoff.
 func isPanelBookmarkHotkey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
@@ -416,7 +493,9 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 		// must not consume keys before PanelsFrame can update its query.
 		return false
 	}
-	if currentArea == "Shell" && (isPanelBookmarkHotkey(e) || isPanelFastFindToggleKey(e)) {
+	if currentArea == "Shell" &&
+		((isPanelBookmarkHotkey(e) && !configurableHotkeyOwnsPanelBookmark(GlobalHotkeysMgr, currentArea, e)) ||
+			isPanelFastFindToggleKey(e)) {
 		return false
 	}
 

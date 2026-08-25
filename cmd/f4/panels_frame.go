@@ -17,6 +17,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -102,6 +103,9 @@ func (pf *PanelsFrame) addCommandHistory(cmd string) {
 	}
 
 	rich := hp.LoadRichHistory("cmdline")
+	if len(rich) == 0 {
+		rich = recordsFromNames(pf.cmdLine.Edit.History)
+	}
 	var newRich []HistoryRecord
 	curDir := ""
 	if fsp := pf.getActivePanel(); fsp != nil {
@@ -110,7 +114,7 @@ func (pf *PanelsFrame) addCommandHistory(cmd string) {
 
 	newRich = append(newRich, HistoryRecord{
 		Name:      cmd,
-		Extra:     curDir,
+		Dir:       curDir,
 		Timestamp: time.Now(),
 	})
 
@@ -966,6 +970,85 @@ func (pf *PanelsFrame) takeLocalPTY() PtyBackend {
 // unrelated PTY tests with ENXIO ("device not configured").
 var spawnLocalShellPTY = true
 
+// newLocalPTY is a seam for the session lifecycle tests. Production always
+// uses the platform PTY implementation; tests can provide a controllable
+// backend without allocating a real terminal.
+var newLocalPTY = func() (PtyBackend, error) {
+	return NewPTY()
+}
+
+// resetLocalShell tears down the current local shell and starts a fresh one.
+// The shell itself is the persistent session used by the command line; reset
+// is deliberately explicit so a plain `exit` can clear all shell-local state
+// without asking the parent process that launched f4 to do anything.
+func (pf *PanelsFrame) resetLocalShell() bool {
+	pf.processEnvironmentWriteMu.Lock()
+	pty := pf.localPTY()
+	if pty == nil {
+		pf.processEnvironmentWriteMu.Unlock()
+		return false
+	}
+
+	pf.ptyMutex.Lock()
+	if pf.pty != pty {
+		pf.ptyMutex.Unlock()
+		pf.processEnvironmentWriteMu.Unlock()
+		return false
+	}
+	pf.pty = nil
+	pf.ptyMutex.Unlock()
+	pf.processEnvironmentWriteMu.Unlock()
+
+	// An environment update may have been serialized for the old shell. Put it
+	// back in the pending queue so the new shell receives it, and release the
+	// old transport's temporary files immediately instead of waiting for the
+	// acknowledgement timeout.
+	pf.processEnvironmentMu.Lock()
+	inFlight := pf.processEnvironmentInFlight
+	pf.processEnvironmentInFlight = nil
+	if inFlight != nil {
+		if inFlight.timeout != nil {
+			inFlight.timeout.Stop()
+		}
+		pf.pendingProcessEnvironment = coalesceProcessEnvironmentChanges(append(
+			cloneProcessEnvironmentChanges(inFlight.changes),
+			pf.pendingProcessEnvironment...,
+		))
+		if inFlight.generation > pf.pendingProcessEnvironmentGeneration {
+			pf.pendingProcessEnvironmentGeneration = inFlight.generation
+		}
+	}
+	pf.processEnvironmentBusy = false
+	pf.processEnvironmentDeliveryFailed = false
+	pf.processEnvironmentOutputTail = nil
+	pf.deferredProcessEnvironmentInput = nil
+	pf.processEnvironmentMu.Unlock()
+	if inFlight != nil && inFlight.cleanup != nil {
+		inFlight.cleanup()
+	}
+	if inFlight != nil && inFlight.muted && pf.termView != nil {
+		pf.termView.SetMuted(false)
+	}
+
+	_ = pty.Close()
+
+	pf.executing = false
+	pf.shellPromptReady = false
+	pf.ignoreNextPrompt = false
+	pf.returnToPanels = false
+	pf.workspaceCommandTitle = ""
+	pf.lastPtyPath = ""
+	pf.lastPtyVFS = nil
+	if pf.termView != nil {
+		pf.termView.SetMuted(false)
+		pf.termView.pty = nil
+		pf.termView.ResetBuffer(pf.termView.Width, pf.termView.Height)
+	}
+	pf.parser = NewAnsiParser(pf.termView, nil)
+	pf.initPTY()
+	return true
+}
+
 func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
@@ -989,7 +1072,7 @@ func (pf *PanelsFrame) initPTY() {
 
 		if p == nil {
 			var err error
-			p, err = NewPTY()
+			p, err = newLocalPTY()
 			if err != nil {
 				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
 				logPTYDiagnostics()
@@ -1921,7 +2004,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Terminals that cannot tell the two Ctrls apart report LeftCtrlPressed
 	// for either one — that is what the Ctrl+Alt alias (far2l offers the
 	// same pair) is for.
-	if e.KeyDown {
+	if e.KeyDown && !configurableHotkeyOwnsPanelBookmark(GlobalHotkeysMgr, "Shell", e) {
 		rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
 		lctrl := (e.ControlKeyState & vtinput.LeftCtrlPressed) != 0
 		isBookmarkGoto := (rctrl && !shift && !alt) || ((lctrl || rctrl) && alt && !shift)
@@ -2096,6 +2179,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			isDirChange := false
 			targetPath := ""
 
+			if lowerCmd == "exit f4" {
+				pf.cmdLine.Clear()
+				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
+					pf.setCommandLineFocus(false)
+				}
+				vtui.FrameManager.EmitCommand(vtui.CmQuit, nil)
+				return true
+			}
+
 			// Intercept drive letter changes (e.g., "C:", "D:\") on Windows
 			if runtime.GOOS == "windows" && len(trimmedCmd) >= 2 && len(trimmedCmd) <= 3 && trimmedCmd[1] == ':' {
 				if lowerCmd[0] >= 'a' && lowerCmd[0] <= 'z' {
@@ -2133,6 +2225,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
 					pf.setCommandLineFocus(false)
 				}
+				pf.resetLocalShell()
 				return true
 			}
 
@@ -2219,10 +2312,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			if activePty != nil {
 				var path string
 				isWindowsShell := runtime.GOOS == "windows"
+				var localShellVFS vfs.VFS
 				var integration vfs.PtyShellIntegration
 				if fsp, ok := pf.panels[pf.activeIdx].(*FileSystemPanel); ok {
-					if _, isOS := fsp.vfs.(*vfs.OSVFS); isOS {
+					if isLocalOSVFS(fsp.vfs) {
 						path = fsp.vfs.GetPath()
+						localShellVFS = fsp.vfs
 					} else if vfsHasRemotePTY(fsp.vfs) {
 						path = fsp.vfs.GetPath()
 						isWindowsShell = false
@@ -2246,6 +2341,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 				if isWindowsShell {
 					cmd = resolveWindowsCommand(cmd)
+				}
+
+				// The local Unix PTY is a persistent shell session. Its current
+				// directory must not be reset to the panel path before every
+				// command: doing that discards a `cd` performed by an alias. The
+				// panel still synchronizes the shell when the panel itself moves;
+				// this one-shot check only covers an Enter arriving before the
+				// next frame refresh.
+				if localShellVFS != nil && !isWindowsShell {
+					if path != pf.lastPtyPath || !sameVFSInstance(localShellVFS, pf.lastPtyVFS) {
+						if pf.syncPTYDirectory(path, localShellVFS) {
+							pf.lastPtyPath = path
+							pf.lastPtyVFS = localShellVFS
+						}
+					}
+					path = ""
 				}
 
 				if integration != nil {
@@ -3294,6 +3405,25 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 	f2 := Msg("KeyBar.F2")
 	overrideF2 := false
 	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
+		if q, ok := pf.altPanels[pf.activeIdx].(*QuickViewPanel); ok && q != nil && q.IsFocused() {
+			nextCP := vfs.DisplayCodepageName(vfs.GetNextFastSwitchCodepage(q.cacheCodepage))
+			return &vtui.KeySet{
+				Normal: vtui.KeyBarLabels{
+					Msg("KeyBar.ViewerF1"),
+					func() string {
+						if q.wrap {
+							return Msg("KeyBar.ViewerF2")
+						}
+						return Msg("KeyBar.F2Wrap")
+					}(),
+					Msg("KeyBar.ViewerF3"), Msg("KeyBar.ViewerF4"),
+					"", "", Msg("KeyBar.ViewerF7"), nextCP, "", Msg("KeyBar.ViewerF10"),
+				},
+				Shift: vtui.KeyBarLabels{"", "", "", "", "", "", Msg("KeyBar.ViewerF7"), Msg("Codepage.Title"), "", "", "", ""},
+			}
+		}
+	}
+	if pf.showPanels && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 		if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "quick_view" {
 			if q, ok := a.(*QuickViewPanel); ok {
 				if q.wrap {
@@ -4248,7 +4378,47 @@ func (pf *PanelsFrame) showPluginMenu() {
 }
 
 func (pf *PanelsFrame) showDriveMenu(panelIdx int) {
-	pf.showDriveMenuAt(panelIdx, 0)
+	pf.showDriveMenuAt(panelIdx, pf.driveMenuDefaultPos(panelIdx))
+}
+
+// driveMenuDefaultPos returns the drive-menu row the cursor should land on
+// when the menu opens. far2l positions the cursor on the drive the active
+// panel currently shows; for f4 that means: if the panel is on a real
+// filesystem drive that appears in the menu (e.g. a Windows drive letter),
+// land on that drive, otherwise keep the historic default — the "Other panel"
+// entry at row 0.
+func (pf *PanelsFrame) driveMenuDefaultPos(panelIdx int) int {
+	fsp, ok := pf.panels[panelIdx].(*FileSystemPanel)
+	if !ok {
+		return 0
+	}
+	osVFS, ok := fsp.vfs.(*vfs.OSVFS)
+	if !ok {
+		return 0
+	}
+	cur := osVFS.GetPath()
+	for i, drv := range getPlatformDrives() {
+		if driveMatchesPath(drv, cur) {
+			// platform drives begin at menu row 1 (row 0 is "Other panel")
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// driveMatchesPath reports whether the platform drive entry drv is the one
+// the path cur currently belongs to. Only the Windows drive-letter case is
+// matched (the menu entries there carry letters, as the user expects); in
+// posix/UNIX mode the default "Other panel" row stays selected.
+func driveMatchesPath(drv DriveEntry, cur string) bool {
+	if runtime.GOOS != "windows" || hostmode.Posix() {
+		return false
+	}
+	vol := filepath.VolumeName(cur)
+	if vol == "" {
+		return false
+	}
+	return strings.HasPrefix(strings.ToUpper(drv.Name), strings.ToUpper(vol))
 }
 
 // showDriveMenuAt opens the drive menu with the cursor on selectPos. The

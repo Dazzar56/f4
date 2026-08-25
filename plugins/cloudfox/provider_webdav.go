@@ -2077,8 +2077,9 @@ func (b *webDAVBackend) Create(ctx context.Context, location string) (io.WriteCl
 		// and leave the descriptor temporarily pinned on Windows.
 		var body io.Reader = io.NewSectionReader(file, 0, size)
 		reporter, hasReporter := uploadCtx.Value(vfs.ReporterKey).(vfs.TaskReporter)
+		progress, _ := uploadCtx.Value(providerUploadProgressContextKey{}).(*providerUploadProgress)
 		if hasReporter {
-			body = &providerProgressReader{r: body, ctx: uploadCtx, reporter: reporter, name: b.Base(location), total: size}
+			body = &providerProgressReader{r: body, ctx: uploadCtx, reporter: reporter, progress: progress, name: b.Base(location), total: size}
 		}
 		req, err := http.NewRequestWithContext(uploadCtx, http.MethodPut, u.String(), body)
 		if err != nil {
@@ -2093,7 +2094,7 @@ func (b *webDAVBackend) Create(ctx context.Context, location string) (io.WriteCl
 			if !hasReporter {
 				return io.NopCloser(replay), nil
 			}
-			replay = &providerProgressReader{r: replay, ctx: uploadCtx, reporter: reporter, name: b.Base(location), total: size}
+			replay = &providerProgressReader{r: replay, ctx: uploadCtx, reporter: reporter, progress: progress, name: b.Base(location), total: size}
 			return io.NopCloser(replay), nil
 		}
 		resp, err := b.client.Do(req)

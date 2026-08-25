@@ -58,9 +58,6 @@ func hotkeyDialogSizeForScreen(screenWidth, screenHeight int) (int, int) {
 	if height < 10 {
 		height = 10
 	}
-	if height > 48 {
-		height = 48
-	}
 	return width, height
 }
 
@@ -122,15 +119,22 @@ func hotkeyTableColumns(rows []hotkeyRow, dialogWidth int) []vtui.TableColumn {
 	return columns
 }
 
-func selectedHotkeyRow(table *vtui.Table, rows []hotkeyRow) (hotkeyRow, bool) {
+func selectedHotkeyRowAt(table *vtui.Table, rows []hotkeyRow, displayPos int) (hotkeyRow, bool) {
 	if table == nil {
 		return hotkeyRow{}, false
 	}
-	idx := table.RowAt(table.SelectPos)
+	idx := table.RowAt(displayPos)
 	if idx < 0 || idx >= len(rows) {
 		return hotkeyRow{}, false
 	}
 	return rows[idx], true
+}
+
+func selectedHotkeyRow(table *vtui.Table, rows []hotkeyRow) (hotkeyRow, bool) {
+	if table == nil {
+		return hotkeyRow{}, false
+	}
+	return selectedHotkeyRowAt(table, rows, table.SelectPos)
 }
 
 func actionHotkeyConfig(pf *PanelsFrame) {
@@ -297,7 +301,12 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 	btnCancel.OnClick = func() { dlg.Close() }
 
 	table.OnAction = func(idx int) {
-		btnAssign.OnClick()
+		// idx is the table's display position. Use it directly: the table may
+		// be sorted or QuickSearch-filtered, and SelectPos can be observed
+		// after the dispatcher's state has moved on.
+		if row, ok := selectedHotkeyRowAt(table, hkRows, idx); ok && row.Editable {
+			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, refresh)
+		}
 	}
 
 	vtui.FrameManager.Push(dlg)

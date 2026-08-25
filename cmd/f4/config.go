@@ -78,6 +78,20 @@ func bytesReader(p string) io.Reader {
 	return bytes.NewReader(b)
 }
 
+func parseHistoryShowTimes(value string) [historyTypeCount]int {
+	result := [historyTypeCount]int{historyShowDateTime, historyShowDateTime, historyShowDateTime}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t'
+	})
+	for i := 0; i < len(parts) && i < len(result); i++ {
+		mode, err := strconv.Atoi(parts[i])
+		if err == nil && mode >= historyShowDateTime && mode <= historyShowNone {
+			result[i] = mode
+		}
+	}
+	return result
+}
+
 func resetConfigDirForTest() {
 	configDirOnce = sync.Once{}
 	cachedF4ConfigDir = ""
@@ -214,12 +228,16 @@ type F4Config struct {
 	WheelTableUp    int
 	WheelTableDown  int
 	// Path hints (autocomplete in path inputs and the command line).
-	PathHintTimeout        int  // seconds for a VFS ReadDir behind a hint
-	PathHintFullPath       bool // show full paths in the hint, false = final element only
-	PathHintSource         int  // 0 = active panel, 1 = passive panel, 2 = both
-	PathHintMaxVisible     int  // visible rows cap in the hint list
-	PathHintPerCategory    bool // the cap applies per category (active/passive/history)
-	DialogAutoComplete     bool // drop-down while typing in fields that have history
+	PathHintTimeout     int  // seconds for a VFS ReadDir behind a hint
+	PathHintFullPath    bool // show full paths in the hint, false = final element only
+	PathHintSource      int  // 0 = active panel, 1 = passive panel, 2 = both
+	PathHintMaxVisible  int  // visible rows cap in the hint list
+	PathHintPerCategory bool // the cap applies per category (active/passive/history)
+	DialogAutoComplete  bool // drop-down while typing in fields that have history
+	// HistoryShowTimes controls the timestamp presentation in command, folder,
+	// and viewer/editor history dialogs: date+time, date, or hidden.
+	HistoryShowTimes       [historyTypeCount]int
+	HistoryDirsPrefixLen   int // command-history directory prefix width
 	SlideShowDelay         int
 	ImageX11Overlay        bool
 	VideoPauseOnFocusLoss  bool
@@ -361,6 +379,8 @@ var AppConfig = F4Config{
 	PathHintMaxVisible:       5,
 	PathHintPerCategory:      true,
 	DialogAutoComplete:       true,
+	HistoryShowTimes:         [historyTypeCount]int{historyShowDateTime, historyShowDateTime, historyShowDateTime},
+	HistoryDirsPrefixLen:     24,
 	SlideShowDelay:           defaultSlideShowDelay,
 	ImageX11Overlay:          true,
 	TTYXKeys:                 true,
@@ -630,6 +650,18 @@ func LoadConfig() {
 	}
 	AppConfig.PathHintPerCategory = ini.GetString("PathHints", "PerCategory", "1") == "1"
 	AppConfig.DialogAutoComplete = ini.GetString("PathHints", "DialogAutoComplete", "1") == "1"
+	AppConfig.HistoryShowTimes = parseHistoryShowTimes(ini.GetString("History", "ShowTimes", "0,0,0"))
+	if configured := ini.GetString("History", "HistoryShowTimes", ""); configured != "" {
+		AppConfig.HistoryShowTimes = parseHistoryShowTimes(configured)
+	}
+	AppConfig.HistoryDirsPrefixLen = 24
+	fmt.Sscanf(ini.GetString("History", "DirsPrefixLen", "24"), "%d", &AppConfig.HistoryDirsPrefixLen)
+	if configured := ini.GetString("History", "HistoryDirsPrefixLen", ""); configured != "" {
+		fmt.Sscanf(configured, "%d", &AppConfig.HistoryDirsPrefixLen)
+	}
+	if AppConfig.HistoryDirsPrefixLen < 4 {
+		AppConfig.HistoryDirsPrefixLen = 4
+	}
 	AppConfig.SlideShowDelay = defaultSlideShowDelay
 	fmt.Sscanf(ini.GetString("Images", "SlideShowDelay", "5"), "%d", &AppConfig.SlideShowDelay)
 	if AppConfig.SlideShowDelay <= 0 {
@@ -838,6 +870,10 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "MaxVisible = %d\n", AppConfig.PathHintMaxVisible)
 	fmt.Fprintf(&sb, "PerCategory = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.PathHintPerCategory])
 	fmt.Fprintf(&sb, "DialogAutoComplete = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.DialogAutoComplete])
+
+	sb.WriteString("\n[History]\n")
+	fmt.Fprintf(&sb, "ShowTimes = %d,%d,%d\n", AppConfig.HistoryShowTimes[0], AppConfig.HistoryShowTimes[1], AppConfig.HistoryShowTimes[2])
+	fmt.Fprintf(&sb, "DirsPrefixLen = %d\n", AppConfig.HistoryDirsPrefixLen)
 	sb.WriteString("\n[Images]\n")
 	fmt.Fprintf(&sb, "SlideShowDelay = %d\n", AppConfig.SlideShowDelay)
 	fmt.Fprintf(&sb, "ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout)

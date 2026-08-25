@@ -322,6 +322,7 @@ func (s *userMenuState) saveRoot() bool {
 
 func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSelect int) {
 	menu := vtui.NewVMenu(" " + title + " ")
+	markUserMenu(menu)
 
 	// Map F1..F24 hotkeys to item indices for fast lookup in OnKeyDown.
 	// vtui already handles single-char (&-prefixed) hotkeys natively.

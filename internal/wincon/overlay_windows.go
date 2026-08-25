@@ -21,14 +21,25 @@ package wincon
 // conhost.exe, a different process, so parenting to it attaches the two
 // threads' input queues. That is how every overlay onto a console works and
 // it is what makes the picture behave; the price is that a wedged conhost can
-// wedge the thread that pumps the overlay. It is a thread of its own for
-// exactly that reason, and nothing the rest of f4 does waits on it.
+// wedge the thread that pumps the overlay.
+//
+// **Hence the invariant of this file: no caller ever waits on the pump
+// thread.** SetWindowPos, ShowWindow and SetWindowRgn on a window owned by
+// another thread are synchronous — they send messages to the owner and wait —
+// so calling one of them from the thread that is drawing a frame puts that
+// frame behind conhost, and conhost is what draws f4's own text and delivers
+// its keys. Issue #805 is what that looks like from the outside: the picture
+// never arrives, the whole interface stops, and Esc is answered when Windows
+// breaks the wait, minutes later. So the calls below only write down what
+// they want (overlay_state.go) and post one message; every user32 and gdi32
+// call that touches the window happens on the pump thread and nowhere else.
 
 import (
 	"fmt"
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -87,6 +98,7 @@ const (
 	wmDestroy     = 0x0002
 	wmApp         = 0x8000
 	wmOverlayQuit = wmApp + 1
+	wmOverlaySync = wmApp + 2
 
 	htTransparent = ^uintptr(0) // HTTRANSPARENT is -1
 
@@ -96,6 +108,15 @@ const (
 	colorOnColor    = 3
 	biRGB           = 0
 	stdOutputHandle = ^uintptr(10) // STD_OUTPUT_HANDLE is -11
+)
+
+const (
+	// overlayReadyTimeout bounds the wait for the window to be created.
+	// Creating it is the call that attaches the input queues, so it is the
+	// one place at startup where a wedged conhost could hold f4 up. A
+	// picture is not worth a hang, and going without the overlay is a
+	// perfectly good outcome.
+	overlayReadyTimeout = 5 * time.Second
 )
 
 type rect struct{ Left, Top, Right, Bottom int32 }
@@ -221,16 +242,19 @@ func GridSize() (int, int, bool) {
 
 // Overlay is one window over the console.
 type Overlay struct {
-	mu      sync.Mutex
-	parent  uintptr
-	hwnd    uintptr
-	ready   chan error
-	rect    Rect
-	pix     []byte
-	pixW    int
-	pixH    int
-	visible bool
-	closed  bool
+	// st is what the window should look like. Callers write it, the pump
+	// thread applies it; see the invariant at the top of the file.
+	st overlayState
+
+	// mu guards the handle and the frame buffer, both of which the pump
+	// thread reads while it paints.
+	mu     sync.Mutex
+	parent uintptr
+	hwnd   uintptr
+	ready  chan error
+	pix    []byte
+	pixW   int
+	pixH   int
 }
 
 var (
@@ -292,6 +316,15 @@ func wndProc(hwnd uintptr, message uint32, wparam, lparam uintptr) uintptr {
 			return 0
 		}
 
+	case wmOverlaySync:
+		regMu.Lock()
+		o := reg[hwnd]
+		regMu.Unlock()
+		if o != nil {
+			o.apply(hwnd)
+		}
+		return 0
+
 	case wmOverlayQuit:
 		procDestroyWindow.Call(hwnd)
 		return 0
@@ -305,6 +338,12 @@ func wndProc(hwnd uintptr, message uint32, wparam, lparam uintptr) uintptr {
 	}
 	r, _, _ := procDefWindowProcW.Call(hwnd, uintptr(message), wparam, lparam)
 	return r
+}
+
+func (s *overlayState) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
 }
 
 // New creates the overlay over the console window.
@@ -324,10 +363,19 @@ func New() (*Overlay, error) {
 	// one is parented across a process boundary, so a conhost that stops
 	// answering must not be able to stop anything else in f4.
 	go o.pump()
-	if err := <-o.ready; err != nil {
-		return nil, err
+	select {
+	case err := <-o.ready:
+		if err != nil {
+			return nil, err
+		}
+		return o, nil
+	case <-time.After(overlayReadyTimeout):
+		// The pump thread is stuck inside CreateWindowExW, the call
+		// that attaches the queues. Mark the overlay finished; the
+		// thread tidies up after itself if it ever comes back.
+		o.st.close()
+		return nil, fmt.Errorf("the console did not answer in %s", overlayReadyTimeout)
 	}
-	return o, nil
 }
 
 func (o *Overlay) pump() {
@@ -356,6 +404,16 @@ func (o *Overlay) pump() {
 	o.hwnd = hwnd
 	o.mu.Unlock()
 	o.ready <- nil
+
+	if o.st.isClosed() {
+		// New gave up waiting for this window. Nobody holds it, so it
+		// goes now rather than living on as a hole over the console.
+		regMu.Lock()
+		delete(reg, hwnd)
+		regMu.Unlock()
+		procDestroyWindow.Call(hwnd)
+		return
+	}
 
 	var m msg
 	for {
@@ -401,68 +459,72 @@ func (o *Overlay) paint(hwnd uintptr) {
 		diRGBColors, srcCopy)
 }
 
-// Place moves the overlay, in the console's client coordinates.
+// Place moves the overlay, in the console's client coordinates. It returns as
+// soon as the request has been written down: the window itself is moved on the
+// pump thread, because SetWindowPos on another thread's window waits for it.
 func (o *Overlay) Place(r Rect) error {
-	o.mu.Lock()
-	hwnd, closed := o.hwnd, o.closed
-	same := r == o.rect && o.visible
-	o.rect = r
-	o.mu.Unlock()
-	if closed || hwnd == 0 {
-		return fmt.Errorf("the overlay is closed")
-	}
 	if r.W <= 0 || r.H <= 0 {
 		o.Hide()
 		return nil
 	}
-	if same {
-		return nil
-	}
-	procSetWindowPos.Call(hwnd, 0,
-		uintptr(int32(r.X)), uintptr(int32(r.Y)),
-		uintptr(int32(r.W)), uintptr(int32(r.H)),
-		swpNoActivate|swpNoZOrder|swpShowWindow)
-	o.mu.Lock()
-	o.visible = true
-	o.mu.Unlock()
-	return nil
-}
-
-// Draw hands over the pixels, RGBA, top row first, and asks for a repaint.
-func (o *Overlay) Draw(pix []byte, w, h, stride int) error {
-	if w <= 0 || h <= 0 || stride < w*4 || len(pix) < stride*h {
-		return fmt.Errorf("a %dx%d picture needs %d bytes at stride %d, got %d",
-			w, h, stride*h, stride, len(pix))
-	}
-	buf := make([]byte, w*h*4)
-	blitInto(buf, w, h, pix, w, h, stride, 0, 0)
-
-	o.mu.Lock()
-	o.pix, o.pixW, o.pixH = buf, w, h
-	hwnd := o.hwnd
-	o.mu.Unlock()
-	if hwnd == 0 {
+	post, ok := o.st.place(r)
+	if !ok {
 		return fmt.Errorf("the overlay is closed")
 	}
-	procInvalidateRect.Call(hwnd, 0, 0)
+	if post {
+		o.post()
+	}
 	return nil
 }
 
-// SetBounds limits the overlay to a set of rectangles given relative to its
-// own corner, so the text between them stays the console's. This is what lets
-// a grid of thumbnails be one window with its captions showing through.
-func (o *Overlay) SetBounds(rects []Rect) bool {
+// post asks the pump thread to make the window agree with the state. It never
+// waits: PostMessageW leaves the message on the queue and returns, and that is
+// the whole difference between this and issue #805.
+func (o *Overlay) post() {
 	o.mu.Lock()
 	hwnd := o.hwnd
 	o.mu.Unlock()
 	if hwnd == 0 {
-		return false
+		o.st.wakeFailed()
+		return
 	}
+	if r, _, _ := procPostMessageW.Call(hwnd, wmOverlaySync, 0, 0); r == 0 {
+		o.st.wakeFailed()
+	}
+}
+
+// apply is the other half, on the pump thread: every call that moves, shows,
+// hides or reshapes the window is here and nowhere else.
+func (o *Overlay) apply(hwnd uintptr) {
+	ops := o.st.take()
+	if ops.Empty() {
+		return
+	}
+	if ops.Hide {
+		procShowWindow.Call(hwnd, swHide)
+		return
+	}
+	if ops.SetRegion {
+		applyRegion(hwnd, ops.Region)
+	}
+	if ops.Move {
+		procSetWindowPos.Call(hwnd, 0,
+			uintptr(int32(ops.Rect.X)), uintptr(int32(ops.Rect.Y)),
+			uintptr(int32(ops.Rect.W)), uintptr(int32(ops.Rect.H)),
+			swpNoActivate|swpNoZOrder|swpShowWindow)
+	}
+	if ops.Invalidate {
+		procInvalidateRect.Call(hwnd, 0, 0)
+	}
+}
+
+// applyRegion builds the region and hands it over. On the pump thread, so the
+// window is given an object made on the thread that owns the window.
+func applyRegion(hwnd uintptr, rects []Rect) {
 	if len(rects) == 0 {
 		procSetWindowRgn.Call(hwnd, 0, 1)
-		return true
+		return
 	}
-
 	var combined uintptr
 	for _, r := range rects {
 		if r.W <= 0 || r.H <= 0 {
@@ -482,34 +544,64 @@ func (o *Overlay) SetBounds(rects []Rect) bool {
 		procDeleteObject.Call(part)
 	}
 	if combined == 0 {
-		return false
+		return
 	}
 	// The window owns the region once it is set, so it is not deleted here.
-	r, _, _ := procSetWindowRgn.Call(hwnd, combined, 1)
-	if r == 0 {
+	if r, _, _ := procSetWindowRgn.Call(hwnd, combined, 1); r == 0 {
 		procDeleteObject.Call(combined)
+	}
+}
+
+// Draw hands over the pixels, RGBA, top row first, and asks for a repaint.
+func (o *Overlay) Draw(pix []byte, w, h, stride int) error {
+	if w <= 0 || h <= 0 || stride < w*4 || len(pix) < stride*h {
+		return fmt.Errorf("a %dx%d picture needs %d bytes at stride %d, got %d",
+			w, h, stride*h, stride, len(pix))
+	}
+	buf := make([]byte, w*h*4)
+	blitInto(buf, w, h, pix, w, h, stride, 0, 0)
+
+	o.mu.Lock()
+	o.pix, o.pixW, o.pixH = buf, w, h
+	hwnd := o.hwnd
+	o.mu.Unlock()
+	if hwnd == 0 {
+		return fmt.Errorf("the overlay is closed")
+	}
+	if o.st.touchPixels() {
+		o.post()
+	}
+	return nil
+}
+
+// SetBounds limits the overlay to a set of rectangles given relative to its
+// own corner, so the text between them stays the console's. This is what lets
+// a grid of thumbnails be one window with its captions showing through.
+func (o *Overlay) SetBounds(rects []Rect) bool {
+	o.mu.Lock()
+	hwnd := o.hwnd
+	o.mu.Unlock()
+	if hwnd == 0 {
 		return false
+	}
+	if o.st.setRegion(rects) {
+		o.post()
 	}
 	return true
 }
 
 // Hide takes the picture off the screen without giving up the window.
 func (o *Overlay) Hide() {
-	o.mu.Lock()
-	hwnd, visible := o.hwnd, o.visible
-	o.visible = false
-	o.rect = Rect{}
-	o.mu.Unlock()
-	if hwnd != 0 && visible {
-		procShowWindow.Call(hwnd, swHide)
+	if o.st.hide() {
+		o.post()
 	}
 }
 
-// Visible reports whether the picture is on the screen.
+// Visible reports what the picture was last asked to be rather than what is on
+// the screen this instant: the caller uses it to decide whether to redraw, and
+// the pump thread may be a message behind.
 func (o *Overlay) Visible() bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return o.visible
+	return o.st.visible()
 }
 
 // ClientSize is the console window's client area in pixels.
@@ -527,16 +619,16 @@ func (o *Overlay) ClientSize() (int, int, bool) {
 
 // Close destroys the window and stops its thread.
 func (o *Overlay) Close() {
-	o.mu.Lock()
-	hwnd := o.hwnd
-	if o.closed || hwnd == 0 {
-		o.closed = true
-		o.mu.Unlock()
+	if !o.st.close() {
 		return
 	}
-	o.closed = true
+	o.mu.Lock()
+	hwnd := o.hwnd
 	o.hwnd = 0
 	o.mu.Unlock()
+	if hwnd == 0 {
+		return
+	}
 	// Destroying a window has to happen on the thread that made it.
 	procPostMessageW.Call(hwnd, wmOverlayQuit, 0, 0)
 }

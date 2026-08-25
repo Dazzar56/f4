@@ -65,6 +65,13 @@ func mainMenuActionAvailable() bool {
 // F9 fallback. The palette executes it only after its own dialog has gone away,
 // so GetTopFrame refers to the screen the user was working in.
 func actionActivateMainMenu() bool {
+	return activateMainMenuAt(-1)
+}
+
+// activateMainMenuAt opens the active menu bar. A non-negative position is an
+// explicit top-level menu selected by a caller such as Shift+F10; -1 keeps the
+// ordinary F9/palette behavior.
+func activateMainMenuAt(requestedPos int) bool {
 	if !mainMenuActionAvailable() {
 		return false
 	}
@@ -76,14 +83,19 @@ func actionActivateMainMenu() bool {
 
 	menu.Active = true
 	if len(menu.Items) > 0 {
-		selectPos := menu.SelectPos
-		if panels, ok := top.(*PanelsFrame); ok {
-			// PanelsFrame owns F9 before vtui's fallback and always opens the
-			// fixed-side menu belonging to the active panel. Do not retain the
-			// previously visited menu when the command comes from the palette.
-			selectPos = 0
-			if panels.activeIdx == 1 {
-				selectPos = 4
+		selectPos := requestedPos
+		if selectPos < 0 {
+			selectPos = menu.SelectPos
+		}
+		if requestedPos < 0 {
+			if panels, ok := top.(*PanelsFrame); ok {
+				// PanelsFrame owns F9 before vtui's fallback and always opens the
+				// fixed-side menu belonging to the active panel. Do not retain the
+				// previously visited menu when the command comes from the palette.
+				selectPos = 0
+				if panels.activeIdx == 1 {
+					selectPos = 4
+				}
 				if selectPos >= len(menu.Items) {
 					selectPos = 0
 				}

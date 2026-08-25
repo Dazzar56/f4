@@ -44,14 +44,26 @@ func (m *mockPty) Reset() {
 	m.written = nil
 }
 func (m *mockPty) Read(b []byte) (int, error) {
-	for !m.closed {
+	for {
+		m.mu.Lock()
+		closed := m.closed
+		m.mu.Unlock()
+		if closed {
+			return 0, io.EOF
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return 0, io.EOF
 }
 func (m *mockPty) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.closed = true
 	return nil
+}
+func (m *mockPty) IsClosed() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.closed
 }
 func (m *mockPty) SetSize(cols, rows int)                {}
 func (m *mockPty) Wait() error                           { return nil }

@@ -186,6 +186,17 @@ the picture and the key bar, which would instead mean that
 placement gives it. The new `X11_GFX` line prints the rectangle drawn beside
 the rectangle asked for and settles it.
 
+**B2. Windows console: black rectangle and a frozen interface.** Issue #805,
+fixed. The console overlay had never been run on Windows, and the first report
+found the threading. `Place`, `Hide` and `SetBounds` made their window calls on
+the calling thread; on a window owned by another thread those calls wait for
+that thread, and the overlay's pump thread shares an input queue with conhost.
+`RenderExternal` runs with the screen locked, so f4 waited on conhost while
+conhost was what f4 needed to draw and to read keys. The window operations are
+now written into `wincon/overlay_state.go` and applied on the pump thread after
+one `PostMessageW`; see `WINCON.md` section 2 for the invariant and the rule
+that keeps it.
+
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
 see the entry in section 8.
@@ -260,6 +271,14 @@ median cut palette of 255 colours for the whole picture. Redefining registers
 between bands would lift that limit entirely, and f4's receiver already honours
 it — the two halves of the protocol are asymmetric until this is done. Note
 that this is the vtui repository, not f4.
+
+Konsole's sixel decoder is not compatible with that full-colour form: it keeps
+indexed pixels and mutates the shared palette when a later band redefines a
+register, recolouring bands that were already decoded. f4 therefore selects
+vtui's existing kitty transport for Konsole 22.04 and later, where the terminal
+supports the raw RGB/RGBA subset used by the image viewer. This leaves the
+full-colour sixel path unchanged for terminals that handle it correctly, and a
+valid `VTUI_GRAPHICS` override still takes precedence.
 
 **15. Nothing.** The device attributes answer used to be swallowed when a
 chunk ended on its final byte, which kept every client from ever asking for a

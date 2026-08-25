@@ -26,6 +26,18 @@ type mockCrashingHighlighter struct {
 
 const highlighterLimit = 64 * 1024
 
+func TestEditor_UsesDedicatedScrollbarPaletteSlot(t *testing.T) {
+	ev := NewEditorView(piecetable.New([]byte("text")), nil, "test.txt")
+	defer ev.Close()
+
+	if ev.scrollBar == nil {
+		t.Fatal("editor scrollbar was not initialized")
+	}
+	if ev.scrollBar.ColorIdx != ColEditorScrollbar {
+		t.Fatalf("editor scrollbar color index = %d, want %d", ev.scrollBar.ColorIdx, ColEditorScrollbar)
+	}
+}
+
 func (m *mockCrashingHighlighter) Highlight(line string, prev any, base uint64) ([]uint64, any) {
 	if len(line) > highlighterLimit {
 		m.t.Errorf("FATAL: Highlighter received a line of %d bytes, which is over the safety limit of %d", len(line), highlighterLimit)
@@ -5917,6 +5929,50 @@ func TestEditorView_MouseSelection(t *testing.T) {
 		t.Errorf("Expected range 0:5, got %d:%d", min, max)
 	}
 }
+
+func TestEditorView_MouseBlockSelection_AltShiftCopiesAndKeepsSelection(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("abcde\n12345\nvwxyz"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+
+	mods := vtinput.LeftAltPressed | vtinput.ShiftPressed
+	vtui.SetClipboard("old clipboard")
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: true,
+		MouseX: 1, MouseY: 1, ButtonState: vtinput.FromLeft1stButtonPressed,
+		ControlKeyState: mods,
+	})
+	if !ev.rectSelActive || !ev.mouseRectSelecting {
+		t.Fatal("Alt+Shift+LMB should start a rectangular mouse selection")
+	}
+
+	// Some backends omit the held-button bit from motion events. The editor
+	// must keep the active rectangular gesture in that case as well.
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		MouseX: 3, MouseY: 3, MouseEventFlags: vtinput.MouseMoved,
+	})
+	ev.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, KeyDown: false,
+		MouseX: 3, MouseY: 3,
+	})
+
+	if ev.mouseRectSelecting {
+		t.Fatal("rectangular mouse gesture should be released")
+	}
+	if !ev.rectSelActive {
+		t.Fatal("rectangular selection should remain highlighted after release")
+	}
+	if got, want := vtui.GetClipboard(), "bc\n23\nwx"; got != want {
+		t.Errorf("mouse rectangular copy = %q, want %q", got, want)
+	}
+	if !GlobalLastClipboardWasRectangular {
+		t.Fatal("mouse rectangular copy should mark the clipboard as rectangular")
+	}
+}
+
 func TestEditorView_RectangularSelection_Copy(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New([]byte("line1\nline2\nline3"))

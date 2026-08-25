@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -102,6 +104,69 @@ func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {
 	startZero := vb.FindLineStart(3)
 	if startZero != 0 {
 		t.Errorf("FindLineStart at file beginning should return 0, got %d", startZero)
+	}
+}
+
+func TestViewerView_NonUTF8OffsetsUseDecodedStream(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	root := t.TempDir()
+	path := filepath.Join(root, "cp866.txt")
+	raw, err := vfs.EncodeBytes([]byte("Привет\nМир\n"), 866)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldAuto, oldDefault := AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage
+	AppConfig.ViewerAutodetectCodePage = false
+	AppConfig.ViewerDefaultCodePage = 866
+	t.Cleanup(func() {
+		AppConfig.ViewerAutodetectCodePage = oldAuto
+		AppConfig.ViewerDefaultCodePage = oldDefault
+	})
+
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(root), path)
+	if err != nil {
+		t.Fatalf("NewViewerView: %v", err)
+	}
+	defer vv.Close()
+
+	if vv.Codepage != 866 {
+		t.Fatalf("codepage = %d, want 866", vv.Codepage)
+	}
+	if vv.backend.Size() <= int64(len(raw)) {
+		t.Fatalf("backend size = %d, want decoded UTF-8 stream larger than raw %d", vv.backend.Size(), len(raw))
+	}
+	data := make([]byte, int(vv.backend.Size()))
+	n, err := vv.backend.file.ReadAt(context.Background(), data, 0)
+	if err != nil {
+		t.Fatalf("ReadAt decoded stream: %v", err)
+	}
+	if string(data[:n]) != "Привет\nМир\n" {
+		t.Fatalf("decoded stream = %q", data[:n])
+	}
+
+	// Switching to raw UTF-8 must not leave the viewport beyond the new,
+	// shorter stream when the user was at the end of the decoded view.
+	vv.TopOffset = vv.backend.Size() - 1
+	vv.ReloadWithCodepage(65001)
+	if vv.TopOffset < 0 || vv.TopOffset >= vv.backend.Size() {
+		t.Fatalf("TopOffset = %d after reload, backend size = %d", vv.TopOffset, vv.backend.Size())
+	}
+
+	// Codepage labels are still allowed in hex mode, but the displayed bytes
+	// must remain the raw file bytes.
+	vv.HexMode = true
+	vv.ReloadWithCodepage(866)
+	data = make([]byte, len(raw))
+	n, err = vv.backend.file.ReadAt(context.Background(), data, 0)
+	if err != nil && err != io.EOF {
+		t.Fatalf("ReadAt raw hex stream: %v", err)
+	}
+	if !bytes.Equal(data[:n], raw[:n]) {
+		t.Fatalf("hex stream was decoded: got %x, want %x", data[:n], raw[:n])
 	}
 }
 

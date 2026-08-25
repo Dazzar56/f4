@@ -31,6 +31,22 @@ func TestSessionDir_Isolation(t *testing.T) {
 	}
 }
 
+func TestSessionPickerDialogWidth(t *testing.T) {
+	tests := []struct {
+		screenWidth int
+		want        int
+	}{
+		{screenWidth: 120, want: 100},
+		{screenWidth: 80, want: 80},
+		{screenWidth: 0, want: 100},
+	}
+	for _, tt := range tests {
+		if got := sessionPickerDialogWidth(tt.screenWidth); got != tt.want {
+			t.Errorf("sessionPickerDialogWidth(%d) = %d, want %d", tt.screenWidth, got, tt.want)
+		}
+	}
+}
+
 // TestClearNonBlock_ClearsFlag guards the OpenBSD 7.5+ regression described
 // in PORTABILITY_BSD.md, 4.4: the original code called
 // syscall.Syscall(syscall.SYS_FCNTL, ...) directly, an indirect syscall that

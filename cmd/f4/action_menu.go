@@ -47,8 +47,9 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 			text = "√ " + text
 		}
 		item := vtui.MenuItem{
-			Text:    text,
-			OnClick: func() { RunAction(a.Name) },
+			Text:     text,
+			OnClick:  func() { RunAction(a.Name) },
+			UserData: menuHistoryItemKey(a.Name),
 		}
 		if hm := GlobalHotkeysMgr; hm != nil {
 			item.Shortcut = FormatKeyForUI(hm.GetKeyForAction(area, a.Name))
@@ -84,6 +85,7 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		m.items = append(m.items, vtui.MenuItem{
 			Text:     text,
 			Shortcut: command.Shortcut,
+			UserData: menuHistoryItemKey("plugin:" + command.ID),
 			OnClick: func() {
 				if pf := findPanelsFrameAnyScreen(); pf != nil {
 					executeRegisteredPluginCommand(vfs.PluginCommandPanel, command.ID, pf)

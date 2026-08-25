@@ -173,3 +173,40 @@ func TestPanelsFrame_PTY_SyncEscaping(t *testing.T) {
 		}
 	}
 }
+
+func TestPanelsFrame_LocalUnixCommandKeepsPersistentShellDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix PTY command composition")
+	}
+
+	pf := setupMockPanelsFrame(t)
+	defer pf.Close()
+	pty := pf.pty.(*mockPty)
+
+	tmp := t.TempDir()
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	if err := fsp.vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
+	// Pretend the normal frame refresh has already synchronized this panel.
+	// The command itself must not re-impose the panel path on the persistent
+	// shell: an alias such as `cd:home` is allowed to change that shell's cwd.
+	pf.lastPtyPath = tmp
+	pf.lastPtyVFS = fsp.vfs
+
+	pf.cmdLine.Edit.SetText("cd:home")
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	written := pty.String()
+	panelSync := "cd '" + strings.ReplaceAll(tmp, "'", "'\\''") + "' &&"
+	if strings.Contains(written, panelSync) {
+		t.Fatalf("local Unix command re-imposed panel directory %q: %q", tmp, written)
+	}
+	if !strings.Contains(written, "cd:home") {
+		t.Fatalf("alias command did not reach the persistent PTY shell: %q", written)
+	}
+}

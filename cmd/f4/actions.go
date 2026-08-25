@@ -94,6 +94,12 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 	search := newHistorySearch(menu, richFolders, Msg("History.FoldersHint"))
 	search.supportsLocks = folderHP != nil
+	search.showTimes = true
+	search.timeMode = AppConfig.HistoryShowTimes[historyTypeFolders]
+	search.onTimesChanged = func(mode int) {
+		AppConfig.HistoryShowTimes[historyTypeFolders] = mode
+		SaveConfig()
+	}
 	search.onLockToggled = func() {
 		if folderHP != nil {
 			richFolders = append([]HistoryRecord(nil), search.all...)
@@ -101,6 +107,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 			saveFolderHistoryRecords(folderHP, richFolders)
 		}
 	}
+	search.applyFilter()
 
 	if activePanel := pf.getActivePanel(); activePanel != nil {
 		currentPath := activePanel.persistentPath()
@@ -234,13 +241,16 @@ func actionCommandHistory(pf *PanelsFrame) {
 			richCmds = append(richCmds, HistoryRecord{Name: c})
 		}
 	}
+	if len(richCmds) == 0 && len(h) > 0 {
+		richCmds = recordsFromNames(h)
+	}
 	// The tab/workspace branch originally stored command directories in a
 	// parallel history. Fold those records into upstream's richer history
 	// model so existing sessions retain their paths after the merge.
 	legacyPaths := loadCommandHistoryPaths(h)
 	for i := range richCmds {
-		if richCmds[i].Extra == "" && i < len(legacyPaths) {
-			richCmds[i].Extra = legacyPaths[i]
+		if richCmds[i].directory() == "" && i < len(legacyPaths) {
+			richCmds[i].Dir = legacyPaths[i]
 		}
 	}
 
@@ -249,8 +259,21 @@ func actionCommandHistory(pf *PanelsFrame) {
 	search := newHistorySearch(menu, richCmds, Msg("History.CommandsHint"))
 	search.supportsLocks = isF4
 	search.showDetails = true
+	search.showTimes = true
+	search.timeMode = AppConfig.HistoryShowTimes[historyTypeCommands]
+	search.showDirPrefix = true
+	search.dirPrefixLen = AppConfig.HistoryDirsPrefixLen
+	search.onTimesChanged = func(mode int) {
+		AppConfig.HistoryShowTimes[historyTypeCommands] = mode
+		SaveConfig()
+	}
+	search.onPrefixChanged = func(width int) {
+		AppConfig.HistoryDirsPrefixLen = width
+		SaveConfig()
+	}
 	search.showSecond = search.hasSecondary()
 	search.secondWidth = 24
+	search.applyFilter()
 
 	search.onLockToggled = func() {
 		if isF4 {
@@ -258,13 +281,16 @@ func actionCommandHistory(pf *PanelsFrame) {
 		}
 	}
 	search.onCtrlF10 = func(rec HistoryRecord) {
-		if rec.Extra != "" {
+		if dir := rec.directory(); dir != "" {
 			search.cleanup()
 			menu.Close()
 			if targetPanel := pf.getActivePanel(); targetPanel != nil {
-				pf.NavigateToPath(targetPanel, rec.Extra)
+				pf.NavigateToPath(targetPanel, dir)
 			}
 		}
+	}
+	search.onDetails = func(rec HistoryRecord) {
+		showCommandHistoryDetails(pf, rec, search, menu)
 	}
 
 	// Shared "paste selected command" path used by Enter and mouse click.
@@ -365,6 +391,39 @@ func actionCommandHistory(pf *PanelsFrame) {
 	}
 
 	vtui.FrameManager.Push(menu)
+}
+
+func showCommandHistoryDetails(pf *PanelsFrame, rec HistoryRecord, search *historySearch, menu *vtui.VMenu) {
+	dateText := "None"
+	timeText := "None"
+	if !rec.Timestamp.IsZero() {
+		dateText = rec.Timestamp.Format("2006-01-02")
+		timeText = rec.Timestamp.Format("15:04:05")
+	}
+	dir := rec.directory()
+	message := fmt.Sprintf("Command: %s\nDirectory: %s\nDate: %s\nTime: %s", rec.Name, dir, dateText, timeText)
+	buttons := []string{"&Close"}
+	if dir != "" {
+		buttons = append(buttons, "&ChDir", "&Run-up")
+	}
+	dlg := vtui.ShowMessage(Msg("History.CommandsTitle"), message, buttons)
+	dlg.OnResult = func(code int) {
+		if code == 0 || dir == "" {
+			return
+		}
+		search.cleanup()
+		menu.Close()
+		if code == 1 {
+			if panel := pf.getActivePanel(); panel != nil {
+				pf.NavigateToPath(panel, dir)
+			}
+			return
+		}
+		if code == 2 {
+			pf.cmdLine.Edit.SetText(rec.Name)
+			pf.cmdLine.Edit.HistoryPos = -1
+		}
+	}
 }
 
 // confirmAndClearHistory shows a Yes/No dialog, and on Yes wipes the
@@ -3994,7 +4053,9 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	}
 	fontChoices := guiFontDisplayChoices(AppConfig.Language, AppConfig.GuiFont)
 	comboFont := vtui.NewComboBox(0, 0, 30, fontChoices)
-	comboFont.Edit.SetText(guiFontDisplayName(AppConfig.GuiFont))
+	comboFont.Edit.SetText(guiFontCurrentDisplayName(AppConfig.Language, AppConfig.GuiFont))
+	comboFont.Edit.SelectAll()
+	configureGuiFontCombo(comboFont, fontChoices)
 	lblFont := vtui.NewLabel(0, 0, Msg("AppearanceSettings.Font"), comboFont)
 	chkSystemMonospace := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.UseSystemMonospace"), false)
 	if AppConfig.GuiUseSystemMonospace {
@@ -4177,11 +4238,12 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 			AppConfig.ColorStyle = names[comboStyle.Menu.SelectPos]
 		}
 		useSystemMonospace := chkSystemMonospace.State == 1
-		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != comboFont.Edit.GetText() || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
+		fontValue := guiFontValueForDisplay(AppConfig.Language, AppConfig.GuiFont, comboFont.Edit.GetText())
+		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != fontValue || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
 		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
 		AppConfig.GuiUseSystemMonospace = useSystemMonospace
-		AppConfig.GuiFont = comboFont.Edit.GetText()
+		AppConfig.GuiFont = fontValue
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)
 		if AppConfig.GuiFontSize <= 0 {
 			AppConfig.GuiFontSize = defaultGuiFontSize(runtime.GOOS)

@@ -238,6 +238,96 @@ func TestEventToHotkeyStringPreservesRightCtrl(t *testing.T) {
 	}
 }
 
+// TestEventToHotkeyStringNamesPunctuationByVirtualKey covers issue #807: the
+// kitty keyboard protocol reports the backslash key with the character it
+// types, which is '\' with Ctrl and '|' with Ctrl+Shift, so the VK_DC
+// bindings never matched there.
+func TestEventToHotkeyStringNamesPunctuationByVirtualKey(t *testing.T) {
+	cases := []struct {
+		name  string
+		event *vtinput.InputEvent
+		want  string
+	}{
+		{
+			name:  "kitty Ctrl+backslash",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_5, Char: '\\', ControlKeyState: vtinput.LeftCtrlPressed},
+			want:  "CtrlVK_DC",
+		},
+		{
+			name:  "kitty Ctrl+Shift+backslash",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_5, Char: '|', ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed},
+			want:  "CtrlShiftVK_DC",
+		},
+		{
+			name:  "far2l and legacy tty send no char",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_5, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed},
+			want:  "CtrlShiftVK_DC",
+		},
+		{
+			name:  "right Ctrl keeps its own spelling",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_5, Char: '\\', ControlKeyState: vtinput.RightCtrlPressed},
+			want:  "RCtrlVK_DC",
+		},
+		{
+			name:  "brackets",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_4, Char: '[', ControlKeyState: vtinput.LeftCtrlPressed},
+			want:  "CtrlVK_DB",
+		},
+		{
+			name:  "a layout that types another character on the same key",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_3, Char: 'ё', ControlKeyState: vtinput.LeftCtrlPressed},
+			want:  "CtrlVK_C0",
+		},
+		{
+			name:  "letters are untouched",
+			event: &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_A, Char: 'a', ControlKeyState: vtinput.LeftCtrlPressed},
+			want:  "CtrlA",
+		},
+	}
+	for _, tc := range cases {
+		if got := EventToHotkeyString(tc.event); got != tc.want {
+			t.Errorf("%s: hotkey = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+
+	// The macro layer keeps naming keys the way Far does, so a recorded
+	// macro assigned to Ctrl+Shift+\ still answers to the same string it
+	// was stored under.
+	ctrlShiftBackslash := &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_5, Char: '|', ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed}
+	if got := EventToFarString(ctrlShiftBackslash); got != "CtrlShift|" {
+		t.Errorf("macro key name = %q, want CtrlShift| (the macro layer must not change)", got)
+	}
+}
+
+// TestKittyBackslashReachesBookmarks walks the reported key from the bytes a
+// terminal in kitty keyboard mode sends to the action the default bindings
+// give it.
+func TestKittyBackslashReachesBookmarks(t *testing.T) {
+	hm := NewHotkeyManager("")
+	hm.initDefaults()
+
+	cases := []struct {
+		seq  string
+		want string
+	}{
+		{"\x1b[92:124;6u", "Panel.Bookmarks"}, // Ctrl+Shift+\
+		{"\x1b[92;5u", "Panel.GoRoot"},        // Ctrl+\
+	}
+	for _, tc := range cases {
+		event, _, err := vtinput.ParseKitty([]byte(tc.seq))
+		if err != nil {
+			t.Fatalf("ParseKitty(%q) failed: %v", tc.seq, err)
+		}
+		if event.VirtualKeyCode != vtinput.VK_OEM_5 {
+			t.Fatalf("ParseKitty(%q) gave VK 0x%X, want VK_OEM_5", tc.seq, event.VirtualKeyCode)
+		}
+		key := EventToHotkeyString(event)
+		if got := configuredHotkeyAction(hm, "Shell", key); got != tc.want {
+			t.Errorf("ParseKitty(%q) -> %q -> %q, want %q", tc.seq, key, got, tc.want)
+		}
+	}
+}
+
 func TestConfiguredHotkeyActionRightCtrlFallback(t *testing.T) {
 	hm := NewHotkeyManager("")
 
@@ -248,6 +338,46 @@ func TestConfiguredHotkeyActionRightCtrlFallback(t *testing.T) {
 	hm.Bind("Shell", "RCtrlF3", "None")
 	if got := configuredHotkeyAction(hm, "Shell", "RCtrlF3"); got != "None" {
 		t.Fatalf("explicit RCtrl unbind should win over fallback: got %q, want None", got)
+	}
+}
+
+func TestConfiguredHotkeyActionExplicitCtrlOverridesBuiltInRightCtrl(t *testing.T) {
+	hm := NewHotkeyManager("")
+
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlA"); got != "AI.TogglePanel" {
+		t.Fatalf("built-in RCtrlA action = %q, want AI.TogglePanel", got)
+	}
+
+	hm.Bind("Shell", "CtrlA", "Panel.Toggle")
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlA"); got != "Panel.Toggle" {
+		t.Fatalf("explicit CtrlA should override built-in RCtrlA: got %q, want Panel.Toggle", got)
+	}
+
+	hm.Bind("Shell", "CtrlA", "None")
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrlA"); got != "None" {
+		t.Fatalf("explicit CtrlA unbind should override built-in RCtrlA: got %q, want None", got)
+	}
+}
+
+func TestConfigurableHotkeyCanOverrideRightCtrlBookmark(t *testing.T) {
+	hm := NewHotkeyManager("")
+	rightCtrl3 := &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_3,
+		ControlKeyState: vtinput.RightCtrlPressed,
+	}
+
+	if configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
+		t.Fatal("built-in Ctrl3 should leave RightCtrl+3 owned by bookmarks")
+	}
+
+	hm.Bind("Shell", "Ctrl3", "File.Attributes")
+	if !configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
+		t.Fatal("explicit Ctrl3 should make RightCtrl+3 configurable")
+	}
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrl3"); got != "File.Attributes" {
+		t.Fatalf("RightCtrl+3 fallback = %q, want File.Attributes", got)
 	}
 }
 
