@@ -1068,7 +1068,7 @@ func init() {
 					// SetClipboard can block up to ~4s on far2l IPC or
 					// while shelling out to xclip/wl-copy — do it off the
 					// UI goroutine (matches Grabber's copyAndExit).
-					go vtui.SetClipboard(strings.Join(names, "\n"))
+					setClipboardAsync(strings.Join(names, "\n"))
 				}
 			}
 		}),
@@ -1090,7 +1090,7 @@ func init() {
 					// far2l note: with the cursor on ".." this action
 					// treats it as the name of the current folder.
 					if cursorOnParent(fsp) {
-						go vtui.SetClipboard(base)
+						setClipboardAsync(base)
 					}
 					return
 				}
@@ -1098,7 +1098,7 @@ func init() {
 				for _, n := range names {
 					paths = append(paths, fsp.vfs.Join(base, n))
 				}
-				go vtui.SetClipboard(strings.Join(paths, "\n"))
+				setClipboardAsync(strings.Join(paths, "\n"))
 			}
 		}),
 	})
@@ -1128,7 +1128,7 @@ func init() {
 					// far2l note: with the cursor on ".." this action
 					// treats it as the name of the current folder.
 					if cursorOnParent(fsp) {
-						go vtui.SetClipboard(resolve(base))
+						setClipboardAsync(resolve(base))
 					}
 					return
 				}
@@ -1136,7 +1136,7 @@ func init() {
 				for _, n := range names {
 					paths = append(paths, resolve(fsp.vfs.Join(base, n)))
 				}
-				go vtui.SetClipboard(strings.Join(paths, "\n"))
+				setClipboardAsync(strings.Join(paths, "\n"))
 			}
 		}),
 	})

@@ -245,7 +245,7 @@ func currentWindowTitle() string {
 }
 
 var copyWindowTitleToClipboard = func(title string) {
-	go vtui.SetClipboard(title)
+	setClipboardAsync(title)
 }
 
 func actionCopyWindowTitle() bool {
