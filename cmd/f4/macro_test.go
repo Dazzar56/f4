@@ -368,8 +368,11 @@ func TestConfigurableHotkeyCanOverrideRightCtrlBookmark(t *testing.T) {
 		ControlKeyState: vtinput.RightCtrlPressed,
 	}
 
-	if configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
-		t.Fatal("built-in Ctrl3 should leave RightCtrl+3 owned by bookmarks")
+	if !configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
+		t.Fatal("default Ctrl3 should make RightCtrl+3 configurable")
+	}
+	if got := configuredHotkeyAction(hm, "Shell", "RCtrl3"); got != "Panel.ViewDetailed" {
+		t.Fatalf("RightCtrl+3 default fallback = %q, want Panel.ViewDetailed", got)
 	}
 
 	hm.Bind("Shell", "Ctrl3", "File.Attributes")
