@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/unxed/f4/piecetable"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -100,6 +102,57 @@ func TestEditorHexRenderSkipsTextLayout(t *testing.T) {
 
 	if got := buffer.largestRead(); got > 16 {
 		t.Fatalf("hex render read %d bytes from the text buffer, want at most 16", got)
+	}
+}
+
+func TestAwaitOffsetAsyncDoesNotReadOnUIThread(t *testing.T) {
+	buffer := &editorRenderTrackingBuffer{data: bytes.Repeat([]byte("x"), 1024*1024)}
+	ev := newEditorView(piecetable.NewWithBuffer(buffer), nil, "", false, true)
+	defer ev.Close()
+
+	buffer.reset()
+	ev.indexing = true
+	ev.indexStatus = IndexStatus{Phase: IndexScanning, Total: int64(len(buffer.data))}
+	if !ev.awaitOffsetAsync(0) {
+		t.Fatal("awaitOffsetAsync() did not start waiting for the index")
+	}
+	if got := buffer.largestRead(); got != 0 {
+		t.Fatalf("awaitOffsetAsync() synchronously read %d bytes", got)
+	}
+}
+
+func TestEditorEscapeCancelsIndexing(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	ev := newEditorView(piecetable.New([]byte("text")), nil, "", false, true)
+	defer ev.Close()
+
+	cancelled := false
+	ev.indexing = true
+	ev.indexStatus = IndexStatus{Phase: IndexScanning, Total: 4, Scanned: 1}
+	ev.indexCancel = func() { cancelled = true }
+	ev.targetOffset = 123
+	ev.targetLine = -1
+
+	escape := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}
+	if !ev.VetoActionKey(escape) {
+		t.Fatal("Escape was not reserved for the editor while indexing")
+	}
+	handled := ev.ProcessKey(escape)
+	if !handled {
+		t.Fatal("Escape was not handled while indexing")
+	}
+	if !cancelled || ev.indexing || ev.indexCancel != nil {
+		t.Errorf("indexing was not cancelled: cancelled=%v indexing=%v cancel=%v", cancelled, ev.indexing, ev.indexCancel != nil)
+	}
+	if ev.targetOffset != -1 || ev.targetLine != -1 {
+		t.Errorf("pending target was not cleared: offset=%d line=%d", ev.targetOffset, ev.targetLine)
+	}
+	if ev.IndexState().Phase != IndexIdle {
+		t.Errorf("index phase = %v, want idle", ev.IndexState().Phase)
 	}
 }
 

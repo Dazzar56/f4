@@ -2246,12 +2246,10 @@ func init() {
 				// the cursor may be "line 0, column five million". Text mode
 				// needs the real line, counted as far as the cursor before
 				// it is shown; the scan then carries on from there.
-				// awaitOffset places the cursor now when the index can say
-				// where that byte is, and hands the offset to the scan when it
-				// cannot — rather than answering with the last line the index
-				// knows and a column counted from there, which is the very
-				// "column five million" this is here to get rid of.
-				ev.awaitOffset(ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos)
+				// Do not perform the initial index read synchronously here:
+				// switching a large binary to text must leave the editor
+				// responsive while the index is built in the background.
+				ev.awaitOffsetAsync(ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos)
 			}
 			ev.ensureCursorVisible()
 			vtui.FrameManager.Redraw()

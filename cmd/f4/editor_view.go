@@ -480,7 +480,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 			// the index knows about, and the file may well have more. Say so
 			// rather than let it read as the whole truth.
 			if st := ev.IndexState(); st.Phase == IndexScanning {
-				return fmt.Sprintf(" %s │ %s %d%% │ %d,%d     ",
+				return fmt.Sprintf(" %s │ %s %d%% (Esc) │ %d,%d     ",
 					vfs.DisplayCodepageName(ev.Codepage), Msg("Editor.Indexing"),
 					st.Percent(), ev.CursorLine+1, ev.CursorPos)
 			}
@@ -1676,10 +1676,15 @@ DoneRendering:
 // VetoActionKey reports modal input states in which the editor must see
 // the key before the global hotkey dispatcher. While autocomplete is
 // active, the keys it consumes (Tab/Esc) or uses to dismiss itself
-// (navigation, Enter) belong to the editor's own ProcessKey.
+// (navigation, Enter) belong to the editor's own ProcessKey. Escape also
+// belongs here while indexing so it can cancel the scan rather than reach a
+// frame-level action.
 func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
+	}
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.indexing {
+		return true
 	}
 	if !ev.acEnabled || len(ev.acMatches) == 0 {
 		return false
@@ -1850,6 +1855,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			e.VirtualKeyCode == vtinput.VK_RETURN {
 			ev.acMatches = nil
 		}
+	}
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.indexing {
+		ev.targetOffset = -1
+		ev.targetLine = -1
+		ev.cancelIndexing()
+		vtui.FrameManager.Redraw()
+		return true
 	}
 
 	// Allow FrameManager to handle Ctrl+Tab for workspace switching
@@ -2703,6 +2715,31 @@ func (ev *EditorView) awaitOffset(offset int) bool {
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 	if !ev.indexing && !ev.indexIsComplete() {
+		ev.StartIndexing()
+	}
+	return true
+}
+
+// awaitOffsetAsync moves to an offset without doing the initial index read on
+// the UI goroutine. This is used for mode changes where indexing a large file
+// can otherwise make the editor appear to hang.
+func (ev *EditorView) awaitOffsetAsync(offset int) bool {
+	if offset < 0 {
+		return false
+	}
+	if ev.indexIsComplete() || ev.li.GetLineOffset(ev.li.LineCount()-1) > offset {
+		ev.targetOffset = -1
+		line := ev.li.GetLineAtOffset(offset)
+		ev.CursorLine = line
+		ev.CursorPos = offset - ev.li.GetLineOffset(line)
+		ev.updateDesiredVisualCol()
+		return false
+	}
+	ev.targetOffset = offset
+	ev.targetLine = -1
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	if !ev.indexing {
 		ev.StartIndexing()
 	}
 	return true
