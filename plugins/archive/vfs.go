@@ -1722,7 +1722,13 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 	case "zip":
 		return v.copyBulkZip(ctx, archiveFile, selectedMap, innerPath, password, dstVfs, dstDir, reporter)
 	case "tar":
-		return v.copyBulkTar(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
+		// tar.NewReader consumes an uncompressed tar stream. Compressed tar
+		// archives are read through the generic extractor, which selects the
+		// compression layer before handing entries to the tar extractor.
+		if strings.HasSuffix(strings.ToLower(v.Base(v.arcPath)), ".tar") {
+			return v.copyBulkTar(ctx, archiveFile, selectedMap, innerPath, dstVfs, dstDir, reporter)
+		}
+		return v.copyBulkFallback(ctx, archiveFile, selectedMap, innerPath, password, dstVfs, dstDir, reporter)
 	}
 	return v.copyBulkFallback(ctx, archiveFile, selectedMap, innerPath, password, dstVfs, dstDir, reporter)
 }
