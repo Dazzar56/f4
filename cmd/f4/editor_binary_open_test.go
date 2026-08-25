@@ -171,6 +171,28 @@ func TestEditorEscapeCancelsIndexing(t *testing.T) {
 	}
 }
 
+func TestEditorEscapeCancelsColorer(t *testing.T) {
+	ch := &ColorerHighlighter{}
+	ev := &EditorView{
+		highlighter:     ch,
+		colorerIndexing: true,
+		colorerCancel:   ch.Cancel,
+	}
+	e := &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_ESCAPE,
+	}
+
+	if !ev.VetoActionKey(e) {
+		t.Fatal("Escape was not reserved for the editor while Colorer is working")
+	}
+	ev.cancelColorer()
+	if !ch.disabled || ev.colorerIndexing || ev.colorerCancel != nil {
+		t.Fatalf("Colorer was not cancelled: disabled=%v indexing=%v cancel=%v", ch.disabled, ev.colorerIndexing, ev.colorerCancel != nil)
+	}
+}
+
 // A binary file opened for editing goes straight into hex on the lazy chunked
 // path (codepage 65001) without a background scan.
 func TestShowEditorBinaryOpensInHex(t *testing.T) {

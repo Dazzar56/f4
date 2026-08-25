@@ -141,6 +141,30 @@ func TestColorer_AttrCacheIsBounded(t *testing.T) {
 	}
 }
 
+func TestColorerQueueLineBoundsDocumentSnapshot(t *testing.T) {
+	ch := &ColorerHighlighter{
+		lineAt:     func(idx int) (string, bool) { return "context", idx >= 0 },
+		workerJobs: make(chan colorerJob, 1),
+	}
+
+	ch.queueLine(4000, "target", 0)
+	job := <-ch.workerJobs
+	if len(job.context) != hlColorerContext {
+		t.Fatalf("jump snapshot contains %d lines, want bounded %d", len(job.context), hlColorerContext)
+	}
+	if job.contextStart != 4000-hlColorerContext || !job.reset {
+		t.Fatalf("jump was not re-anchored: start=%d reset=%v", job.contextStart, job.reset)
+	}
+}
+
+func TestColorerCancelInvalidatesWork(t *testing.T) {
+	ch := &ColorerHighlighter{pending: true, workGeneration: 7}
+	ch.Cancel()
+	if !ch.disabled || ch.pending || ch.workGeneration != 8 {
+		t.Fatalf("cancel did not invalidate the worker: disabled=%v pending=%v generation=%d", ch.disabled, ch.pending, ch.workGeneration)
+	}
+}
+
 // TestColorer_AttrCacheStaysBoundedOnALongForwardScroll pushes storeAttrs
 // well past maxCachedAttrLines — the way holding PgDn through a large file
 // does — and checks eviction actually keeps the map small instead of the

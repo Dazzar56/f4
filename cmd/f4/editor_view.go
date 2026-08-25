@@ -197,6 +197,14 @@ type EditorView struct {
 	highlighting    bool
 	highlightCancel context.CancelFunc
 
+	// Colorer parses outside the UI goroutine. These fields are UI-owned and
+	// make an in-flight parse visible/cancellable without blocking rendering.
+	colorerIndexing bool
+	colorerProgress int
+	colorerTotal    int
+	colorerCancel   func()
+	colorerWorkID   uint64
+
 	// OnClose, if set, fires once after the editor has been torn down.
 	// Used by callers (e.g. the user menu's Ctrl+F4 handler) that want
 	// to react to the file content once the user is done editing.
@@ -448,6 +456,9 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	default:
 		ev.highlighter = vtui.GetHighlighter(path, "")
 	}
+	if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
+		ch.beginColorerStartup()
+	}
 	vtui.DebugLog("EDITOR_INIT: Path=%q, Highlighter=%T", path, ev.highlighter)
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	ev.scrollBar.ColorIdx = ColEditorScrollbar
@@ -497,6 +508,17 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 			// While a scan is running the line number on the right is the one
 			// the index knows about, and the file may well have more. Say so
 			// rather than let it read as the whole truth.
+			if ev.colorerIndexing {
+				percent := 0
+				if ev.colorerTotal > 0 {
+					percent = ev.colorerProgress * 100 / ev.colorerTotal
+					if percent > 100 {
+						percent = 100
+					}
+				}
+				return fmt.Sprintf(" %s │ Colorer %d%% (Esc) │ %d,%d     ",
+					vfs.DisplayCodepageName(ev.Codepage), percent, ev.CursorLine+1, ev.CursorPos)
+			}
 			if st := ev.IndexState(); st.Phase == IndexScanning {
 				return fmt.Sprintf(" %s │ %s %d%% (Esc) │ %d,%d     ",
 					vfs.DisplayCodepageName(ev.Codepage), Msg("Editor.Indexing"),
@@ -1703,7 +1725,7 @@ func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
 	}
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.indexing {
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && (ev.colorerIndexing || ev.indexing) {
 		return true
 	}
 	if !ev.acEnabled || len(ev.acMatches) == 0 {
@@ -1875,6 +1897,11 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			e.VirtualKeyCode == vtinput.VK_RETURN {
 			ev.acMatches = nil
 		}
+	}
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.colorerIndexing {
+		ev.cancelColorer()
+		vtui.FrameManager.Redraw()
+		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.indexing {
 		ev.targetOffset = -1
