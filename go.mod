@@ -1,6 +1,6 @@
 module github.com/unxed/f4
 
-go 1.26.0
+go 1.26.6
 
 require (
 	github.com/Masterminds/semver v1.5.0
@@ -35,7 +35,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260704211908-25d317f8295f
 	github.com/unxed/tar v0.1.128
 	github.com/unxed/vtinput v0.1.5
-	github.com/unxed/vtui v0.1.291
+	github.com/unxed/vtui v0.1.292
 	github.com/unxed/zip v0.1.129
 	github.com/unxed/zipper v0.1.149
 	github.com/vmihailenco/msgpack/v5 v5.4.1
