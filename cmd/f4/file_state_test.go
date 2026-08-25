@@ -62,6 +62,12 @@ func TestF4FileStateProvider_SaveAndRestore(t *testing.T) {
 	if stateV.ViewerOffset != 500 || stateV.ViewerWrap != false || stateV.ViewerHex != true {
 		t.Errorf("Incorrect saved viewer state: %+v", stateV)
 	}
+
+	fs.SaveQuickViewCodepage("readme.md", 866)
+	stateV = fs.GetState("readme.md")
+	if stateV == nil || stateV.QuickViewCodepage != 866 {
+		t.Errorf("Incorrect saved Quick View codepage: %+v", stateV)
+	}
 }
 
 func TestF4FileStateProvider_AsyncSaveUpdatesMemoryAndDisk(t *testing.T) {

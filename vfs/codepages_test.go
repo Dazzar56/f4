@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestCodepages_Basic(t *testing.T) {
@@ -54,6 +55,38 @@ func TestCodepages_DetectEncoding(t *testing.T) {
 	invalidData := []byte{0xC0, 0xAF}
 	if cp := DetectEncoding(invalidData, true, 1251); cp != 1251 {
 		t.Errorf("Expected fallback to 1251, got %d", cp)
+	}
+
+	encodeSample := func(cp int, texts ...string) []byte {
+		for _, text := range texts {
+			encoded, err := EncodeBytes([]byte(text), cp)
+			if err == nil && !utf8.Valid(encoded) {
+				return encoded
+			}
+		}
+		return nil
+	}
+	ansi := encodeSample(11111,
+		"Привет, тестовый текст 123\n",
+		"“Café et déjà vu” 123\n",
+	)
+	if ansi != nil {
+		if cp := DetectEncoding(ansi, true, 65001); cp != 11111 {
+			t.Errorf("Expected ANSI detection, got %d", cp)
+		}
+	} else {
+		t.Log("system ANSI codepage has no non-UTF-8 sample")
+	}
+	oem := encodeSample(22222,
+		"Привет, тестовый текст 123\n",
+		"Café déjà été à côté de Noël 123\n",
+	)
+	if oem != nil {
+		if cp := DetectEncoding(oem, true, 65001); cp != 22222 {
+			t.Errorf("Expected OEM detection, got %d", cp)
+		}
+	} else {
+		t.Log("system OEM codepage has no non-UTF-8 sample")
 	}
 
 	if cp := DetectEncoding(data, false, 1251); cp != 1251 {
