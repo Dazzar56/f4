@@ -32,6 +32,7 @@ type QuickViewPanel struct {
 	// Cache the last-computed preview so we don't re-read the file /
 	// re-scan the directory on every redraw.
 	cacheKey        quickViewSelectionKey
+	cachePath       string
 	cacheValid      bool
 	cacheDir        bool // whether cache is for a directory or file
 	cacheBinary     bool
@@ -206,7 +207,7 @@ func (q *QuickViewPanel) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	case vtinput.VK_F7:
 		if shift {
-			return q.repeatSearch(true)
+			return q.repeatSearch(false)
 		}
 		q.showSearchDialog()
 		return true
@@ -299,8 +300,30 @@ func (q *QuickViewPanel) switchToCodepage(cpID int) bool {
 		q.codepages = make(map[quickViewSelectionKey]int)
 	}
 	q.codepages[q.cacheKey] = cpID
+	q.persistCodepage(cpID)
 	vtui.FrameManager.HardRefresh()
 	return true
+}
+
+func (q *QuickViewPanel) persistCodepage(cpID int) {
+	if GlobalFileState == nil || q.src == nil || q.src.vfs == nil || q.cachePath == "" {
+		return
+	}
+	GlobalFileState.SaveQuickViewCodepageAsync(FileStateKey(q.src.vfs, q.cachePath), cpID)
+}
+
+func (q *QuickViewPanel) rememberedCodepage() (int, bool) {
+	if cpID, ok := q.codepages[q.cacheKey]; ok {
+		return cpID, true
+	}
+	if GlobalFileState == nil || q.src == nil || q.src.vfs == nil || q.cachePath == "" {
+		return 0, false
+	}
+	state := GlobalFileState.GetState(FileStateKey(q.src.vfs, q.cachePath))
+	if state == nil || state.QuickViewCodepage <= 0 {
+		return 0, false
+	}
+	return state.QuickViewCodepage, true
 }
 
 func (q *QuickViewPanel) showCodepageDialog() {
@@ -342,6 +365,7 @@ func (q *QuickViewPanel) showCodepageDialog() {
 		}
 		if cpID == -1 {
 			delete(q.codepages, q.cacheKey)
+			q.persistCodepage(0)
 			q.applyPreviewCodepage(vfs.DetectEncoding(q.cacheRaw, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage), true)
 			vtui.FrameManager.HardRefresh()
 			return
@@ -963,6 +987,7 @@ func (q *QuickViewPanel) refreshCache(key quickViewSelectionKey, path string, it
 	q.cancelFilePreview()
 	q.imageLoadGen++
 	q.cacheKey = key
+	q.cachePath = path
 	q.cacheValid = true
 	q.cacheDir = item.IsDir
 	q.cacheBinary = false
@@ -1110,7 +1135,7 @@ func (q *QuickViewPanel) applyFilePreview(result quickViewFileResult) {
 	q.cacheLines = append(q.cacheLines[:0], result.lines...)
 	q.cacheReadErr = result.err
 	q.hexMode = result.binary
-	if remembered, ok := q.codepages[q.cacheKey]; ok && q.cacheRaw != nil {
+	if remembered, ok := q.rememberedCodepage(); ok && q.cacheRaw != nil {
 		q.applyPreviewCodepage(remembered, false)
 	}
 	q.displayLines = nil

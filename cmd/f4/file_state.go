@@ -22,6 +22,9 @@ type FileState struct {
 	ViewerOffset int64 `json:"vo"`
 	ViewerWrap   bool  `json:"vw"`
 	ViewerHex    bool  `json:"vh"`
+	// QuickViewCodepage is an explicit per-file override. Zero means that
+	// Quick View should use its configured auto-detection/default.
+	QuickViewCodepage int `json:"qcp,omitempty"`
 }
 
 type F4FileStateProvider struct {
@@ -161,6 +164,23 @@ func (fs *F4FileStateProvider) updateViewerState(path string, offset int64, wrap
 	state.ViewerOffset = offset
 	state.ViewerWrap = wrap
 	state.ViewerHex = hex
+	fs.mu.Unlock()
+}
+
+func (fs *F4FileStateProvider) SaveQuickViewCodepage(path string, cp int) {
+	fs.updateQuickViewCodepage(path, cp)
+	fs.save()
+}
+
+func (fs *F4FileStateProvider) SaveQuickViewCodepageAsync(path string, cp int) {
+	fs.updateQuickViewCodepage(path, cp)
+	fs.saveAsync()
+}
+
+func (fs *F4FileStateProvider) updateQuickViewCodepage(path string, cp int) {
+	fs.mu.Lock()
+	state := fs.touch(path)
+	state.QuickViewCodepage = cp
 	fs.mu.Unlock()
 }
 
