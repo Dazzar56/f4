@@ -52,55 +52,26 @@ func (v *OSVFS) SetPath(path string) error {
 		return err
 	}
 
-	// Сначала пробуем проверить оригинальный путь напрямую.
-	// Если он существует, доступен и является директорией (симлинком на нее),
-	// мы сохраняем оригинальный визуальный путь в панели без принудительного разыменования!
+	// First try to verify the original path directly. If it exists, is
+	// accessible and is a directory (or a symlink to one), we keep the
+	// original visual path in the panel without forcing a dereference.
 	if st, errStat := hostfs.Stat(prepareOSPath(abs)); errStat == nil && st.IsDir() {
 		goto verify
 	}
 
-	// Если мы получили ошибку (например, Permission Denied на системном джанкшене Windows
-	// "Documents and Settings"), то только тогда пытаемся принудительно разыменовать симлинк.
-	if resolved, errEval := hostpath.EvalSymlinks(prepareOSPath(abs)); errEval == nil {
-		resolved = stripExtendedPrefix(resolved)
-		if runtime.GOOS == "windows" {
-			origVol := hostpath.VolumeName(abs)
-			resVol := hostpath.VolumeName(resolved)
-			// Prevent resolving mapped drives (e.g. T:\) into UNC paths (\\server\share)
-			if len(origVol) == 2 && origVol[1] == ':' && len(resVol) > 2 && strings.HasPrefix(resVol, `\\`) {
-				abs = origVol + strings.TrimPrefix(resolved, resVol)
-			} else {
-				abs = resolved
-			}
-		} else {
-			abs = resolved
-		}
-		goto verify
-	}
-
-	// Windows fallbacks when EvalSymlinks fails (e.g. protected junctions)
+	// If direct access failed (e.g. Permission Denied on the Windows system
+	// junction "Documents and Settings" or on a nested per-user profile
+	// junction like "Application Data"), force-resolve the reparse points.
+	// Resolution runs on the PLAIN path (no \\?\ prefix): the prefix disables
+	// Win32's transparent reparse redirection, so "Documents and Settings"
+	// is opened directly and yields Access Denied.
 	if runtime.GOOS == "windows" {
-		// 1. wellKnownJunction (string comparison, no syscall)
-		if link, ok := wellKnownJunction(abs); ok {
-			vtui.DebugLog("VFS: SetPath: resolved via wellKnownJunction: %q -> %q", abs, link)
-			abs = link
-			goto verify
-		}
-		// 2. os.Readlink
-		if link, errRead := hostfs.Readlink(abs); errRead == nil {
-			vtui.DebugLog("VFS: SetPath: resolved via Readlink: %q -> %q", abs, link)
-			if hostpath.IsAbs(link) {
-				abs = link
-			} else {
-				abs = hostpath.Join(hostpath.Dir(abs), link)
+		for _, candidate := range resolveReparseCandidates(abs) {
+			vtui.DebugLog("VFS: SetPath: trying reparse candidate %q -> %q", abs, candidate)
+			if st, errStat := hostfs.Stat(prepareOSPath(candidate)); errStat == nil && st.IsDir() {
+				abs = candidate
+				goto verify
 			}
-			goto verify
-		}
-		// 3. Direct syscall (CreateFile + DeviceIoControl)
-		if link, errJunc := resolveWindowsJunction(abs); errJunc == nil {
-			vtui.DebugLog("VFS: SetPath: resolved via resolveWindowsJunction: %q -> %q", abs, link)
-			abs = link
-			goto verify
 		}
 	}
 
@@ -136,11 +107,16 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 	dirPath := path
 	entries, err := hostfs.ReadDir(prepareOSPath(dirPath))
 	if err != nil && os.IsPermission(err) && runtime.GOOS == "windows" {
-		// Try to resolve protected junctions (e.g. "Documents and Settings")
-		if resolved, ok := wellKnownJunction(dirPath); ok {
-			vtui.DebugLog("VFS: ReadDir: resolved junction %q -> %q", dirPath, resolved)
-			dirPath = resolved
-			entries, err = hostfs.ReadDir(prepareOSPath(dirPath))
+		// Resolve protected/per-user junctions (e.g. "Documents and
+		// Settings", "<user>\Application Data") the same way SetPath does.
+		for _, candidate := range resolveReparseCandidates(dirPath) {
+			vtui.DebugLog("VFS: ReadDir: trying reparse candidate %q -> %q", dirPath, candidate)
+			if e, eErr := hostfs.ReadDir(prepareOSPath(candidate)); eErr == nil {
+				vtui.DebugLog("VFS: ReadDir: resolved junction %q -> %q", dirPath, candidate)
+				dirPath = candidate
+				entries, err = e, nil
+				break
+			}
 		}
 	}
 	if err != nil {
@@ -642,6 +618,54 @@ func wellKnownJunction(path string) (string, bool) {
 	}
 
 	return "", false
+}
+
+// resolveReparseCandidates returns candidate paths to retry a failed
+// operation on when the original Windows path could not be opened directly
+// because of a reparse point (junction or symlink) in its components. This
+// covers the compatibility shim "C:\Documents and Settings" (junction to
+// "C:\Users") and the per-user profile junctions such as "Application Data"
+// (-> "AppData\Roaming"), "Local Settings", "My Documents", etc.
+//
+// The first candidate is a full EvalSymlinks resolution of the PLAIN path:
+// the "\\?\" long-path prefix disables Win32's transparent reparse
+// redirection, so resolution must run on the unprefixed path. The remaining
+// candidates handle cases where EvalSymlinks itself is blocked (protected
+// reparse points): the hard-coded well-known junctions, Readlink on the
+// final component, and a raw DeviceIoControl reparse read.
+func resolveReparseCandidates(abs string) []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	var out []string
+	if resolved, errEval := hostpath.EvalSymlinks(abs); errEval == nil {
+		resolved = stripExtendedPrefix(resolved)
+		// Prevent resolving mapped drives (e.g. T:\) into UNC paths (\\server\share).
+		origVol := hostpath.VolumeName(abs)
+		resVol := hostpath.VolumeName(resolved)
+		if len(origVol) == 2 && origVol[1] == ':' && len(resVol) > 2 && strings.HasPrefix(resVol, `\\`) {
+			resolved = origVol + strings.TrimPrefix(resolved, resVol)
+		}
+		out = append(out, resolved)
+	}
+	if link, ok := wellKnownJunction(abs); ok {
+		out = append(out, link)
+	}
+	if link, errRead := hostfs.Readlink(abs); errRead == nil {
+		if hostpath.IsAbs(link) {
+			out = append(out, link)
+		} else {
+			out = append(out, hostpath.Join(hostpath.Dir(abs), link))
+		}
+	}
+	if link, errJunc := resolveWindowsJunction(abs); errJunc == nil {
+		if hostpath.IsAbs(link) {
+			out = append(out, link)
+		} else {
+			out = append(out, hostpath.Join(hostpath.Dir(abs), link))
+		}
+	}
+	return out
 }
 
 // prepareOSPath adds the \\?\ prefix on Windows to prevent the Win32 API
