@@ -601,6 +601,7 @@ PanelSettings.ShowHighlightMarks=Show highlight &marks
 PanelSettings.CommandLineAutoComplete=Enable command line &auto-completion
 PanelSettings.AlwaysShowMenuBar=Always show &menu bar
 PanelSettings.RecordMacrosTo=Record macros to:
+PanelSettings.SearchExactOnHit=Quick Search: e&xact hits only, when present
 
 Jobs.Title=Background Jobs
 Jobs.BtnShow=&Show

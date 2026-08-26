@@ -593,6 +593,7 @@ PanelSettings.ShowHighlightMarks=Показывать пометки &подсв
 PanelSettings.CommandLineAutoComplete=Включить авто&дополнение командной строки
 PanelSettings.AlwaysShowMenuBar=Всегда показывать строку &меню
 PanelSettings.RecordMacrosTo=Записывать макросы в:
+PanelSettings.SearchExactOnHit=Быстрый поиск: только &точные совпадения (если есть)
 
 Jobs.Title=Фоновые задания
 Jobs.BtnShow=&Показать
