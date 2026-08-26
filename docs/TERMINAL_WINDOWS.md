@@ -1,5 +1,8 @@
 # Terminal under Windows — umbrella analysis (issue #425)
 
+Index of everything known about the terminal, with status and the plan:
+`TERMINAL_LEDGER.md`. Start there.
+
 Companion to `TERMINAL.md`, which describes the architecture, and to
 `TERMINAL_REFLOW.md`, which surveys how other terminals reflow text and what
 `f4` should copy from them. This file

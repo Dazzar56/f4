@@ -1,5 +1,8 @@
 # Reflow: what other terminals do, and what f4 should copy
 
+Index of everything known about the terminal, with status and the plan:
+`TERMINAL_LEDGER.md`. Start there.
+
 Companion to `TERMINAL.md` (architecture) and `TERMINAL_WINDOWS.md` (what is
 broken on Windows and in what order it is being fixed). This file records a
 survey of how other terminal emulators solve **reflow** — re-wrapping text when
