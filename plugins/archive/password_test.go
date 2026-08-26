@@ -38,6 +38,17 @@ func TestArchiveVFS_PromptsForExternalEncryptedZip(t *testing.T) {
 }
 
 func TestArchiveVFS_PromptsForExternalEncrypted7z(t *testing.T) {
+	archivePath := createExternalEncrypted7z(t)
+	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithProgressAndPasswords(t, archivePath, []string{"Wrong", "Correct"})
+}
+
+func TestArchiveVFS_RetriesExternalEncrypted7zWithoutProgress(t *testing.T) {
+	archivePath := createExternalEncrypted7z(t)
+	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithPasswords(t, archivePath, []string{"Wrong", "Correct"}, context.Background())
+}
+
+func createExternalEncrypted7z(t *testing.T) string {
+	t.Helper()
 	sevenZip, err := exec.LookPath("7z")
 	if err != nil {
 		t.Skip("7z command is not installed")
@@ -47,14 +58,14 @@ func TestArchiveVFS_PromptsForExternalEncrypted7z(t *testing.T) {
 		t.Fatal(err)
 	}
 	archivePath := filepath.Join(tmp, "secret.7z")
-	// Encrypt headers too so the wrong-password path is deterministic on every
-	// architecture supported by the test matrix.
-	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-mhe=on", "-bd", archivePath, "secret.txt")
+	// Keep headers visible: the password is first checked only when the file
+	// payload is read, which is the retry scenario seen with real archives.
+	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-bd", archivePath, "secret.txt")
 	cmd.Dir = tmp
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("create encrypted 7z: %v: %s", err, output)
 	}
-	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithProgress(t, archivePath, "Correct")
+	return archivePath
 }
 
 func testArchiveVFS_PromptsForEncryptedArchive(t *testing.T, extension string) {
@@ -91,14 +102,30 @@ func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithProgress(t *testing.T, a
 	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithContext(t, archivePath, passwordValue, ctx)
 }
 
+func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithProgressAndPasswords(t *testing.T, archivePath string, passwords []string) {
+	ctx := context.WithValue(context.Background(), vfs.ProgressKey, vfs.ProgressCallback(func(string, int) {}))
+	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithPasswords(t, archivePath, passwords, ctx)
+}
+
 func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithContext(t *testing.T, archivePath, passwordValue string, ctx context.Context) {
+	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithPasswords(t, archivePath, []string{passwordValue}, ctx)
+}
+
+func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithPasswords(t *testing.T, archivePath string, passwords []string, ctx context.Context) {
 	tmp := filepath.Dir(archivePath)
+	if len(passwords) == 0 {
+		t.Fatal("password list is empty")
+	}
 
 	prompts := 0
 	previousPrompt := archivePasswordPrompt
 	archivePasswordPrompt = func(context.Context, string) (string, error) {
+		idx := prompts
 		prompts++
-		return passwordValue, nil
+		if idx >= len(passwords) {
+			return passwords[len(passwords)-1], nil
+		}
+		return passwords[idx], nil
 	}
 	defer func() { archivePasswordPrompt = previousPrompt }()
 
@@ -130,7 +157,7 @@ func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithContext(t *testing.T, ar
 	if string(data) != "secret data" {
 		t.Fatalf("got %q, want %q", data, "secret data")
 	}
-	if prompts != 1 {
-		t.Fatalf("password prompt count = %d, want 1", prompts)
+	if prompts != len(passwords) {
+		t.Fatalf("password prompt count = %d, want %d", prompts, len(passwords))
 	}
 }
