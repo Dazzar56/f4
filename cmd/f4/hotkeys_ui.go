@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -130,6 +131,83 @@ func selectedHotkeyRowAt(table *vtui.Table, rows []hotkeyRow, displayPos int) (h
 	return rows[idx], true
 }
 
+func normalizeHotkeySearchQuery(query string) string {
+	compact := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || r == '+' {
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, strings.TrimSpace(query))
+	if compact == "" {
+		return query
+	}
+
+	var raw strings.Builder
+	remaining := compact
+	for {
+		matched := false
+		for _, modifier := range []struct {
+			name  string
+			canon string
+		}{
+			{name: "rctrl", canon: "RCtrl"},
+			{name: "ctrl", canon: "Ctrl"},
+			{name: "alt", canon: "Alt"},
+			{name: "shift", canon: "Shift"},
+		} {
+			if strings.HasPrefix(remaining, modifier.name) && len(remaining) > len(modifier.name) {
+				raw.WriteString(modifier.canon)
+				remaining = remaining[len(modifier.name):]
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			break
+		}
+	}
+	if raw.Len() == 0 || remaining == "" {
+		return query
+	}
+
+	key := map[string]string{
+		"up": "Up", "down": "Down", "left": "Left", "right": "Right",
+		"home": "Home", "end": "End", "pgup": "PgUp", "pgdn": "PgDn",
+		"ins": "Ins", "del": "Del", "enter": "Enter", "esc": "Esc",
+		"tab": "Tab", "back": "Back", "space": "Space",
+	}[remaining]
+	if key == "" {
+		if len(remaining) == 1 || (remaining[0] == 'f' && len(remaining) <= 3) {
+			key = strings.ToUpper(remaining)
+		} else {
+			return query
+		}
+	}
+	raw.WriteString(key)
+	if strings.HasPrefix(raw.String(), "RCtrl") {
+		return raw.String()
+	}
+	return FormatKeyForUI(raw.String())
+}
+
+func configureHotkeyTableSearch(table *vtui.Table) {
+	table.QuickSearch = true
+	table.SearchExactOnHit = AppConfig.SearchExactOnHit
+	normalizing := false
+	table.OnSearchChange = func(text string) {
+		if normalizing {
+			return
+		}
+		normalized := normalizeHotkeySearchQuery(text)
+		if normalized == text {
+			return
+		}
+		normalizing = true
+		table.SetSearchText(normalized)
+		normalizing = false
+	}
+}
+
 func selectedHotkeyRow(table *vtui.Table, rows []hotkeyRow) (hotkeyRow, bool) {
 	if table == nil {
 		return hotkeyRow{}, false
@@ -164,8 +242,9 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 	}, btnAssign, btnUnbind, btnSave, btnCancel)
 	useDialogTableColors(table)
 	table.ShowScrollBar = true
-	table.Sortable = true    // click a column header to sort, again to reverse
-	table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
+	table.Sortable = true // click a column header to sort, again to reverse
+	//table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
+	configureHotkeyTableSearch(table)
 
 	var rows []vtui.TableRow
 	var hkRows []hotkeyRow
