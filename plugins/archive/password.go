@@ -3,9 +3,11 @@ package archive
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/unxed/archives"
+	"github.com/unxed/sevenzip"
 	"github.com/unxed/vtui"
 	zipperarchive "github.com/unxed/zipper/archive"
 )
@@ -18,6 +20,41 @@ type archivePasswordResult struct {
 // archivePasswordPrompt is replaceable in tests so password handling can be
 // verified without depending on an interactive terminal.
 var archivePasswordPrompt = promptArchivePassword
+
+type archivePasswordValidationError struct {
+	message string
+}
+
+func (e archivePasswordValidationError) Error() string {
+	return "archive password rejected: " + e.message
+}
+
+func newArchivePasswordValidationError(format string, args ...any) error {
+	return archivePasswordValidationError{message: fmt.Sprintf(format, args...)}
+}
+
+func isArchivePasswordValidationError(err error) bool {
+	var validationErr archivePasswordValidationError
+	return errors.As(err, &validationErr)
+}
+
+// isArchivePasswordRetryError extends zipper's password classification with
+// lazy 7z payload errors.  7z archives may leave their headers unencrypted;
+// in that case opening and listing the archive succeeds with an empty or
+// wrong password, and the decoder reports only a sevenzip.ReadError on the
+// first file read.  The ReadError does not always carry the Encrypted flag,
+// so zipperarchive.IsPasswordError cannot identify this case by itself.
+func isArchivePasswordRetryError(err error) bool {
+	if zipperarchive.IsPasswordError(err) {
+		return true
+	}
+	var readErr sevenzip.ReadError
+	if errors.As(err, &readErr) {
+		return true
+	}
+	var readErrPtr *sevenzip.ReadError
+	return errors.As(err, &readErrPtr) && readErrPtr != nil
+}
 
 func promptArchivePassword(ctx context.Context, archiveName string) (string, error) {
 	if vtui.FrameManager == nil {
@@ -98,7 +135,7 @@ func openArchiveFSWithPasswordPrompt(ctx context.Context, localPath, displayName
 }
 
 func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
-	if !zipperarchive.IsPasswordError(cause) {
+	if !isArchivePasswordRetryError(cause) {
 		return cause
 	}
 
@@ -109,14 +146,17 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 	v.mu.Unlock()
 
 	// A password may already have been entered while opening the archive. In
-	// that case, retry with it first: some formats report an encrypted payload
-	// only on the first read even though the archive was opened successfully.
-	if password != "" {
+	// that case, retry with it first for eager password errors. A lazy 7z
+	// ReadError is different: the current password has just failed while
+	// reading a payload, and opening the filesystem with it succeeds again
+	// because the headers are not encrypted. Force a new prompt in that case.
+	forcePrompt := (isLazySevenZipReadError(cause) || isArchivePasswordValidationError(cause)) && password != ""
+	if password != "" && !forcePrompt {
 		fsys, _, err := openArchiveFSWithContext(ctx, localPath, displayName, nil, password)
 		if err == nil {
 			return v.installPasswordFS(fsys, password)
 		}
-		if !zipperarchive.IsPasswordError(err) {
+		if !isArchivePasswordRetryError(err) {
 			return err
 		}
 	}
@@ -134,6 +174,15 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 		return err
 	}
 	return v.installPasswordFS(fsys, password)
+}
+
+func isLazySevenZipReadError(err error) bool {
+	var readErr sevenzip.ReadError
+	if errors.As(err, &readErr) {
+		return true
+	}
+	var readErrPtr *sevenzip.ReadError
+	return errors.As(err, &readErrPtr) && readErrPtr != nil
 }
 
 func (v *ArchiveVFS) installPasswordFS(fsys zipperarchive.FileSystem, password string) error {

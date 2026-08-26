@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash"
+	"hash/crc32"
 	"io"
 	"io/fs"
 	"math"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/unxed/archives"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/sevenzip"
 	"github.com/unxed/zipper/archive"
 
 	"github.com/unxed/tar"
@@ -598,6 +601,8 @@ type archiveReadWrapper struct {
 	f          fs.File
 	fsPath     string
 	size       int64
+	crc32      uint32
+	hasCRC32   bool
 	tmpFile    *os.File
 	tmpPath    string
 	extracted  bool
@@ -607,12 +612,29 @@ type archiveReadWrapper struct {
 	readPos    int64
 }
 
+func archiveFileCRC(info fs.FileInfo) (uint32, bool) {
+	if info == nil {
+		return 0, false
+	}
+	switch header := info.Sys().(type) {
+	case *sevenzip.FileHeader:
+		if header != nil && header.CRC32 != 0 {
+			return header.CRC32, true
+		}
+	case sevenzip.FileHeader:
+		if header.CRC32 != 0 {
+			return header.CRC32, true
+		}
+	}
+	return 0, false
+}
+
 // reopenAfterPassword replaces the member handle after the archive backend
 // reports an encrypted payload while reading it. Some formats validate the
 // password lazily, so Open may succeed and the first Read may be the point at
 // which the password is actually needed.
 func (w *archiveReadWrapper) reopenAfterPassword(ctx context.Context, cause error) error {
-	if !archive.IsPasswordError(cause) || w.v == nil {
+	if !isArchivePasswordRetryError(cause) || w.v == nil {
 		return cause
 	}
 	if err := w.v.openWithPassword(ctx, cause); err != nil {
@@ -780,7 +802,12 @@ func (w *archiveReadWrapper) extractToTempRandom(ctx context.Context) error {
 
 	buf := make([]byte, 128*1024)
 	var loopErr error
-	passwordRetried := false
+	var copied int64
+	var checksum hash.Hash32
+	if w.hasCRC32 {
+		checksum = crc32.NewIEEE()
+	}
+	passwordRetries := 0
 
 	for {
 		if ctx.Err() != nil {
@@ -793,10 +820,20 @@ func (w *archiveReadWrapper) extractToTempRandom(ctx context.Context) error {
 				loopErr = werr
 				break
 			}
+			if checksum != nil {
+				_, _ = checksum.Write(buf[:n])
+			}
+			copied += int64(n)
 		}
 		if errRead != nil {
-			if errRead != io.EOF && archive.IsPasswordError(errRead) && !passwordRetried {
-				passwordRetried = true
+			if errRead == io.EOF && w.hasCRC32 && w.size >= 0 && copied != w.size {
+				errRead = newArchivePasswordValidationError("extracted %d bytes, want %d", copied, w.size)
+			}
+			if errRead == io.EOF && checksum != nil && checksum.Sum32() != w.crc32 {
+				errRead = newArchivePasswordValidationError("extracted data checksum does not match")
+			}
+			if errRead != io.EOF && isArchivePasswordRetryError(errRead) && passwordRetries < 2 {
+				passwordRetries++
 				if srcCloser != nil {
 					_ = srcCloser.Close() // The fallback archive member was read-only.
 					srcCloser = nil
@@ -818,6 +855,10 @@ func (w *archiveReadWrapper) extractToTempRandom(ctx context.Context) error {
 					if err := tmp.Truncate(0); err != nil {
 						loopErr = err
 						break
+					}
+					copied = 0
+					if checksum != nil {
+						checksum = crc32.NewIEEE()
 					}
 					continue
 				} else {
@@ -883,7 +924,7 @@ func (w *archiveReadWrapper) extractToTempRandom(ctx context.Context) error {
 }
 
 func (w *archiveReadWrapper) canFallbackToSequential(err error) bool {
-	if err == nil || archive.IsPasswordError(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if err == nil || isArchivePasswordRetryError(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	message := strings.ToLower(err.Error())
@@ -1091,20 +1132,51 @@ func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
 	}
 
 	f := w.f
+	v := w.v
 	w.mu.Unlock()
 
-	n, err := f.Read(p)
-	if n > 0 {
+	// 7z may return a full-sized, garbage payload with EOF for a wrong
+	// password when its headers remain visible. Materialize 7z members before
+	// exposing bytes so the size/CRC checks can retry without leaking data to
+	// the caller. TAR/ZIP keep their lazy and random-access paths unchanged.
+	if v != nil && strings.EqualFold(filepath.Ext(v.displayName), ".7z") {
+		if err := w.materialize(ctx, false); err != nil {
+			return 0, err
+		}
 		w.mu.Lock()
-		w.readPos += int64(n)
+		tmp := w.tmpFile
 		w.mu.Unlock()
+		return tmp.Read(p)
 	}
-	if err != nil && archive.IsPasswordError(err) {
+
+	passwordRetries := 0
+	var n int
+	var err error
+	for {
+		n, err = f.Read(p)
+		if n > 0 {
+			w.mu.Lock()
+			w.readPos += int64(n)
+			w.mu.Unlock()
+		}
+		if err == io.EOF {
+			w.mu.Lock()
+			shortRead := w.hasCRC32 && w.size >= 0 && w.readPos < w.size
+			readPos := w.readPos
+			w.mu.Unlock()
+			if shortRead {
+				err = newArchivePasswordValidationError("extracted %d bytes, want %d", readPos, w.size)
+			}
+		}
+		if err == nil || !isArchivePasswordRetryError(err) || passwordRetries >= 2 {
+			break
+		}
 		if n > 0 {
 			w.mu.Lock()
 			w.readPos -= int64(n)
 			w.mu.Unlock()
 		}
+		passwordRetries++
 		if retryErr := w.reopenAfterPassword(ctx, err); retryErr != nil {
 			return 0, retryErr
 		}
@@ -1114,12 +1186,6 @@ func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
 		w.mu.Unlock()
 		if err := seekArchiveFile(f, position); err != nil {
 			return 0, err
-		}
-		n, err = f.Read(p)
-		if n > 0 {
-			w.mu.Lock()
-			w.readPos += int64(n)
-			w.mu.Unlock()
 		}
 	}
 	if err != nil && w.canFallbackToSequential(err) {
@@ -1399,8 +1465,11 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 
 	info, err := srcFile.Stat()
 	var size int64
+	var expectedCRC uint32
+	var hasExpectedCRC bool
 	if err == nil && info != nil {
 		size = info.Size()
+		expectedCRC, hasExpectedCRC = archiveFileCRC(info)
 	}
 
 	if update != nil || reporter != nil {
@@ -1418,6 +1487,19 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		}
 		errExtract := extractWithProgress(ctx, srcFile, tmp, size, fileName, update, reporter)
 		_ = srcFile.Close() // The archive member was opened only for reading.
+		if errExtract == nil && hasExpectedCRC {
+			if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+				errExtract = err
+			} else {
+				h := crc32.NewIEEE()
+				_, copyErr := io.Copy(h, tmp)
+				if copyErr != nil {
+					errExtract = copyErr
+				} else if h.Sum32() != expectedCRC {
+					errExtract = newArchivePasswordValidationError("extracted data checksum does not match")
+				}
+			}
+		}
 
 		if errExtract != nil {
 			_ = tmp.Close()        // The incomplete private materialization will be removed.
@@ -1428,7 +1510,7 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 				errExtract = fallbackErr
 			}
 			v.decrementActive()
-			if archive.IsPasswordError(errExtract) {
+			if isArchivePasswordRetryError(errExtract) {
 				if retryErr := v.openWithPassword(ctx, errExtract); retryErr == nil {
 					return v.Open(ctx, path)
 				} else {
@@ -1453,6 +1535,8 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		return &archiveReadWrapper{
 			v:         v,
 			size:      size,
+			crc32:     expectedCRC,
+			hasCRC32:  hasExpectedCRC,
 			tmpFile:   tmp,
 			tmpPath:   tmpName,
 			extracted: true,
@@ -1460,10 +1544,12 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 	}
 
 	return &archiveReadWrapper{
-		v:      v,
-		f:      srcFile,
-		fsPath: fsPath,
-		size:   size,
+		v:        v,
+		f:        srcFile,
+		fsPath:   fsPath,
+		size:     size,
+		crc32:    expectedCRC,
+		hasCRC32: hasExpectedCRC,
 	}, nil
 }
 
