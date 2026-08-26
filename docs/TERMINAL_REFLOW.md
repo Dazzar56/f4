@@ -6,12 +6,19 @@ survey of how other terminal emulators solve **reflow** — re-wrapping text whe
 the window changes width — so that the next person to look at it does not have
 to repeat the reading.
 
-**Status:** the Unix half is implemented — see `terminalReflowEnabled` and
-`reflowLocked` in `cmd/f4/terminal_view.go`. A width change now re-wraps the
-live primary grid; a height-only change still takes the old path, because
-that one is about moving rows between the viewport and `GridHistory` and was
-never broken. Windows keeps Horizontal Preservation until the two experiments
-in section 3 have answers.
+**Status:** shipped on Unix, off on Windows.
+
+A width change re-wraps the live primary grid: `unwrapLocked` joins the rows a
+soft wrap split into logical lines and `reflowLocked` lays them out at the new
+width (`cmd/f4/terminal_view.go`). A height-only change still takes the old
+path, which moves rows between the viewport and `GridHistory` and was never
+broken. Windows keeps Horizontal Preservation, gated by `terminalReflowEnabled`,
+until the two experiments in section 3 have answers.
+
+Verified by hand on `ls -la /usr/bin` with the window dragged narrow and wide
+again, and covered by `TestTerminalView_Reflow_*`. Section 4 records what went
+wrong on the way, because both defects looked like the reflow being a bad idea
+rather than a bug in it.
 
 ## 1. far2l: the reference implementation to copy
 
@@ -158,10 +165,8 @@ The raw material is already here: `WrapFlags`, `GridHistory`, and a `PieceTable`
 with a `WrapEngine`. Three differences from far2l, all worth adopting:
 
 1. **Reflow as flatten-and-relayout, with the cursor as an offset into the
-   stream.** Done: `unwrapLocked` joins soft-wrapped rows into logical lines,
-   reaching back into `GridHistory` for a line that wrapped across the top
-   edge, and `reflowLocked` lays them out at the new width. The cursor is
-   carried as an offset inside its logical line.
+   stream.** Done. The cursor is carried as an offset inside its logical line,
+   and the relayout never splits a wide character from its filler cell.
 2. **Move the wrap marker from the row to the cell and invert it** — mark the
    hard break, not the soft wrap. Not done. `WrapFlags[y]` still has to be
    shifted by hand in `scrollUp`, `scrollDown` and `Resize`; a cell-level
@@ -194,3 +199,30 @@ that here as an external constraint.
   whether throttling (xterm.js, Fluent Terminal) is required.
 * Whether `vtui.CharInfo` has room for a cell-level marker or it needs a parallel
   array.
+
+## 4. What went wrong the first time
+
+Both defects below shipped in the first version of the reflow and were found by
+one `ls -la /usr/bin` and a drag of the window border. They are recorded because
+neither looked like a bug at first — they looked like evidence that re-wrapping
+the live grid was a bad idea.
+
+**Trailing spaces are not padding on a wrapped row.** The first version trimmed
+the trailing default-attribute blanks of every row before joining them, copying
+far2l's trim without copying its precondition. A row that ended by itself may
+well end in padding; a row that soft-wraps cannot, because text reached the
+right edge, so every cell up to it was written. Those spaces are the column
+alignment of the output, and trimming them glued the next row's first column
+onto the previous row: `rootroot976304апр82024zsh`. `significantWidthLocked`
+now takes the wrap flag and returns the full width for a wrapped row.
+
+**Widening frees rows, and something has to fill them.** Re-wrapping to a wider
+grid produces fewer rows than it consumed — that is the whole point — so the
+viewport came back part empty while the output that would have filled it sat in
+`GridHistory`. The height-only path pulls rows back for exactly this reason; the
+reflow now does too, pulling until it has material for the new height instead of
+only the half-lines that wrap into the top row.
+
+The general shape of both: a reflow is not only a function of the visible grid.
+It has to know which line breaks are real, and it has to be free to reach into
+the history for the rest of a line — in either direction.
