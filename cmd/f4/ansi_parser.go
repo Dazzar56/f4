@@ -29,13 +29,20 @@ const (
 
 // AnsiParser converts a stream of bytes into ScreenBuf operations.
 type AnsiParser struct {
-	State              ParserState
-	Params             []string
-	CurParam           strings.Builder
-	Intermediate       string
-	Attr               uint64
-	term               *TerminalView
-	pty                PtyBackend
+	State        ParserState
+	Params       []string
+	CurParam     strings.Builder
+	Intermediate string
+	Attr         uint64
+	term         *TerminalView
+	pty          PtyBackend
+	// replyTo resolves where answers to device queries (DA, DSR, cursor
+	// position, XTSMGRAPHICS, OSC 52) must go. One parser serves every shell
+	// shown in the panel, so the shell that asked is not necessarily the one
+	// whose PTY was wired in at construction: a query from vim on a remote
+	// host must be answered into that host's PTY, not typed into the local
+	// shell's stdin. Nil falls back to the wired-in PTY.
+	replyTo            func() PtyBackend
 	runeBuf            []byte
 	lastRune           rune
 	pendingWindowsSync []byte
@@ -60,6 +67,17 @@ func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 		pty:  p,
 		Attr: DefaultTermAttr,
 	}
+}
+
+// replyPty is the PTY that answers to device queries belong in: whichever
+// shell is currently driving the terminal, or the wired-in one.
+func (p *AnsiParser) replyPty() PtyBackend {
+	if p.replyTo != nil {
+		if target := p.replyTo(); target != nil {
+			return target
+		}
+	}
+	return p.pty
 }
 
 const maxPendingWindowsSync = 64 * 1024
@@ -524,27 +542,27 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		p.term.ScrollBottom = bottom - 1
 		p.term.SetCursor(0, 0)
 	case 'c':
-		if p.pty != nil {
+		if p.replyPty() != nil {
 			// VT220 with sixel graphics. Programs decide whether to
 			// send pictures by looking for the 4 in this list, so a
 			// terminal that draws them has to say so; the level had
 			// to rise with it, because sixel does not exist below
 			// VT220 and a 4 next to a 1 would just be a puzzle.
-			p.pty.Write([]byte("\x1b[?62;4c"))
+			p.replyPty().Write([]byte("\x1b[?62;4c"))
 		}
 	case 't':
-		if len(args) > 0 && p.pty != nil {
+		if len(args) > 0 && p.replyPty() != nil {
 			cw, ch := p.term.CellSize()
 			switch args[0] {
 			case 18:
 				resp := fmt.Sprintf("\x1b[8;%d;%dt", p.term.Height, p.term.Width)
-				p.pty.Write([]byte(resp))
+				p.replyPty().Write([]byte(resp))
 			case 14:
 				resp := fmt.Sprintf("\x1b[4;%d;%dt", p.term.Height*ch, p.term.Width*cw)
-				p.pty.Write([]byte(resp))
+				p.replyPty().Write([]byte(resp))
 			case 16:
 				resp := fmt.Sprintf("\x1b[6;%d;%dt", ch, cw)
-				p.pty.Write([]byte(resp))
+				p.replyPty().Write([]byte(resp))
 			}
 		}
 	case 'h', 'l': // DECSET / DECRST
@@ -670,13 +688,13 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		if len(args) > 0 {
 			switch args[0] {
 			case 5:
-				if p.pty != nil {
-					p.pty.Write([]byte("\x1b[0n"))
+				if p.replyPty() != nil {
+					p.replyPty().Write([]byte("\x1b[0n"))
 				}
 			case 6:
-				if p.pty != nil {
+				if p.replyPty() != nil {
 					resp := fmt.Sprintf("\x1b[%d;%dR", p.term.CursorY+1, p.term.CursorX+1)
-					p.pty.Write([]byte(resp))
+					p.replyPty().Write([]byte(resp))
 				}
 			}
 		}
@@ -727,9 +745,9 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 				p.term.KittyFlagsStack = p.term.KittyFlagsStack[:last]
 			}
 		} else if strings.HasPrefix(s0, "?") {
-			if p.pty != nil {
+			if p.replyPty() != nil {
 				resp := fmt.Sprintf("\x1b[?%du", p.term.KittyFlags)
-				p.pty.Write([]byte(resp))
+				p.replyPty().Write([]byte(resp))
 			}
 		} else {
 			p.term.RestoreCursor()
@@ -754,7 +772,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 }
 
 func (p *AnsiParser) handleDECRQM(args []int) {
-	if len(p.Params) == 0 || p.pty == nil {
+	if len(p.Params) == 0 || p.replyPty() == nil {
 		return
 	}
 
@@ -796,10 +814,10 @@ func (p *AnsiParser) handleDECRQM(args []int) {
 			}
 		}
 		resp := fmt.Sprintf("\x1b[?%d;%d$y", mode, state)
-		p.pty.Write([]byte(resp))
+		p.replyPty().Write([]byte(resp))
 	} else {
 		resp := fmt.Sprintf("\x1b[%d;%d$y", mode, state)
-		p.pty.Write([]byte(resp))
+		p.replyPty().Write([]byte(resp))
 	}
 }
 
@@ -841,7 +859,7 @@ func (p *AnsiParser) handleOSC() {
 		subparts := strings.SplitN(parts[1], ";", 2)
 		if len(subparts) == 2 {
 			if subparts[1] == "?" {
-				if p.pty != nil {
+				if p.replyPty() != nil {
 					p.osc52WG.Add(1)
 					go func(subCmd string) {
 						defer p.osc52WG.Done()
@@ -856,7 +874,7 @@ func (p *AnsiParser) handleOSC() {
 							clip := vtui.GetClipboard()
 							b64 := base64.StdEncoding.EncodeToString([]byte(clip))
 							// Best effort: a dead pty is reported by the read side.
-							_, _ = fmt.Fprintf(p.pty, "\x1b]52;%s;%s\x07", subCmd, b64)
+							_, _ = fmt.Fprintf(p.replyPty(), "\x1b]52;%s;%s\x07", subCmd, b64)
 						}
 					}(subparts[0])
 				}
@@ -1018,7 +1036,7 @@ const sixelColorRegisters = 256
 // picture may be, and some of them wait for the answer, so a terminal that
 // claims sixel in its device attributes has to reply to this as well.
 func (p *AnsiParser) handleGraphicsAttributes(args []int) {
-	if p.pty == nil {
+	if p.replyPty() == nil {
 		return
 	}
 	item, action := 0, 0
@@ -1034,9 +1052,9 @@ func (p *AnsiParser) handleGraphicsAttributes(args []int) {
 	case 1: // number of colour registers
 		switch action {
 		case 1, 2, 3, 4:
-			_, _ = fmt.Fprintf(p.pty, "\x1b[?1;0;%dS", sixelColorRegisters)
+			_, _ = fmt.Fprintf(p.replyPty(), "\x1b[?1;0;%dS", sixelColorRegisters)
 		default:
-			p.pty.Write([]byte("\x1b[?1;2S"))
+			p.replyPty().Write([]byte("\x1b[?1;2S"))
 		}
 	case 2: // sixel raster geometry
 		switch action {
@@ -1049,12 +1067,12 @@ func (p *AnsiParser) handleGraphicsAttributes(args []int) {
 			if h > sixelMaxSide {
 				h = sixelMaxSide
 			}
-			_, _ = fmt.Fprintf(p.pty, "\x1b[?2;0;%d;%dS", w, h)
+			_, _ = fmt.Fprintf(p.replyPty(), "\x1b[?2;0;%d;%dS", w, h)
 		default:
-			p.pty.Write([]byte("\x1b[?2;2S"))
+			p.replyPty().Write([]byte("\x1b[?2;2S"))
 		}
 	default:
 		// ReGIS geometry, and anything we have never heard of.
-		_, _ = fmt.Fprintf(p.pty, "\x1b[?%d;1S", item)
+		_, _ = fmt.Fprintf(p.replyPty(), "\x1b[?%d;1S", item)
 	}
 }

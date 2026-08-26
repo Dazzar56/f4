@@ -960,3 +960,69 @@ func TestAnsiParser_DECSET_Modes(t *testing.T) {
 		t.Errorf("CSI ? 1006;1000 h = mode %d, sgr %t; want normal tracking with SGR", tv.MouseTrackingMode, tv.MouseSGRMode)
 	}
 }
+
+// recordingPty collects everything written back to it.
+type recordingPty struct {
+	mockPty
+	mu   sync.Mutex
+	data []byte
+}
+
+func (p *recordingPty) Write(b []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.data = append(p.data, b...)
+	return len(b), nil
+}
+
+func (p *recordingPty) written() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return string(p.data)
+}
+
+// One parser serves every shell shown in the panel, so a device query has to
+// be answered into the shell that asked. Answering into the local shell types
+// the reply into its stdin as if the user had entered it, and leaves the
+// program that asked (vim over ssh, say) waiting for an answer that never
+// comes.
+func TestAnsiParser_RepliesGoToTheAskingShell(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	local := &recordingPty{}
+	remote := &recordingPty{}
+	p := NewAnsiParser(tv, local)
+
+	var target PtyBackend
+	p.replyTo = func() PtyBackend { return target }
+
+	// No remote session: the local shell is the one driving the terminal.
+	p.Process([]byte("\x1b[c"))
+	if local.written() == "" {
+		t.Fatal("device attributes query was not answered at all")
+	}
+	if remote.written() != "" {
+		t.Fatalf("reply reached a shell that did not ask: %q", remote.written())
+	}
+
+	// A remote shell is now driving; its queries must come back to it.
+	target = remote
+	before := local.written()
+	p.Process([]byte("\x1b[6n"))
+	if remote.written() == "" {
+		t.Error("cursor position report was not sent to the remote shell")
+	}
+	if local.written() != before {
+		t.Errorf("reply leaked into the local shell's stdin: %q", local.written()[len(before):])
+	}
+}
+
+// With no shell wired in and none driving, a query is dropped rather than
+// panicking the read goroutine.
+func TestAnsiParser_ReplyWithoutAnyPtyIsDropped(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	p := NewAnsiParser(tv, nil)
+	p.replyTo = func() PtyBackend { return nil }
+	p.Process([]byte("\x1b[c\x1b[6n\x1b[?1;1;0S"))
+}

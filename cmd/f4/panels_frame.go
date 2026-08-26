@@ -1044,6 +1044,7 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 		pf.termView.ResetBuffer(pf.termView.Width, pf.termView.Height)
 	}
 	pf.parser = NewAnsiParser(pf.termView, nil)
+	pf.parser.replyTo = pf.activeReplyPTY
 	pf.initPTY()
 	return true
 }
@@ -1051,6 +1052,7 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 func (pf *PanelsFrame) initPTY() {
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
+	pf.parser.replyTo = pf.activeReplyPTY
 
 	if !spawnLocalShellPTY {
 		return
@@ -4003,6 +4005,25 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 		}
 	}
 	return pf.pty
+}
+
+// activeReplyPTY names the shell that device queries should be answered
+// into. Unlike getActivePTY it never opens a connection: a query arriving
+// for a host we have no session with is dropped rather than made to dial
+// one, and it must stay callable from the parser's read goroutines.
+func (pf *PanelsFrame) activeReplyPTY() PtyBackend {
+	pf.ptyMutex.Lock()
+	defer pf.ptyMutex.Unlock()
+	var activeVfs vfs.VFS
+	if fsp := pf.getActivePanel(); fsp != nil {
+		activeVfs = fsp.vfs
+	}
+	if activeVfs != nil && vfsHasRemotePTY(activeVfs) {
+		if pty, ok := pf.remotePtys[activeVfs]; ok && pty != nil {
+			return pty
+		}
+	}
+	return nil
 }
 
 func (pf *PanelsFrame) getActivePTY() PtyBackend {
