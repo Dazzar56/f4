@@ -1028,6 +1028,7 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 	_ = pty.Close()
 
 	pf.executing = false
+	pf.termView.ResetKeyboardProtocols()
 	pf.shellPromptReady = false
 	pf.ignoreNextPrompt = false
 	pf.returnToPanels = false
@@ -4000,6 +4001,9 @@ func (pf *PanelsFrame) getActivePTYUnsafe() PtyBackend {
 				pf.ptyMutex.Lock()
 				delete(pf.remotePtys, activeVfs)
 				pf.ptyMutex.Unlock()
+				// The session that switched these on is gone and cannot
+				// switch them off.
+				pf.termView.ResetKeyboardProtocols()
 			}()
 			return pty
 		}

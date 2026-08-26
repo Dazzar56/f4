@@ -76,10 +76,14 @@ rather than a CR, so the terminal appears hung. It does not reproduce when
 far2l exits cleanly, because then it resets the modes itself.
 
 This is the same shape as the reply-routing bug fixed in 5cd20cf: state that
-belongs to one shell kept in an object shared by all of them. The fix is to
-scope the keyboard protocol modes to the session that enabled them and clear
-them when it ends — not to reset them on a timer, which would break a live
-far2l.
+belongs to one shell kept in an object shared by all of them.
+
+Mitigated by `TerminalView.ResetKeyboardProtocols`, called when a remote read
+loop ends and when the local shell is restarted. That covers the case above —
+the modes die with the session that set them. What is still not scoped is a
+panel switching between two live shells: the modes of the one being left stay
+on for the one being entered. Doing that properly means keeping the modes per
+session rather than per `TerminalView`.
 
 3.  **ConPTY Isolation:** ConPTY frequently forces full screen redraws. The VTE Mirror restricts ConPTY's chaos to a fixed-size sandbox (the viewport). The permanent log is immune to cursor-jumping artifacts because lines are only saved when they are mathematically guaranteed to be finished (pushed off the top).
 3.  **Golang GC Efficiency:** Go's Garbage Collector handles large contiguous byte slices (`PieceTable` chunks) orders of magnitude better than deep hierarchies of small, pointer-heavy objects (`[]Cell` for infinite scrollback).

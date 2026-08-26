@@ -1026,3 +1026,23 @@ func TestAnsiParser_ReplyWithoutAnyPtyIsDropped(t *testing.T) {
 	p.replyTo = func() PtyBackend { return nil }
 	p.Process([]byte("\x1b[c\x1b[6n\x1b[?1;1;0S"))
 }
+
+// Keyboard encodings belong to the program that switched them on. When its
+// session ends they have to go with it, or f4 keeps encoding keystrokes for a
+// shell that never asked and cannot read them.
+func TestTerminalView_ResetKeyboardProtocols(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	p := NewAnsiParser(tv, &mockPty{})
+	p.Process([]byte("\x1b[?9001h\x1b[?1h"))
+	tv.KittyFlags = 1
+	if !tv.Win32InputMode {
+		t.Fatal("win32 input mode was not enabled by DECSET 9001")
+	}
+
+	tv.ResetKeyboardProtocols()
+	if tv.Win32InputMode || tv.KittyFlags != 0 || tv.ApplicationCursorKeys {
+		t.Errorf("modes survived the reset: win32=%v kitty=%d appcursor=%v",
+			tv.Win32InputMode, tv.KittyFlags, tv.ApplicationCursorKeys)
+	}
+}

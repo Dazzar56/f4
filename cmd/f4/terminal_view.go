@@ -1713,6 +1713,25 @@ func (tv *TerminalView) pushRowLocked(cells []vtui.CharInfo, wrapped bool) {
 	}
 }
 
+// ResetKeyboardProtocols turns off the keyboard encodings a shell may have
+// switched on with DECSET, so that the next shell is typed to in plain VT.
+//
+// These modes belong to the program that asked for them, but one TerminalView
+// serves every shell in the panel, so they outlive it. A far2l that dies
+// without resetting them leaves f4 encoding every later keystroke as a win32
+// input event, which the plain shell on the other side prints as text --
+// ";0;0;0;0_" and no working Enter.
+//
+// Call this when a session ends or the panel switches shells, never on a
+// timer: a live far2l needs these modes for as long as it runs.
+func (tv *TerminalView) ResetKeyboardProtocols() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	tv.Win32InputMode = false
+	tv.KittyFlags = 0
+	tv.ApplicationCursorKeys = false
+}
+
 func (tv *TerminalView) IsModal() bool         { return false }
 func (tv *TerminalView) RequestFocus() bool    { return true }
 func (tv *TerminalView) Close()                {}
