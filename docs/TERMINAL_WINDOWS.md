@@ -82,6 +82,46 @@ which ConPTY forwards. A vetoed prompt is re-examined every
 panels back. The directory sync goes through the same accounting: `Show()`
 does not type a second sync while the previous line has no settled prompt.
 
+### 3.1. Field results, 2026-08-26 (commit 49d388b)
+
+Tested on Windows 10 19045 against the checklist in #425.
+
+**Passing:** a batch file with ECHO on no longer returns the panels early, and
+neither does one that ends in `pause`; ordinary commands, `notepad` and
+directory navigation behave. So the settled-prompt rule does what it was meant
+to do — an echoed batch prompt no longer forges completion.
+
+**Failing — nested `cmd` deadlocks the terminal.** Type `cmd`, and from then on
+Enter does nothing; `dir` cannot be run and the session never comes back. The
+log shows the mechanism exactly:
+
+    CMD_SESSION: prompt 3 settled (sent=2 pending=true)
+    CMD_SESSION: prompt 3 vetoed (child or title), rechecking
+
+repeating every 250 ms forever, while the frame stack stays on
+`Terminal (executing)`.
+
+The child-process veto is the culprit. A nested `cmd` *is* a child of the outer
+`cmd`, so `IsBusy()` is true for as long as the user stays inside it — which is
+the whole point of running it. The veto was written for a child that finishes on
+its own (`ping`, a compiler), where re-checking is right; for an interactive
+child it is a permanent no. Meanwhile `pf.executing` stays true, so keystrokes
+keep going down the executing path and Enter never reaches the nested shell's
+input.
+
+The fix has to distinguish "a child is running and owns the terminal" from
+"a child is running and f4 should wait": an interactive child *is* the shell now,
+and its prompt is the one that matters. Note the outer prompt cannot be trusted
+to tell them apart — the nested `cmd` prints the same `$P$G`, and it inherits
+our injected `PROMPT`, so it emits our marks too. Candidate signals: the marks
+from the nested shell arrive with the outer shell's own prompt never redrawn, so
+a settled prompt whose text matches while a child exists means the child is
+prompting; alternatively drop the child veto for `cmd`/`powershell`/`pwsh` by
+image name. Neither is verified.
+
+Until this is fixed, running a nested shell inside the f4 terminal on Windows
+hangs the terminal until the session is restarted.
+
 Also: the local PTY read loop ending (shell died) ends any execution instead
 of leaving the panels hidden, and `PTY.SetSize` ignores 0x0 (TERMINAL.md rule
 4 was documented but not enforced).
