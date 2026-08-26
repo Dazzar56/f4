@@ -44,6 +44,7 @@ type cmdShellSession struct {
 	idleTitle string
 	prompt    promptSnapshot
 	timer     *time.Timer
+	attempts  int
 	closed    bool
 }
 
@@ -56,6 +57,11 @@ var cmdPromptSettleDelay = 150 * time.Millisecond
 // by a child process or the title: a nested shell that exits later leaves a
 // prompt that has already settled, so it has to be looked at again.
 var cmdPromptRecheckDelay = 250 * time.Millisecond
+
+// cmdPromptMaxAttempts bounds how long a prompt that keeps failing to settle
+// is waited on before the wait is released. Roughly five seconds of retries at
+// cmdPromptRecheckDelay.
+var cmdPromptMaxAttempts = 20
 
 // windowsShellPrompt marks the prompt start and end. The prompt end mark is
 // printed after $P$G, so the cursor position at its arrival is the position
@@ -121,6 +127,7 @@ func (s *cmdShellSession) handleMark(mark string, snap promptSnapshot) {
 	}
 	s.promptSeq++
 	s.prompt = snap
+	s.attempts = 0
 	seq := s.promptSeq
 	if s.timer != nil {
 		s.timer.Stop()
@@ -146,7 +153,19 @@ func (s *cmdShellSession) settle(seq uint64) {
 		s.mu.Unlock()
 
 		pf := s.pf
-		if pf.termView == nil || !pf.termView.CursorRestsOnPrompt(snap) {
+		if pf.termView == nil {
+			return
+		}
+		if !pf.termView.CursorRestsOnPrompt(snap) {
+			// The cursor has moved off this prompt. Usually that means the
+			// shell is busy with the next line and a later prompt will
+			// arrive; but it also happens transiently, when the parser
+			// reworked the screen under us -- excising a sync command, or
+			// repainting after a resize. Retrying is what keeps a transient
+			// mismatch from stranding the session: give up only after the
+			// prompt has failed to reappear for a while, and give up by
+			// releasing the wait rather than by holding it forever.
+			s.retryOrRelease(seq)
 			return
 		}
 		vtui.DebugLog("CMD_SESSION: prompt %d settled (sent=%d pending=%v)", seq, sentSeq, pending)
@@ -163,7 +182,7 @@ func (s *cmdShellSession) settle(seq uint64) {
 			vetoed = true
 		}
 		if vetoed {
-			vtui.DebugLog("CMD_SESSION: prompt %d vetoed (child or title), rechecking", seq)
+			vtui.DebugLog("CMD_SESSION: prompt %d vetoed (child), rechecking", seq)
 			s.mu.Lock()
 			if !s.closed && seq == s.promptSeq {
 				s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
@@ -184,6 +203,44 @@ func (s *cmdShellSession) settle(seq uint64) {
 		pf.noteLocalShellBusy(false)
 		pf.catchUpProcessEnvironment(true)
 	})
+}
+
+// retryOrRelease looks at prompt seq again shortly, and stops looking after
+// cmdPromptMaxAttempts. Stopping means releasing the wait, not keeping it: a
+// stuck wait leaves pf.executing set, and because isPtyBusy reports that as
+// busy, every hotkey gated on the terminal being quiet stops working -- Esc
+// among them, while Ctrl+O keeps working because it is not gated. A terminal
+// that ends a command slightly too early is a much smaller problem than one
+// the user cannot get out of.
+func (s *cmdShellSession) retryOrRelease(seq uint64) {
+	s.mu.Lock()
+	if s.closed || seq != s.promptSeq {
+		s.mu.Unlock()
+		return
+	}
+	s.attempts++
+	if s.attempts < cmdPromptMaxAttempts {
+		s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+	vtui.DebugLog("CMD_SESSION: prompt %d never settled, releasing the wait", seq)
+	s.release()
+}
+
+// release ends the wait without having proved the shell is at a prompt.
+func (s *cmdShellSession) release() {
+	pf := s.pf
+	s.mu.Lock()
+	s.pending = false
+	s.mu.Unlock()
+	pf.shellPromptReady = true
+	pf.ignoreNextPrompt = false
+	if pf.executing {
+		pf.endExecution()
+	}
+	pf.noteLocalShellBusy(false)
 }
 
 // titleSaysRunning recognizes the "<title> - <command>" form cmd gives the

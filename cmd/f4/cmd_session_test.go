@@ -150,3 +150,30 @@ type toggleBusyPty struct {
 }
 
 func (p *toggleBusyPty) IsBusy() bool { return p.busy.Load() }
+
+// A prompt whose cursor has moved on must not strand the session. Nothing
+// clears pf.executing except the settle path, and isPtyBusy reports executing
+// as busy, so a wait that never ends disables every hotkey gated on the
+// terminal being quiet -- Esc stops toggling the panels while Ctrl+O, which is
+// not gated, keeps working. That asymmetry is the symptom to look for.
+func TestCmdSessionReleasesAWaitThatNeverSettles(t *testing.T) {
+	pf := newCmdSessionFrame(t)
+	oldMax := cmdPromptMaxAttempts
+	cmdPromptMaxAttempts = 3
+	t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
+
+	feedAndWait(pf, testPrompt, 60*time.Millisecond)
+	pf.executing = true
+	pf.cmdSession.noteSent()
+
+	// A prompt arrives, but output keeps coming so the cursor never rests on
+	// it: the screen is being rewritten under the settle check.
+	feedAndWait(pf, "cmd\r\n"+testPrompt+"more output follows", 300*time.Millisecond)
+
+	if pf.executing {
+		t.Error("executing stayed set: the terminal would be stuck busy, with Esc dead and Ctrl+O alive")
+	}
+	if !pf.cmdSession.idle() {
+		t.Error("the session never released its wait")
+	}
+}

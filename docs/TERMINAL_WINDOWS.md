@@ -158,6 +158,33 @@ tester confirmed the visible `cd /d "C:\F4" & rem f4_sync` now appears only
 once, at startup — the first sync goes out before the first prompt has
 settled, which is the one case the session accounting cannot yet hide.
 
+### 3.2. The stranded wait, and why it looked like "Esc is broken"
+
+Reported after 3.1: commands finish, but afterwards `Ctrl+O` works while `Esc`
+does not.
+
+That asymmetry names the cause precisely. `Esc` is bound with the `EscToggle`
+condition, which ends in `!pf.isPtyBusy()`; `Ctrl+O` is bound with
+`NoAltScreenApp`, which does not look at busy at all. `isPtyBusy` returns
+`pf.executing` when no child process is running, so anything that leaves
+`executing` set disables `Esc` and everything else gated on a quiet terminal,
+while leaving `Ctrl+O` alive.
+
+What left it set: `cmdShellSession.settle` checked that the cursor still rested
+on the prompt and, if it did not, returned — with no timer and no retry. The
+check runs 150 ms after the mark arrives, and in that window the parser may
+well have moved the cursor: it excises the sync command from the stream, and a
+ConPTY repaint rewrites the screen wholesale. One transient mismatch and the
+session waited forever.
+
+Now the check retries, and after `cmdPromptMaxAttempts` it *releases* the wait
+instead of holding it. The direction matters: a terminal that calls a command
+finished slightly too early is a smaller problem than one the user cannot get
+out of. Any future veto added to this path must fail the same way.
+
+Note also that `titleSaysRunning` can never fire (§3.1: the title is unreadable
+behind a pseudoconsole), so the title veto is now dead weight in this code.
+
 ## 5. Plan, in order
 
 | # | Step | Status |
