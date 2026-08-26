@@ -60,6 +60,27 @@ Before finalizing the `f4` architecture, we analyzed the source code of the most
 
     What remains genuinely hard is Windows, and for an unrelated reason: ConPTY runs its own reflow and repaints the whole viewport afterwards, so a second reflow in `f4` would fight it. That is what `PSEUDOCONSOLE_RESIZE_QUIRK` (flag `0x2`) exists for — it tells ConPTY not to invalidate on resize and to trust the terminal to re-wrap. Unverified for `f4`, and the 2024 ConPTY rewrite (microsoft/terminal#17510) admits it now emits `\r\n` on delayed EOL wrap, which can destroy the soft-wrap signal on recent builds. So: the Unix side is open, the Windows side needs those two experiments first. The full survey — how far2l, WezTerm, Alacritty and xterm.js each solve this, and which parts are worth copying — is in `TERMINAL_REFLOW.md`; the Windows bug list is in `TERMINAL_WINDOWS.md`.
 
+### Known bug: keyboard protocol modes outlive the shell that asked for them
+
+`TerminalView.Win32InputMode` and `TerminalView.KittyFlags` are set by `DECSET`
+from whichever shell is driving the panel, and nothing clears them when that
+shell exits or when the panel switches to another one. One `TerminalView`
+serves them all, so the mode leaks.
+
+Seen in the field: `far2l --tty` on a remote host turns on win32-input-mode and
+the kitty keyboard protocol, then dies without resetting them (its "revive
+instance" path). Every later keystroke to the plain remote shell is still
+encoded, and the shell prints the encoding as text — `;0;0;0;0_ls` on screen,
+the tail of `CSI Vk;Sc;Uc;Kd;Cs;Rc _`. Enter goes the same way, as a sequence
+rather than a CR, so the terminal appears hung. It does not reproduce when
+far2l exits cleanly, because then it resets the modes itself.
+
+This is the same shape as the reply-routing bug fixed in 5cd20cf: state that
+belongs to one shell kept in an object shared by all of them. The fix is to
+scope the keyboard protocol modes to the session that enabled them and clear
+them when it ends — not to reset them on a timer, which would break a live
+far2l.
+
 3.  **ConPTY Isolation:** ConPTY frequently forces full screen redraws. The VTE Mirror restricts ConPTY's chaos to a fixed-size sandbox (the viewport). The permanent log is immune to cursor-jumping artifacts because lines are only saved when they are mathematically guaranteed to be finished (pushed off the top).
 3.  **Golang GC Efficiency:** Go's Garbage Collector handles large contiguous byte slices (`PieceTable` chunks) orders of magnitude better than deep hierarchies of small, pointer-heavy objects (`[]Cell` for infinite scrollback).
 
