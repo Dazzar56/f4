@@ -1886,21 +1886,6 @@ func (tv *TerminalView) PromptSnapshot() promptSnapshot {
 	return promptSnapshot{Row: tv.CursorY, Col: tv.CursorX, Text: tv.textBeforeCursorLocked()}
 }
 
-// CursorRestsOnPrompt reports whether the cursor still sits right after the
-// prompt text of snap. Position alone is not enough: a repaint can move the
-// prompt to another row, and a batch line echoes the prompt at the same place
-// with the command text after it — so the text ending at the cursor is what
-// is compared.
-func (tv *TerminalView) CursorRestsOnPrompt(snap promptSnapshot) bool {
-	tv.mu.Lock()
-	defer tv.mu.Unlock()
-	if tv.UseAltScreen || snap.Text == "" {
-		return false
-	}
-	text := tv.textBeforeCursorLocked()
-	return strings.HasSuffix(text, snap.Text)
-}
-
 func (tv *TerminalView) HandleOSC133(payload string) {
 	vtui.DebugLog("TERM_OSC133: %s", payload)
 	if tv.OnShellMark != nil {

@@ -136,14 +136,20 @@ Also observed by the tester: `Ctrl+O` while stuck brings the panels back and
 input works again. That confirms the diagnosis — nothing is wrong with the
 input path, only with `executing` never clearing.
 
-A second thing the same probe should settle (results pending): whether a GUI
-child like `notepad` reports a window handle. If it does, the child veto can
-skip GUI children too, which fixes the older "f4 stays busy while notepad is
-open" behaviour with the same change. `start notepad` detaches and probably
-does not appear in the tree at all.
+Implemented in `cmd_session.go`: `childHoldsTerminal` ignores children in
+`nestedShellImages` (only `cmd.exe` — PowerShell rejects `cd /d`, so it must
+stay a raw-mode child like ssh or python) and ignores GUI children, whose
+subsystem is read from the PE header of the image (`pe_subsystem.go`,
+`PTY.ChildProcesses`). cmd does not wait for a GUI program, so `notepad` typed
+at the prompt leaves cmd idle; the second field report confirmed that it was
+only the five-second fallback (§3.3) that had been returning the panels in
+that case. A console child that is not a shell holds the terminal for as long
+as it runs — that wait is deliberately unbounded, `ping -t` is forever.
 
-Until this is fixed, running a nested shell inside the f4 terminal on Windows
-hangs the terminal until `Ctrl+O` or a session restart.
+Open: with the panels hidden and a nested `cmd` at its prompt, Enter typed in
+raw mode reportedly did nothing while `dir` typed after `Ctrl+O` (through f4's
+command line) worked. The fix above sidesteps it by returning the panels at
+the nested prompt; why raw-mode Enter fails there has not been explained.
 
 Also: the local PTY read loop ending (shell died) ends any execution instead
 of leaving the panels hidden, and `PTY.SetSize` ignores 0x0 (TERMINAL.md rule
@@ -185,19 +191,53 @@ out of. Any future veto added to this path must fail the same way.
 Note also that `titleSaysRunning` can never fire (§3.1: the title is unreadable
 behind a pseudoconsole), so the title veto is now dead weight in this code.
 
+### 3.3. Five seconds on every `dir`: the mark arrives before its prompt
+
+Second field report (10.0.19045): every command, `dir` included, brought the
+panels back only after 5–6 seconds. Users read that as "the panels are not
+coming back" and started pressing keys.
+
+Five seconds is `cmdPromptMaxAttempts × cmdPromptRecheckDelay` — the release
+fallback from §3.2. So the settle check itself was failing on every plain
+command and the fallback was doing all the work. The check compared the screen
+against a snapshot taken when the prompt-end mark was parsed, and on this build
+that snapshot is empty: ConPTY passes the OSC 133 mark through to the pipe
+*before* it has rendered the prompt text that precedes it in cmd's output, so
+at the mark the cursor sits at the start of an empty row and the text
+`C:\work>` arrives in a later read. On 10.0.26200 the first tester's commands
+ended at once, so there the text comes first. Both orders are now in the test
+model (`windowsBuilds` in `cmd_session_test.go`) and every session test runs
+under each.
+
+Fix: the snapshot is gone. `settle` looks at what is in front of the cursor
+*now*, requires it to be prompt-shaped (`promptShaped`: a drive path then `>`,
+which an echoed batch line, a `set /p` prompt and program output that ends in
+`>` all fail), and requires it to be unchanged since the previous look. On the
+late-text build that costs one extra re-look, about 400 ms in total instead of
+five seconds.
+
+The title veto was removed in the same change: §3.1 showed the title is
+unreadable behind a pseudoconsole, and `cmdShellSession.titleSaysRunning` could
+never have fired.
+
 ## 5. Plan, in order
 
 | # | Step | Status |
 | --- | --- | --- |
 | 1 | Settled-prompt completion (#409) | shipped, field-tested |
-| 2 | Nested shell: skip the child veto for shell/interpreter images; remove the dead title veto | next — signal confirmed by probe |
-| 3 | GUI children (`notepad`) do not count as busy | after probe results on `haswindow` |
-| 4 | Self-erasing directory sync cleanup (section 3) | after 2 |
-| 5 | Startup sync typed before the first prompt settles | with 4 |
-| 6 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | probe script fixed, results pending |
+| 2 | Nested shell: skip the child veto for `cmd.exe`; remove the dead title veto | shipped |
+| 3 | GUI children (`notepad`) do not count as busy | shipped (PE subsystem) |
+| 4 | Examine the screen at settle time, not a snapshot at the mark (§3.3) | shipped |
+| 5 | Self-erasing directory sync cleanup (section 3) | next |
+| 6 | Startup sync typed before the first prompt settles | with 5 |
+| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | Go probe built, results pending |
 
-Step 2 is small and the data is in. Do it first; it turns the terminal from
-"hangs on `cmd`" into usable.
+Steps 2–4 need a field run: expected is `dir` ending well under a second on
+19045, `notepad` and nested `cmd` returning the panels at once, and `ping -t`
+holding them until Ctrl+C. The PowerShell probe for step 7 failed twice on
+P/Invoke details (`err=87` for both flags, i.e. before the flag mattered);
+`tools/conptyprobe` is the same experiment written with the calls f4 itself
+uses, cross-compiled here.
 
 ## 4. Issue #362 — Ctrl+C does not interrupt in f4-gui
 

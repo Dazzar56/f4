@@ -239,6 +239,59 @@ func (p *PTY) IsBusy() bool {
 	return false
 }
 
+// ChildProcesses lists the shell's direct children with the one thing the
+// session needs to know about each: whether cmd is waiting for it. A GUI
+// child is not waited for. Unlike IsBusy this is not cached; it is only
+// called while a prompt is being examined.
+func (p *PTY) ChildProcesses() []childProcess {
+	p.mu.Lock()
+	proc := p.process
+	p.mu.Unlock()
+	if proc == nil {
+		return nil
+	}
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil
+	}
+	defer windows.CloseHandle(snapshot)
+
+	var pe32 windows.ProcessEntry32
+	pe32.Size = uint32(unsafe.Sizeof(pe32))
+	if err := windows.Process32First(snapshot, &pe32); err != nil {
+		return nil
+	}
+	var children []childProcess
+	for {
+		if pe32.ParentProcessID == proc.ProcessId {
+			name := windows.UTF16ToString(pe32.ExeFile[:])
+			children = append(children, childProcess{Name: name, GUI: processIsGUI(pe32.ProcessID)})
+		}
+		if err := windows.Process32Next(snapshot, &pe32); err != nil {
+			break
+		}
+	}
+	return children
+}
+
+// processIsGUI reads the subsystem of the process's image. Anything that
+// cannot be read (an elevated child, a vanished one) counts as a console
+// program: waiting for it is the safe error.
+func processIsGUI(pid uint32) bool {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	buf := make([]uint16, windows.MAX_LONG_PATH)
+	size := uint32(len(buf))
+	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &size); err != nil {
+		return false
+	}
+	gui, err := executableIsGUI(windows.UTF16ToString(buf[:size]))
+	return err == nil && gui
+}
+
 func GetSystemShell() string {
 	shell := os.Getenv("COMSPEC")
 	if shell == "" {

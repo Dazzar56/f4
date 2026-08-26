@@ -23,10 +23,24 @@ import (
 // while a prompt that waits for input leaves the cursor resting right after
 // the prompt text. The session therefore ends an execution only when a prompt
 // mark (B, printed after $P$G) has arrived since the command was sent, the
-// cursor has rested on that prompt for cmdPromptSettleDelay, the shell has no
-// child process (a nested cmd or python prints the same prompt) and the
-// console title does not say that cmd is still running something ("<title> -
-// <command>", which ConPTY forwards).
+// screen in front of the cursor looks like cmd's prompt and has not changed
+// for cmdPromptSettleDelay, and no console child process that would own the
+// terminal is running.
+//
+// What was learned from the field (docs/TERMINAL_WINDOWS.md §3.1–3.3):
+//
+//   - The screen is examined at settle time, never from a snapshot taken when
+//     the mark arrived. ConPTY passes the mark through before it has
+//     necessarily rendered the prompt text that precedes it, so a snapshot
+//     taken at the mark can be empty; comparing against it failed every plain
+//     `dir` and left the panels to a five-second fallback.
+//   - The console title is unreadable behind a pseudoconsole, so there is no
+//     title veto: cmd's "<title> - <command>" form never reaches us.
+//   - A child process vetoes completion only if it is a console program that
+//     is not itself cmd. A nested cmd prints the same prompt and is the shell
+//     now; a GUI program (notepad) is not waited for by cmd, so cmd is already
+//     at its prompt. The veto for a running console child is not bounded:
+//     `ping -t` keeps the terminal busy for as long as it runs.
 //
 // The session is only created for the local Windows shell; the remote FISH+
 // peer and Unix shells keep their own completion signals.
@@ -41,32 +55,75 @@ type cmdShellSession struct {
 	promptSeq uint64
 	sentSeq   uint64
 	pending   bool // a typed line (command or directory sync) has no prompt yet
-	idleTitle string
-	prompt    promptSnapshot
+	observed  promptSnapshot
 	timer     *time.Timer
 	attempts  int
 	closed    bool
 }
 
-// cmdPromptSettleDelay is how long the cursor must rest on a prompt before it
-// counts as the shell waiting for input. ConPTY renders the text that follows
-// an echoed batch prompt within a frame or two; a long silence is a prompt.
+// cmdPromptSettleDelay is how long after a prompt mark the screen is first
+// examined. ConPTY renders the text that follows an echoed batch prompt within
+// a frame or two; a prompt still alone after this is a prompt.
 var cmdPromptSettleDelay = 150 * time.Millisecond
 
-// cmdPromptRecheckDelay is the poll interval while a settled prompt is vetoed
-// by a child process or the title: a nested shell that exits later leaves a
-// prompt that has already settled, so it has to be looked at again.
+// cmdPromptRecheckDelay is the poll interval while the prompt has not settled
+// yet, or while a console child holds the terminal.
 var cmdPromptRecheckDelay = 250 * time.Millisecond
 
 // cmdPromptMaxAttempts bounds how long a prompt that keeps failing to settle
-// is waited on before the wait is released. Roughly five seconds of retries at
-// cmdPromptRecheckDelay.
+// is waited on before the wait is released (roughly five seconds). It does
+// not bound the child veto, which lasts as long as the child does.
 var cmdPromptMaxAttempts = 20
 
 // windowsShellPrompt marks the prompt start and end. The prompt end mark is
 // printed after $P$G, so the cursor position at its arrival is the position
 // the shell reads input from.
 const windowsShellPrompt = `$E]133;A$E\$P$G$E]133;B$E\`
+
+// childProcess is what the session needs to know about a child of the shell.
+type childProcess struct {
+	Name string // image file name, e.g. "PING.EXE"
+	GUI  bool   // built for the Windows GUI subsystem: cmd does not wait for it
+}
+
+// childInspector is implemented by PTY backends that can list the shell's
+// direct children. Backends that cannot are treated as having none.
+type childInspector interface {
+	ChildProcesses() []childProcess
+}
+
+// nestedShellImages are children that print a cmd-style prompt and accept
+// the lines f4 types (cd /d "..." & command). Their prompt ends the outer
+// command's wait, and the panels come back with the nested shell as the shell.
+// PowerShell is deliberately absent: it rejects `cd /d`, so it must keep the
+// terminal in raw mode until the user leaves it, like ssh or python.
+var nestedShellImages = map[string]bool{
+	"cmd.exe": true,
+}
+
+// childHoldsTerminal reports whether one of the shell's children is a console
+// program f4 has to wait for.
+func childHoldsTerminal(children []childProcess) bool {
+	for _, c := range children {
+		if c.GUI {
+			continue
+		}
+		if nestedShellImages[strings.ToLower(c.Name)] {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// promptShaped reports whether text is what cmd's $P$G leaves in front of the
+// cursor: a path with a drive, then ">". A batch line echo has the command
+// text after the ">", a `set /p` prompt has no drive, and program output that
+// happens to end in ">" has no path.
+func promptShaped(text string) bool {
+	text = strings.TrimRight(text, " ")
+	return strings.HasSuffix(text, ">") && strings.Contains(text, `:\`)
+}
 
 func newCmdShellSession(pf *PanelsFrame) *cmdShellSession {
 	return &cmdShellSession{pf: pf}
@@ -126,7 +183,7 @@ func (s *cmdShellSession) handleMark(mark string, snap promptSnapshot) {
 		return
 	}
 	s.promptSeq++
-	s.prompt = snap
+	s.observed = snap
 	s.attempts = 0
 	seq := s.promptSeq
 	if s.timer != nil {
@@ -136,8 +193,8 @@ func (s *cmdShellSession) handleMark(mark string, snap promptSnapshot) {
 	s.mu.Unlock()
 }
 
-// settle checks, on the UI goroutine, whether prompt seq is the shell waiting
-// for input, and if so ends whatever f4 was waiting for.
+// settle examines, on the UI goroutine, whether prompt seq is the shell
+// waiting for input, and if so ends whatever f4 was waiting for.
 func (s *cmdShellSession) settle(seq uint64) {
 	manager := vtui.FrameManager
 	if manager == nil {
@@ -149,59 +206,51 @@ func (s *cmdShellSession) settle(seq uint64) {
 			s.mu.Unlock()
 			return
 		}
-		snap, sentSeq, pending := s.prompt, s.sentSeq, s.pending
+		previous, sentSeq, pending := s.observed, s.sentSeq, s.pending
 		s.mu.Unlock()
 
 		pf := s.pf
 		if pf.termView == nil {
 			return
 		}
-		if !pf.termView.CursorRestsOnPrompt(snap) {
-			// The cursor has moved off this prompt. Usually that means the
-			// shell is busy with the next line and a later prompt will
-			// arrive; but it also happens transiently, when the parser
-			// reworked the screen under us -- excising a sync command, or
-			// repainting after a resize. Retrying is what keeps a transient
-			// mismatch from stranding the session: give up only after the
-			// prompt has failed to reappear for a while, and give up by
-			// releasing the wait rather than by holding it forever.
+
+		// What is on screen now, not what was there when the mark arrived.
+		current := pf.termView.PromptSnapshot()
+		if pf.termView.UseAltScreen || !promptShaped(current.Text) || current != previous {
+			// Either the shell is busy with the next line (a batch echo, a
+			// command that took over), or the prompt is still being drawn:
+			// ConPTY can pass the mark through before the prompt text. Look
+			// again shortly, against what is on screen now.
+			s.mu.Lock()
+			if !s.closed && seq == s.promptSeq {
+				s.observed = current
+			}
+			s.mu.Unlock()
 			s.retryOrRelease(seq)
 			return
 		}
-		vtui.DebugLog("CMD_SESSION: prompt %d settled (sent=%d pending=%v)", seq, sentSeq, pending)
+
 		if pending && seq <= sentSeq {
 			// This prompt was printed before the line we typed; the shell has
-			// not even started on it.
-			return
-		}
-		vetoed := false
-		if pty := pf.localPTY(); pty != nil && pty.IsBusy() {
-			vetoed = true
-		}
-		if !vetoed && s.titleSaysRunning(pf.termView.Title) {
-			vetoed = true
-		}
-		if vetoed {
-			vtui.DebugLog("CMD_SESSION: prompt %d vetoed (child), rechecking", seq)
-			s.mu.Lock()
-			if !s.closed && seq == s.promptSeq {
-				s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
-			}
-			s.mu.Unlock()
+			// not even started on it. The prompt for our line will come.
+			vtui.DebugLog("CMD_SESSION: prompt %d predates the typed line (sent=%d), ignoring", seq, sentSeq)
 			return
 		}
 
-		s.mu.Lock()
-		s.pending = false
-		s.idleTitle = pf.termView.Title
-		s.mu.Unlock()
-		pf.shellPromptReady = true
-		pf.ignoreNextPrompt = false
-		if pf.executing {
-			pf.endExecution()
+		if inspector, ok := pf.localPTY().(childInspector); ok {
+			if children := inspector.ChildProcesses(); childHoldsTerminal(children) {
+				vtui.DebugLog("CMD_SESSION: prompt %d held by child %v, rechecking", seq, children)
+				s.mu.Lock()
+				if !s.closed && seq == s.promptSeq {
+					s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
+				}
+				s.mu.Unlock()
+				return
+			}
 		}
-		pf.noteLocalShellBusy(false)
-		pf.catchUpProcessEnvironment(true)
+
+		vtui.DebugLog("CMD_SESSION: prompt %d settled (sent=%d pending=%v)", seq, sentSeq, pending)
+		s.release()
 	})
 }
 
@@ -229,7 +278,7 @@ func (s *cmdShellSession) retryOrRelease(seq uint64) {
 	s.release()
 }
 
-// release ends the wait without having proved the shell is at a prompt.
+// release ends the wait: the shell is taken to be at its prompt.
 func (s *cmdShellSession) release() {
 	pf := s.pf
 	s.mu.Lock()
@@ -241,16 +290,5 @@ func (s *cmdShellSession) release() {
 		pf.endExecution()
 	}
 	pf.noteLocalShellBusy(false)
-}
-
-// titleSaysRunning recognizes the "<title> - <command>" form cmd gives the
-// console title while it runs an external command or a batch file.
-func (s *cmdShellSession) titleSaysRunning(title string) bool {
-	s.mu.Lock()
-	base := s.idleTitle
-	s.mu.Unlock()
-	if base == "" || title == base {
-		return false
-	}
-	return strings.HasPrefix(title, base+" - ")
+	pf.catchUpProcessEnvironment(true)
 }

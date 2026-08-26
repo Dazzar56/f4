@@ -1,19 +1,82 @@
 package main
 
 import (
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/unxed/vtui"
 )
 
-const testPrompt = "\x1b]133;A\x1b\\C:\\work>\x1b]133;B\x1b\\"
+// windowsBuild models what a given Windows build does at the seams the cmd
+// session depends on. Everything here was observed in the field on real
+// machines (docs/TERMINAL_WINDOWS.md §3.1–3.3); a test that runs under every
+// build in windowsBuilds is a test against all of it.
+type windowsBuild struct {
+	name string
 
-// newCmdSessionFrame builds a panels frame whose terminal is driven by the
-// cmd session, the way NewPanelsFrame does on Windows, and shortens the
-// settle delay so the tests do not wait for real ConPTY timings.
-func newCmdSessionFrame(t *testing.T) *PanelsFrame {
+	// markBeforeText: ConPTY passes the OSC 133 prompt-end mark through to
+	// the pipe before it has rendered the prompt text that precedes it, so
+	// the text arrives in a later read. Seen on 10.0.19045 as a five-second
+	// delay on every `dir` while the session compared the screen against an
+	// empty snapshot taken at the mark. On 10.0.26200 the same commands
+	// ended at once, so there the text comes first.
+	markBeforeText bool
+
+	// The console title is never readable from outside a pseudoconsole: the
+	// probe found it empty for every process on both builds. It is listed
+	// here as a constant of the model so nobody reintroduces a title veto.
+	titleReadable bool
+}
+
+var windowsBuilds = []windowsBuild{
+	{name: "Windows 10 19045", markBeforeText: true, titleReadable: false},
+	{name: "Windows 11 26200", markBeforeText: false, titleReadable: false},
+}
+
+// Children observed by the process probe on both builds while the user did
+// the checklist. cmd waits for the console ones; notepad is a GUI program
+// cmd returns from immediately; `start notepad` detaches and is not a child
+// at all.
+var (
+	childPing      = childProcess{Name: "PING.EXE", GUI: false}
+	childTimeout   = childProcess{Name: "timeout.exe", GUI: false}
+	childNestedCmd = childProcess{Name: "cmd.exe", GUI: false}
+	childNotepad   = childProcess{Name: "notepad.exe", GUI: true}
+)
+
+const promptText = `C:\work>`
+
+// fakeWinPty stands in for the ConPTY-backed PTY: it reports whatever
+// children the test says the shell has.
+type fakeWinPty struct {
+	mockPty
+	mu       sync.Mutex
+	children []childProcess
+}
+
+func (p *fakeWinPty) ChildProcesses() []childProcess {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]childProcess(nil), p.children...)
+}
+
+func (p *fakeWinPty) setChildren(children ...childProcess) {
+	p.mu.Lock()
+	p.children = children
+	p.mu.Unlock()
+}
+
+// cmdShellSim feeds the parser what cmd.exe under ConPTY would send, in the
+// order the modelled build sends it.
+type cmdShellSim struct {
+	t     *testing.T
+	pf    *PanelsFrame
+	pty   *fakeWinPty
+	build windowsBuild
+}
+
+func newCmdShellSim(t *testing.T, build windowsBuild) *cmdShellSim {
 	t.Helper()
 	oldSettle, oldRecheck := cmdPromptSettleDelay, cmdPromptRecheckDelay
 	cmdPromptSettleDelay, cmdPromptRecheckDelay = 20*time.Millisecond, 20*time.Millisecond
@@ -23,157 +86,288 @@ func newCmdSessionFrame(t *testing.T) *PanelsFrame {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := setupMockPanelsFrame(t)
 	t.Cleanup(pf.Close)
+	pty := &fakeWinPty{}
+	pf.pty = pty
 	pf.cmdSession = newCmdShellSession(pf)
 	pf.termView.OnShellMark = func(mark string, snap promptSnapshot) { pf.cmdSession.handleMark(mark, snap) }
 	pf.parser = NewAnsiParser(pf.termView, nil)
-	return pf
+	return &cmdShellSim{t: t, pf: pf, pty: pty, build: build}
 }
 
-func feedAndWait(pf *PanelsFrame, data string, wait time.Duration) {
-	pf.parser.Process([]byte(data))
-	deadline := time.Now().Add(wait)
+func (s *cmdShellSim) feed(data string) { s.pf.parser.Process([]byte(data)) }
+
+func (s *cmdShellSim) wait(d time.Duration) {
+	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
 		drainUITasks()
 		time.Sleep(5 * time.Millisecond)
 	}
 }
 
+// prompt sends what PROMPT=$E]133;A$E\$P$G$E]133;B$E\ produces, in the order
+// this build delivers it. The text after a batch-echoed prompt (the command
+// line and its line break) goes with it, as it does in one ConPTY frame.
+func (s *cmdShellSim) prompt(after string) {
+	if s.build.markBeforeText {
+		s.feed("\x1b]133;A\x1b\\\x1b]133;B\x1b\\")
+		s.wait(10 * time.Millisecond)
+		s.feed(promptText + after)
+		return
+	}
+	s.feed("\x1b]133;A\x1b\\" + promptText + "\x1b]133;B\x1b\\" + after)
+}
+
+// start brings the shell up: banner, first prompt, settled.
+func (s *cmdShellSim) start() {
+	s.feed("Microsoft Windows [Version 10.0]\r\n\r\n")
+	s.prompt("")
+	s.wait(80 * time.Millisecond)
+	if !s.pf.cmdSession.idle() {
+		s.t.Fatalf("[%s] startup prompt did not settle", s.build.name)
+	}
+}
+
+// run types a command: f4 marks the execution and the shell echoes the line.
+func (s *cmdShellSim) run(command string) {
+	s.pf.executing = true
+	s.pf.returnToPanels = true
+	s.pf.showPanels = false
+	s.pf.cmdSession.noteSent()
+	s.feed(command + "\r\n")
+}
+
+// settledWithin is the time a prompt may take to end an execution without
+// falling back to the release: the first look plus one re-look for the build
+// that delivers the text late, with slack for the test scheduler.
+const settledWithin = 120 * time.Millisecond
+
+func (s *cmdShellSim) expectExecuting(want bool, what string) {
+	s.t.Helper()
+	if s.pf.executing != want {
+		s.t.Errorf("[%s] %s: executing=%v, want %v", s.build.name, what, s.pf.executing, want)
+	}
+}
+
+func forEachBuild(t *testing.T, fn func(t *testing.T, sim *cmdShellSim)) {
+	for _, build := range windowsBuilds {
+		t.Run(build.name, func(t *testing.T) { fn(t, newCmdShellSim(t, build)) })
+	}
+}
+
+// A plain command ends when its prompt has settled -- promptly, on every
+// build, and not via the five-second release. On 19045 this is the case that
+// took five seconds before the screen was examined at settle time.
+func TestCmdSessionPlainCommandEndsPromptly(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("dir")
+		sim.feed(" Volume in drive C\r\nfile.txt\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after dir's prompt")
+		if !sim.pf.showPanels {
+			t.Error("panels did not come back")
+		}
+	})
+}
+
 // A batch file with ECHO on prints the prompt in front of every line it
-// runs. Those prompts must not be taken for the one that follows the batch
-// (issue #409): the command text and the line break after them move the
-// cursor away, so they never settle.
+// runs. Those prompts must not be taken for the one after the batch (#409):
+// the command text and the line break after them mean the screen in front
+// of the cursor is not a prompt.
 func TestCmdSessionBatchEchoPromptsDoNotEndExecution(t *testing.T) {
-	pf := newCmdSessionFrame(t)
-	feedAndWait(pf, "Microsoft Windows\r\n\r\n"+testPrompt, 60*time.Millisecond)
-	if !pf.cmdSession.idle() {
-		t.Fatal("startup prompt did not settle")
-	}
-
-	pf.executing = true
-	pf.returnToPanels = true
-	pf.showPanels = false
-	pf.cmdSession.noteSent()
-
-	// Echo of the typed line, then two batch lines with their prompts.
-	feedAndWait(pf, "foo.bat\r\n\r\n"+testPrompt+"echo started\r\nstarted\r\n\r\n", 60*time.Millisecond)
-	feedAndWait(pf, testPrompt+"timeout /t 5\r\nWaiting for 5 seconds...", 60*time.Millisecond)
-	if !pf.executing || pf.showPanels {
-		t.Fatal("an echoed batch prompt ended the execution")
-	}
-
-	// The real prompt after the batch: nothing follows it.
-	feedAndWait(pf, "\r\n\r\n"+testPrompt, 80*time.Millisecond)
-	if pf.executing || !pf.showPanels {
-		t.Fatal("the settled prompt after the batch did not return the panels")
-	}
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("foo.bat")
+		sim.feed("\r\n")
+		sim.prompt("echo started\r\nstarted\r\n\r\n")
+		sim.wait(settledWithin)
+		sim.expectExecuting(true, "after the first echoed batch line")
+		sim.prompt("timeout /t 5\r\nWaiting for 5 seconds...")
+		sim.wait(settledWithin)
+		sim.expectExecuting(true, "while the batch waits")
+		sim.prompt("pause\r\nPress any key to continue . . . ")
+		sim.wait(settledWithin)
+		sim.expectExecuting(true, "while the batch pauses")
+		sim.feed("\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after the prompt that follows the batch")
+	})
 }
 
-// A startup prompt that crosses ConPTY after the command was typed was not
-// printed for that command and cannot end it.
+// A console child holds the terminal for as long as it runs; there is no
+// timeout on that, `ping -t` is legitimately forever. When it exits, the
+// prompt that had already settled is taken.
+func TestCmdSessionConsoleChildHoldsTheTerminal(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("ping -t 127.0.0.1")
+		sim.pty.setChildren(childPing)
+		// The shell printed nothing new -- but suppose a prompt did appear
+		// while the child runs (a batch that spawned ping with echo on and
+		// the prompt text alone on screen): the child still holds it.
+		sim.feed("\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin + 4*cmdPromptRecheckDelay)
+		sim.expectExecuting(true, "while ping runs")
+		sim.pty.setChildren()
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after ping exited")
+	})
+}
+
+// A nested cmd is the shell now. It prints the same prompt, accepts the same
+// lines, and its prompt ends the outer command's wait instead of holding it
+// -- this is the case that hung the terminal until Ctrl+O.
+func TestCmdSessionNestedCmdIsTheShellNow(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("cmd")
+		sim.pty.setChildren(childNestedCmd)
+		sim.feed("Microsoft Windows [Version 10.0]\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "at the nested shell's prompt")
+
+		// A command typed into the nested shell works the same way.
+		sim.run("dir")
+		sim.feed("file.txt\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after dir in the nested shell")
+
+		// And exit brings the outer prompt back.
+		sim.run("exit")
+		sim.pty.setChildren()
+		sim.feed("\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after exit")
+	})
+}
+
+// cmd does not wait for a GUI program, so it is at its prompt while notepad
+// is open; f4 must not stay busy for as long as the window does.
+func TestCmdSessionGUIChildDoesNotHoldTheTerminal(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("notepad")
+		sim.pty.setChildren(childNotepad)
+		sim.feed("\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "with notepad open")
+	})
+}
+
+// A prompt that reaches the pipe after the command was typed, but was
+// printed before it (the startup prompt still crossing ConPTY), is not the
+// answer to the command.
 func TestCmdSessionStalePromptDoesNotEndExecution(t *testing.T) {
-	pf := newCmdSessionFrame(t)
-	pf.executing = true
-	pf.cmdSession.noteSent()
-	// The shell is still printing its startup prompt; the typed line has
-	// not been echoed yet (it is queued in the console input).
-	feedAndWait(pf, testPrompt, 60*time.Millisecond)
-	if !pf.executing {
-		t.Fatal("a prompt printed before the command was accepted as its end")
-	}
-	// Now the echo, the output and the prompt that belongs to the command.
-	feedAndWait(pf, "dir\r\nfiles...\r\n\r\n"+testPrompt, 80*time.Millisecond)
-	if pf.executing {
-		t.Fatal("the prompt after the command did not end it")
-	}
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.run("dir")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(true, "after a prompt that predates the command")
+		sim.feed("dir\r\nfile.txt\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after the command's own prompt")
+	})
 }
 
-// A prompt that has settled is looked at again: a nested shell prints the
-// same prompt, and the parent's prompt only counts once the child is gone.
-func TestCmdSessionChildProcessVetoesSettledPrompt(t *testing.T) {
-	pf := newCmdSessionFrame(t)
-	busy := &toggleBusyPty{}
-	pf.pty = busy
-	feedAndWait(pf, testPrompt, 60*time.Millisecond)
-	busy.busy.Store(true)
-	pf.executing = true
-	pf.cmdSession.noteSent()
-	feedAndWait(pf, "cmd\r\n"+testPrompt, 80*time.Millisecond)
-	if !pf.executing {
-		t.Fatal("a prompt of a running child shell ended the execution")
-	}
-	busy.busy.Store(false)
-	feedAndWait(pf, "", 100*time.Millisecond)
-	if pf.executing {
-		t.Fatal("the prompt was not reconsidered after the child exited")
-	}
+// The console title is not readable behind a pseudoconsole (both builds), so
+// nothing may depend on it. Even if a title did arrive it must change
+// nothing.
+func TestCmdSessionIgnoresConsoleTitle(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		if sim.build.titleReadable {
+			t.Fatal("no build with a readable title has been observed; update the model before relying on it")
+		}
+		sim.start()
+		sim.run("dir")
+		sim.feed("\x1b]0;C:\\Windows\\system32\\cmd.exe - dir\x07file.txt\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "with a running-style title still set")
+	})
 }
 
-// While cmd runs something it appends the command to the console title.
-// ConPTY forwards the title, and a prompt printed under such a title is a
-// batch line, not the shell waiting for input.
-func TestCmdSessionRunningTitleVetoesPrompt(t *testing.T) {
-	pf := newCmdSessionFrame(t)
-	feedAndWait(pf, "\x1b]0;C:\\Windows\\system32\\cmd.exe\x07"+testPrompt, 60*time.Millisecond)
-	if !pf.cmdSession.idle() {
-		t.Fatal("startup prompt did not settle")
-	}
-	pf.executing = true
-	pf.cmdSession.noteSent()
-	feedAndWait(pf, "foo.bat\r\n\x1b]0;C:\\Windows\\system32\\cmd.exe - foo.bat\x07"+testPrompt, 80*time.Millisecond)
-	if !pf.executing {
-		t.Fatal("a prompt printed while the title says the batch is running ended the execution")
-	}
-	feedAndWait(pf, "\x1b]0;C:\\Windows\\system32\\cmd.exe\x07", 80*time.Millisecond)
-	if pf.executing {
-		t.Fatal("the prompt was not accepted once the title was restored")
-	}
-}
-
-// The directory sync typed into the shell is a line like any other: no
-// second sync may be typed until its prompt has settled.
-func TestCmdSessionSyncWaitsForPrompt(t *testing.T) {
-	pf := newCmdSessionFrame(t)
-	feedAndWait(pf, testPrompt, 60*time.Millisecond)
-	pf.cmdSession.noteSent()
-	if pf.cmdSession.idle() {
-		t.Fatal("session reported idle with a line outstanding")
-	}
-	feedAndWait(pf, "cd /d \"C:\\work\" & rem f4_sync\r\n\r\n"+testPrompt, 80*time.Millisecond)
-	if !pf.cmdSession.idle() {
-		t.Fatal("session did not become idle after the prompt settled")
-	}
-}
-
-type toggleBusyPty struct {
-	mockPty
-	busy atomic.Bool
-}
-
-func (p *toggleBusyPty) IsBusy() bool { return p.busy.Load() }
-
-// A prompt whose cursor has moved on must not strand the session. Nothing
-// clears pf.executing except the settle path, and isPtyBusy reports executing
-// as busy, so a wait that never ends disables every hotkey gated on the
-// terminal being quiet -- Esc stops toggling the panels while Ctrl+O, which is
-// not gated, keeps working. That asymmetry is the symptom to look for.
+// A prompt whose screen never settles must not strand the session: nothing
+// else clears pf.executing, and isPtyBusy reports executing as busy, which
+// disables every hotkey gated on a quiet terminal (Esc) while leaving the
+// ungated ones (Ctrl+O) alive.
 func TestCmdSessionReleasesAWaitThatNeverSettles(t *testing.T) {
-	pf := newCmdSessionFrame(t)
-	oldMax := cmdPromptMaxAttempts
-	cmdPromptMaxAttempts = 3
-	t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		oldMax := cmdPromptMaxAttempts
+		cmdPromptMaxAttempts = 3
+		t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
+		sim.start()
+		sim.run("weird")
+		sim.prompt("output that keeps the cursor off the prompt")
+		sim.wait(settledWithin + time.Duration(cmdPromptMaxAttempts+1)*cmdPromptRecheckDelay)
+		sim.expectExecuting(false, "after the release")
+		if !sim.pf.cmdSession.idle() {
+			t.Error("the session never released its wait")
+		}
+	})
+}
 
-	feedAndWait(pf, testPrompt, 60*time.Millisecond)
-	pf.executing = true
-	pf.cmdSession.noteSent()
+// The directory sync is a typed line like any other: no second sync may be
+// typed until its prompt has settled.
+func TestCmdSessionSyncWaitsForPrompt(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.pf.cmdSession.noteSent()
+		if sim.pf.cmdSession.idle() {
+			t.Fatal("session reported idle with a line outstanding")
+		}
+		sim.feed("cd /d \"C:\\work\" & rem f4_sync\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		if !sim.pf.cmdSession.idle() {
+			t.Fatal("session did not become idle after the prompt settled")
+		}
+	})
+}
 
-	// A prompt arrives, but output keeps coming so the cursor never rests on
-	// it: the screen is being rewritten under the settle check.
-	feedAndWait(pf, "cmd\r\n"+testPrompt+"more output follows", 300*time.Millisecond)
-
-	if pf.executing {
-		t.Error("executing stayed set: the terminal would be stuck busy, with Esc dead and Ctrl+O alive")
+func TestPromptShaped(t *testing.T) {
+	cases := map[string]bool{
+		`C:\work>`:                        true,
+		`C:\>`:                            true,
+		`Z:\share\deep\path> `:            true,
+		`PS C:\work> `:                    true, // shape only; nested powershell is held by the child veto
+		`C:\work>pause`:                   false,
+		`Press any key to continue . . .`: false,
+		`Enter value>`:                    false, // set /p prompt: no drive
+		`>>> `:                            false, // python
+		``:                                false,
 	}
-	if !pf.cmdSession.idle() {
-		t.Error("the session never released its wait")
+	for text, want := range cases {
+		if got := promptShaped(text); got != want {
+			t.Errorf("promptShaped(%q) = %v, want %v", text, got, want)
+		}
+	}
+}
+
+func TestChildHoldsTerminal(t *testing.T) {
+	cases := []struct {
+		children []childProcess
+		want     bool
+	}{
+		{nil, false},
+		{[]childProcess{childPing}, true},
+		{[]childProcess{childTimeout}, true},
+		{[]childProcess{childNestedCmd}, false},
+		{[]childProcess{childNotepad}, false},
+		{[]childProcess{childNestedCmd, childPing}, true}, // ping inside the nested cmd
+		{[]childProcess{{Name: "powershell.exe"}}, true},  // rejects cd /d: stays raw
+		{[]childProcess{{Name: "python.exe"}}, true},
+	}
+	for _, c := range cases {
+		if got := childHoldsTerminal(c.children); got != c.want {
+			t.Errorf("childHoldsTerminal(%v) = %v, want %v", c.children, got, c.want)
+		}
 	}
 }

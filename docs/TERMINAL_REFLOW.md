@@ -219,12 +219,13 @@ that here as an external constraint.
 ### Open questions
 
 * What `CreatePseudoConsole` does with flag `0x2` on Windows 10 1809 — ignore it
-  or fail. A fallback is needed either way. A tester-run probe
-  (`f4-conpty-probe.ps1`: creates a pseudoconsole with flags 0 and 2, types a
-  line longer than the console, resizes, dumps the raw bytes) will answer this
-  and the soft-wrap question above for whatever build the tester has. Its first
-  run died on a PowerShell type accelerator before reaching ConPTY; the fixed
-  version is out, results pending.
+  or fail. A fallback is needed either way. `tools/conptyprobe` (build with
+  `GOOS=windows go build ./tools/conptyprobe`) creates a pseudoconsole with
+  flags 0 and 2 using the same calls as `pty_windows.go`, types a line longer
+  than the console, resizes, and dumps the raw bytes; it answers this and the
+  soft-wrap question above for whatever build it runs on. Two PowerShell
+  attempts at the same experiment failed on P/Invoke details before reaching
+  ConPTY. Results pending.
 * What a full buffer reflow costs while the user drags the window border, and
   whether throttling (xterm.js, Fluent Terminal) is required.
 * Which programs are actually harmed by being re-wrapped without an alternate
