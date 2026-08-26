@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -41,6 +42,61 @@ func TestActionExtractArchive_Integrity(t *testing.T) {
 	destDir := filepath.Join(tmpDir, "output")
 	if err := os.Mkdir(destDir, 0700); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestActionExtractArchive_Encrypted7zPromptsForPassword(t *testing.T) {
+	sevenZip, err := exec.LookPath("7z")
+	if err != nil {
+		t.Skip("7z command is not installed")
+	}
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "secret.txt"), []byte("secret data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(tmpDir, "secret.7z")
+	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-bd", archivePath, "secret.txt")
+	cmd.Dir = tmpDir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("create encrypted 7z: %v: %s", err, output)
+	}
+
+	destDir := filepath.Join(tmpDir, "output")
+	if err := os.Mkdir(destDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	prompts := 0
+	previousPrompt := archivePasswordPrompt
+	archivePasswordPrompt = func(context.Context, string) (string, error) {
+		prompts++
+		if prompts == 1 {
+			return "Wrong", nil
+		}
+		return "Correct", nil
+	}
+	t.Cleanup(func() { archivePasswordPrompt = previousPrompt })
+
+	app := &mockAppForProgress{
+		t:          t,
+		activeVfs:  vfs.NewOSVFS(tmpDir),
+		passiveVfs: vfs.NewOSVFS(destDir),
+		names:      []string{filepath.Base(archivePath)},
+		done:       make(chan struct{}),
+	}
+	actionExtractArchive(app)
+	<-app.done
+
+	if prompts != 2 {
+		t.Fatalf("password prompt count = %d, want 2", prompts)
+	}
+	data, err := os.ReadFile(filepath.Join(destDir, "secret.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "secret data" {
+		t.Fatalf("extracted content = %q, want %q", data, "secret data")
 	}
 }
 
