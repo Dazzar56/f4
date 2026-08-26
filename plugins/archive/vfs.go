@@ -1588,9 +1588,50 @@ func (v *ArchiveVFS) performCleanup() error {
 }
 
 func (v *ArchiveVFS) Clone() vfs.VFS {
-	// Archive VFS is currently stateful and linked to temp files.
-	// For now, return self as cloning requires extracting everything again.
-	return v
+	v.mu.Lock()
+	if v.isClosed {
+		v.mu.Unlock()
+		return vfs.NewNullVFS(0)
+	}
+	parent, arcPath, backingPath := v.parent, v.arcPath, v.backingPath
+	displayName, format, password, innerPath := v.displayName, v.format, v.password, v.innerPath
+	v.mu.Unlock()
+
+	var finalPath string
+	var closer io.Closer
+	if osvfs, ok := parent.(*vfs.OSVFS); ok {
+		// The local archive file is already independently owned by its parent
+		// VFS, so a second decoder can use the same immutable path safely.
+		finalPath = backingPath
+		if finalPath == "" {
+			var err error
+			finalPath, err = osvfs.Abs(arcPath)
+			if err != nil {
+				return vfs.NewNullVFS(0)
+			}
+		}
+	} else {
+		// Remote archives need their own materialization lease. Sharing the
+		// source lease would let one workspace's delayed cleanup remove the
+		// backing file from the other workspace.
+		lease, err := acquireArchiveMaterialization(context.Background(), parent, arcPath, displayName)
+		if err != nil {
+			return vfs.NewNullVFS(0)
+		}
+		finalPath, closer = lease.Path(), lease
+	}
+
+	fsys, _, err := openArchiveFSWithContext(context.Background(), finalPath, displayName, closer, password)
+	if err != nil {
+		if closer != nil {
+			_ = closer.Close()
+		}
+		return vfs.NewNullVFS(0)
+	}
+	return &ArchiveVFS{
+		parent: parent, arcPath: arcPath, backingPath: finalPath, displayName: displayName,
+		format: format, password: password, innerPath: innerPath, fsys: fsys, closer: closer,
+	}
 }
 
 var ProgressTickerInterval = 250 * time.Millisecond

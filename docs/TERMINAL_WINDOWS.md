@@ -121,17 +121,17 @@ calls handlers in reverse order of registration. Log the entry of
 
 ## 5. Issue #424 — the terminal half
 
-`TerminalView.CloneStateFrom` copies `other.pty` into the clone. The clone's
-own `initPTY` goroutine assigns its freshly created PTY to the same field
-asynchronously, so which one wins is a race. That is the mechanism behind
-"a command run in one workspace shows up in another".
-
-`pty` is ownership, not visual state, and does not belong in a state clone.
-`Clone` should set it explicitly under `ptyMutex` after copying the grid.
+This was fixed: `TerminalView.CloneStateFrom` copies terminal display state but
+leaves `pty` owned by the destination `PanelsFrame`. The clone's own
+`initPTY` goroutine therefore cannot race with a source workspace's PTY, which
+was the mechanism behind "a command run in one workspace shows up in another".
 
 The routing half of #424 (actions landing in the wrong workspace) was a
-separate defect in `findPanelsFrameAnyScreen` and is already fixed; see
-`workspace_routing_test.go`.
+separate defect in `findPanelsFrameAnyScreen` and is covered by the active-
+workspace routing tests.
+
+Archive and FTP VFS clones now also keep independent path state and lifecycle;
+their regressions are covered in the corresponding plugin tests.
 
 ## 6. Target shape
 
@@ -149,7 +149,7 @@ Today the command construction is duplicated between `panels_frame.go` and
 | 1 | VK fallback for Ctrl+letter in `TranslateInput` | #362 | low |
 | 2 | Drop the cwd sync on directory change | #165 | low |
 | 3 | OSC 133 parity gate | #409 | low |
-| 4 | Stop copying `pty` in `CloneStateFrom` | #424 | low |
+| 4 | Stop copying `pty` in `CloneStateFrom` | #424 | done |
 | 5 | Logging patch for OSC 133 | #409 | none |
 | 6 | Frame Windows commands with `%F4E%` markers | #409 | medium |
 | 7 | `IsBusy` from the pseudoconsole process list | #409 | medium |
@@ -162,4 +162,4 @@ Today the command construction is duplicated between `panels_frame.go` and
 * Confirmation that the Ctrl+Break report still reproduces on master, and in
   which build.
 * A decision on whether Ctrl+N should start a new shell or share one, which
-  determines the shape of the fix in section 5.
+  determines the shape of the remaining terminal work in section 5.
