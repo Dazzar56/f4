@@ -168,12 +168,37 @@ with a `WrapEngine`. Three differences from far2l, all worth adopting:
    stream.** Done. The cursor is carried as an offset inside its logical line,
    and the relayout never splits a wide character from its filler cell.
 2. **Move the wrap marker from the row to the cell and invert it** — mark the
-   hard break, not the soft wrap. Not done. `WrapFlags[y]` still has to be
-   shifted by hand in `scrollUp`, `scrollDown` and `Resize`; a cell-level
-   marker would delete all three of those parallel updates.
-3. **Choose reflow vs truncation by output mode**, not only by alternate
-   screen. Not done: a raw-mode TUI that raised no alternate screen (a Python
-   REPL) is still re-wrapped under it.
+   hard break, not the soft wrap. Not done. `WrapFlags[y]` is indexed by row, so
+   it has to be shifted by hand wherever rows move; a cell-level marker would
+   delete every one of those parallel updates, because the marker would travel
+   with the character.
+
+   The bits are already reserved: `vtui/colors.go` declares
+   `ExplicitLineBreak = 0x0400` and `ImportantLineChar = 0x0800`, the same names
+   and the same values as far2l's `WinCompat.h`. Nothing in `f4` writes them
+   yet. So this work needs no hunt for room in `Attributes` — it needs the
+   careful part, which is that `WrapFlags` and `GridHistoryWrap` are touched in
+   about three dozen places in `cmd/f4/terminal_view.go`, including `PutChar`,
+   `scrollUp`, `scrollDown`, `EraseLine`, `EraseDisplay` and `GetAllLogBytes`.
+   That code is shared with Windows and runs on every character ConPTY emits,
+   and unlike the reflow itself it cannot be hidden behind
+   `terminalReflowEnabled`: the whole point is for one marker to serve
+   everywhere. Do it when the Windows terminal is not being tested, and expect
+   to re-run the Windows checks afterwards.
+3. **Decide reflow vs truncation by something better than the alternate
+   screen.** Open, and it needs research before it needs code — the wording
+   here used to suggest it was a matter of copying far2l, which it is not.
+
+   far2l branches on `ENABLE_PROCESSED_OUTPUT`, a Windows console mode it owns
+   because `WinPort` *is* the console API. On Unix the equivalent state (raw vs
+   cooked, `ICANON`, `ECHO`) is set by the child on the slave side of the PTY
+   and is not visible to us at all. The candidate substitutes are all
+   heuristics with their own false positives: autowrap turned off, mouse
+   tracking enabled, application cursor keys. So the question to answer first is
+   an empirical one — which programs actually suffer from being re-wrapped while
+   holding no alternate screen, and is that set large enough to be worth a
+   heuristic. A Python REPL is the obvious candidate to measure; `readline`
+   redraws its own line on `SIGWINCH`, so it may well not care.
 
 ### Order of work
 
@@ -197,8 +222,11 @@ that here as an external constraint.
   or fail. A fallback is needed either way.
 * What a full buffer reflow costs while the user drags the window border, and
   whether throttling (xterm.js, Fluent Terminal) is required.
-* Whether `vtui.CharInfo` has room for a cell-level marker or it needs a parallel
-  array.
+* Which programs are actually harmed by being re-wrapped without an alternate
+  screen — see item 3 above. Measure before adding a heuristic.
+
+Answered since this file was written: `vtui.CharInfo` has room for a cell-level
+marker, and the bits are already named for it (item 2).
 
 ## 4. What went wrong the first time
 
