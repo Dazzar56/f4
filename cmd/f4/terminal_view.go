@@ -1465,11 +1465,20 @@ type logicalLine struct {
 	cursor int // offset of the cursor within this line, or -1
 }
 
-// significantWidthLocked returns the length of row after dropping the trailing
-// run of cells that carry no information: default-attribute blanks. A blank
-// that changes the background counts as significant, or shrinking the window
-// would eat coloured fills.
-func significantWidthLocked(row []vtui.CharInfo) int {
+// significantWidthLocked returns how much of row carries information.
+//
+// A row that soft-wraps into the next one carries all of it: text reached the
+// right edge, so every cell up to that edge was written, trailing spaces
+// included. Those spaces are the column alignment of things like `ls -la`, and
+// trimming them glues the columns of the next row onto the previous one.
+//
+// A row that ended by itself is trimmed of its trailing default-attribute
+// blanks. A blank that changes the background still counts as significant, or
+// shrinking the window would eat coloured fills.
+func significantWidthLocked(row []vtui.CharInfo, wrapped bool) int {
+	if wrapped {
+		return len(row)
+	}
 	w := len(row)
 	for w > 0 {
 		c := row[w-1]
@@ -1490,7 +1499,7 @@ func significantWidthLocked(row []vtui.CharInfo) int {
 // pair of coordinates. Recomputing (x, y) arithmetically is what makes a live
 // reflow desync from the shell; pinning the cursor to a position in the text
 // survives the relayout, and the shell redraws its prompt on SIGWINCH anyway.
-func (tv *TerminalView) unwrapLocked() []logicalLine {
+func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 	// Rows of the viewport worth carrying: everything up to the last row with
 	// text, and never less than the cursor row.
 	lastRow := 0
@@ -1511,7 +1520,8 @@ func (tv *TerminalView) unwrapLocked() []logicalLine {
 	}
 	var rows []sourceRow
 	for y := 0; y <= lastRow && y < tv.Height; y++ {
-		width := significantWidthLocked(tv.Lines[y])
+		wrapped := y < len(tv.WrapFlags) && tv.WrapFlags[y]
+		width := significantWidthLocked(tv.Lines[y], wrapped)
 		cursorX := -1
 		if y == tv.CursorY {
 			cursorX = tv.CursorX
@@ -1526,22 +1536,26 @@ func (tv *TerminalView) unwrapLocked() []logicalLine {
 		}
 		cells := make([]vtui.CharInfo, width)
 		copy(cells, tv.Lines[y][:width])
-		wrapped := y < len(tv.WrapFlags) && tv.WrapFlags[y]
 		rows = append(rows, sourceRow{cells: cells, wrapped: wrapped, cursorX: cursorX})
 	}
 
-	// Pull back the history rows that wrap into row 0.
+	// Pull rows back out of GridHistory, for two reasons. A history row that
+	// soft-wraps into what follows is half of a line and has to be re-wrapped
+	// with its other half. And re-wrapping to a wider grid produces fewer rows
+	// than it consumed, so without more material the viewport would come back
+	// part empty with its earlier output stranded in the history.
 	pulled := 0
 	for len(tv.GridHistory) > 0 && pulled < maxReflowHistoryPull {
 		last := len(tv.GridHistory) - 1
-		if !tv.GridHistoryWrap[last] {
+		wrapped := tv.GridHistoryWrap[last]
+		if !wrapped && len(rows) >= h {
 			break
 		}
 		row := tv.GridHistory[last]
-		width := significantWidthLocked(row)
+		width := significantWidthLocked(row, wrapped)
 		cells := make([]vtui.CharInfo, width)
 		copy(cells, row[:width])
-		rows = append([]sourceRow{{cells: cells, wrapped: true, cursorX: -1}}, rows...)
+		rows = append([]sourceRow{{cells: cells, wrapped: wrapped, cursorX: -1}}, rows...)
 		tv.GridHistory = tv.GridHistory[:last]
 		tv.GridHistoryWrap = tv.GridHistoryWrap[:last]
 		pulled++
@@ -1570,7 +1584,7 @@ func (tv *TerminalView) unwrapLocked() []logicalLine {
 
 // reflowLocked re-wraps the primary screen to width w and height h.
 func (tv *TerminalView) reflowLocked(w, h int) {
-	lines := tv.unwrapLocked()
+	lines := tv.unwrapLocked(h)
 
 	blank := vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 	padTo := func(row []vtui.CharInfo, n int) []vtui.CharInfo {

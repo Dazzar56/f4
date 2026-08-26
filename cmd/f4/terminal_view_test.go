@@ -1474,3 +1474,66 @@ func TestIssue117_F4Host_ClipboardOpenAuth(t *testing.T) {
 		t.Errorf("Expected 10 bytes for open reply, got %d", len(decoded))
 	}
 }
+
+// A soft-wrapped row holds text right up to the right edge, so the spaces at
+// its end are real: they are the column alignment of output like `ls -la`.
+// Trimming them as if they were padding glues the columns of the next row onto
+// the previous one, which is what "rootroot976304апр82024zsh" looked like.
+func TestTerminalView_Reflow_KeepsAlignmentSpacesOfWrappedRows(t *testing.T) {
+	if !terminalReflowEnabled {
+		t.Skip("live grid reflow is off on this platform")
+	}
+	tv := NewTerminalView(20, 4)
+	defer tv.Close()
+	tv.SetCursor(0, 0)
+	// Exactly 20 columns, ending in the spaces that align the next column,
+	// then the wrapped remainder.
+	for _, r := range "-rwxr-xr-x 1 root   zsh" {
+		tv.PutChar(r, DefaultTermAttr)
+	}
+
+	tv.Resize(40, 4)
+	joined := ""
+	for y := 0; y < tv.Height; y++ {
+		if txt := rowText(tv.Lines[y]); txt != "" {
+			joined += txt
+		}
+	}
+	if joined != "-rwxr-xr-x 1 root   zsh" {
+		t.Errorf("alignment spaces were lost through the reflow: %q", joined)
+	}
+}
+
+// Re-wrapping to a wider grid turns many rows into few, so the viewport has
+// room it did not have before. That room is filled from GridHistory instead of
+// being left blank with the earlier output stranded off screen.
+func TestTerminalView_Reflow_RefillsViewportFromHistory(t *testing.T) {
+	if !terminalReflowEnabled {
+		t.Skip("live grid reflow is off on this platform")
+	}
+	tv := NewTerminalView(10, 4)
+	defer tv.Close()
+	tv.SetCursor(0, 0)
+	// Eight short lines: four end up on screen, four in the history.
+	for i := 1; i <= 8; i++ {
+		for _, r := range fmt.Sprintf("line%d", i) {
+			tv.PutChar(r, DefaultTermAttr)
+		}
+		tv.PutChar('\r', DefaultTermAttr)
+		tv.PutChar('\n', DefaultTermAttr)
+	}
+	if len(tv.GridHistory) == 0 {
+		t.Fatal("nothing reached GridHistory")
+	}
+
+	tv.Resize(40, 4)
+	filled := 0
+	for y := 0; y < tv.Height; y++ {
+		if rowText(tv.Lines[y]) != "" {
+			filled++
+		}
+	}
+	if filled < 3 {
+		t.Errorf("only %d of %d rows were filled after widening; the rest stayed in history", filled, tv.Height)
+	}
+}
