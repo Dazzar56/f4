@@ -97,11 +97,6 @@ func testArchiveVFS_PromptsForEncryptedArchiveAtPath(t *testing.T, archivePath, 
 	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithContext(t, archivePath, passwordValue, context.Background())
 }
 
-func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithProgress(t *testing.T, archivePath, passwordValue string) {
-	ctx := context.WithValue(context.Background(), vfs.ProgressKey, vfs.ProgressCallback(func(string, int) {}))
-	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithContext(t, archivePath, passwordValue, ctx)
-}
-
 func testArchiveVFS_PromptsForEncryptedArchiveAtPathWithProgressAndPasswords(t *testing.T, archivePath string, passwords []string) {
 	ctx := context.WithValue(context.Background(), vfs.ProgressKey, vfs.ProgressCallback(func(string, int) {}))
 	testArchiveVFS_PromptsForEncryptedArchiveAtPathWithPasswords(t, archivePath, passwords, ctx)
