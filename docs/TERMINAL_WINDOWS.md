@@ -58,41 +58,37 @@ Fix, in order of increasing cost:
 
 ## 3. Issue #409 — bat/cmd appear to run in the background
 
-Established from the code:
+Root cause, established from cmd.exe's documented behaviour: with ECHO on
+(the default), cmd prints the *prompt* in front of every line of a batch file
+it runs. f4's injected `PROMPT` therefore emitted its OSC 133 "command done"
+mark on the first line of `foo.bat`, `pf.executing` was cleared, and
+`PTY.IsBusy()` could not object because cmd interprets batch files
+in-process and creates no child. The old integration test used `@echo off`
+plus `ping.exe` (a child), which is exactly the combination that never
+reproduces it.
 
-* The Windows path sends `cd /d "dir" & <cmd>` with no OSC 133 framing, unlike
-  the Unix path, which wraps the command in `133;C` … `133;D`.
-* The only source of a marker on Windows is `PROMPT`, which emits `133;D` at
-  every prompt. `133;C` is never emitted at all.
-* `isPtyBusy()` is `PTY.IsBusy() || pf.executing`.
-* `PTY.IsBusy()` on Windows asks whether the shell process has a child.
-  `cmd.exe` interprets `.bat`/`.cmd` in-process and creates no child, so this
-  is always false for a batch file.
+Fix: `cmd_session.go`. `PROMPT` now marks the prompt start (`133;A`) and end
+(`133;B`, printed after `$P$G`); no mark claims completion. A typed line is
+finished only when a prompt end mark has arrived *after* the line was typed,
+the cursor has rested right after that prompt's text for
+`cmdPromptSettleDelay` (150 ms — an echoed batch line is followed by the
+command text and a line break within a frame, a real prompt by nothing), the
+shell has no child process (a nested `cmd`/`python` prints the same prompt),
+and the console title is not in cmd's "<title> - <command>" running form,
+which ConPTY forwards. A vetoed prompt is re-examined every
+`cmdPromptRecheckDelay`, so a nested shell that exits later still hands the
+panels back. The directory sync goes through the same accounting: `Show()`
+does not type a second sync while the previous line has no settled prompt.
 
-So the busy state for a batch file rests entirely on `pf.executing`, which is
-cleared by the first `133;D` — a marker tied to the prompt, not to the command.
+Also: the local PTY read loop ending (shell died) ends any execution instead
+of leaving the panels hidden, and `PTY.SetSize` ignores 0x0 (TERMINAL.md rule
+4 was documented but not enforced).
 
-Hypotheses for the early `D`, none yet confirmed three ways:
-
-* H1: the `D` from the prompt printed *before* our command is parsed after
-  `pf.executing` was set (the flag is set synchronously on Enter, PTY data
-  arrives asynchronously).
-* H2: the batch file changes or restores `PROMPT`, or spawns a nested `cmd`.
-* H3: ConPTY's premature prompt (Appendix A, observation 3).
-
-H1 fits the "panels come back immediately" report best. Before fixing, collect
-evidence: log the chunk number, the offset inside the chunk and a hexdump
-around every OSC 133 marker in `HandleOSC133`, plus a timestamp and the exact
-wire command at both send sites; then run a `.bat` containing `timeout /t 5`.
-
-Direction once confirmed:
-
-1. Ignore a `D` that arrives without a matching `C` (parity gate). Cheapest and
-   also covers H3.
-2. Frame Windows commands the way Unix ones are framed, via an `F4E`
-   environment variable holding ESC, so `C`/`D` belong to the command.
-3. Replace `PTY.IsBusy` with the pseudoconsole's process list rather than the
-   shell's children, which is blind to batch files and builtins by design.
+Not done yet, in the same session layer: making the directory sync creep-free
+by typing a short self-erasing `echo %F4E%[nA%F4E%[J...` cleanup line after
+the new prompt arrives (F4E holding ESC, like `$E` in PROMPT), so that the
+erase happens in conhost's own buffer and survives ConPTY repaints; and
+reading the shell's cwd back from the text between the A and B marks.
 
 ## 4. Issue #362 — Ctrl+C does not interrupt in f4-gui
 

@@ -1776,6 +1776,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						pf.termView.SetMuted(true)
 					}
 					pf.writePTY(activePty, []byte(cmdToWire))
+					if isWindowsShell {
+						pf.noteLocalShellLineSent(activePty)
+					}
 					pf.showPanels = false
 				}
 			})

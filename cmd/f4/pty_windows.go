@@ -112,6 +112,11 @@ func (p *PTY) Read(b []byte) (int, error) {
 }
 
 func (p *PTY) SetSize(cols, rows int) {
+	// A minimized window reports 0x0; ConPTY does not survive being told so
+	// (TERMINAL.md, rule 4). Nor does it need a height it cannot use.
+	if cols <= 0 || rows <= 0 {
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	windows.ResizePseudoConsole(p.console, windows.Coord{X: int16(cols), Y: int16(rows)})

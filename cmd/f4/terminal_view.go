@@ -84,6 +84,9 @@ type TerminalView struct {
 
 	OnTitleChange func(string)
 	OnBusyChange  func(bool)
+	// OnShellMark receives every OSC 133 mark (A, B, C, D, E...) together
+	// with the cursor state at that moment. It runs on the PTY goroutine.
+	OnShellMark func(mark string, snap promptSnapshot)
 
 	// --- Mouse-driven text selection over the visible viewport ---
 	// Coordinates are absolute (screen) columns/rows, chosen so the
@@ -1528,8 +1531,78 @@ func (tv *TerminalView) HandleKittyAPC(s string) {
 	tv.kittyGraphics().Handle(s)
 }
 
+// promptSnapshot is where the cursor stood, and what the shell had printed
+// before it, at the moment an OSC 133 mark crossed the parser. The prompt
+// text is the run of cells that ends at the cursor, joined across soft-wrapped
+// rows, so that a prompt longer than the window still compares whole.
+type promptSnapshot struct {
+	Row, Col int
+	Text     string
+}
+
+// textBeforeCursorLocked returns the text on the cursor's row up to the
+// cursor, with the previous rows prepended for as long as they soft-wrap
+// into it. Trailing blanks of the row stay out of the answer.
+func (tv *TerminalView) textBeforeCursorLocked() string {
+	buf := tv.getBuffer()
+	y, x := tv.CursorY, tv.CursorX
+	if y < 0 || y >= len(buf) {
+		return ""
+	}
+	if x > len(buf[y]) {
+		x = len(buf[y])
+	}
+	var parts []string
+	parts = append(parts, cellsText(buf[y][:x]))
+	for y > 0 && !tv.UseAltScreen && y-1 < len(tv.WrapFlags) && tv.WrapFlags[y-1] {
+		y--
+		parts = append(parts, cellsText(buf[y]))
+	}
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	return strings.Join(parts, "")
+}
+
+func cellsText(cells []vtui.CharInfo) string {
+	var sb strings.Builder
+	for _, c := range cells {
+		if c.Char == vtui.WideCharFiller {
+			continue
+		}
+		sb.WriteString(vtui.CellString(c.Char))
+	}
+	return sb.String()
+}
+
+// PromptSnapshot captures the cursor and the text in front of it.
+func (tv *TerminalView) PromptSnapshot() promptSnapshot {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return promptSnapshot{Row: tv.CursorY, Col: tv.CursorX, Text: tv.textBeforeCursorLocked()}
+}
+
+// CursorRestsOnPrompt reports whether the cursor still sits right after the
+// prompt text of snap. Position alone is not enough: a repaint can move the
+// prompt to another row, and a batch line echoes the prompt at the same place
+// with the command text after it — so the text ending at the cursor is what
+// is compared.
+func (tv *TerminalView) CursorRestsOnPrompt(snap promptSnapshot) bool {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.UseAltScreen || snap.Text == "" {
+		return false
+	}
+	text := tv.textBeforeCursorLocked()
+	return strings.HasSuffix(text, snap.Text)
+}
+
 func (tv *TerminalView) HandleOSC133(payload string) {
 	vtui.DebugLog("TERM_OSC133: %s", payload)
+	if tv.OnShellMark != nil {
+		mark, _, _ := strings.Cut(payload, ";")
+		tv.OnShellMark(mark, tv.PromptSnapshot())
+	}
 	if payload == "C" {
 		tv.SetMuted(false)
 		if tv.OnBusyChange != nil {

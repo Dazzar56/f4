@@ -72,7 +72,11 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 	dir := t.TempDir()
 	finished := filepath.Join(dir, "finished.marker")
 	script := filepath.Join(dir, "f4-batch-probe.cmd")
-	content := "@echo off\r\necho started>started.marker\r\nping.exe -n 4 127.0.0.1 >nul\r\necho finished>finished.marker\r\nping.exe -n 4 127.0.0.1 >nul\r\n"
+	// ECHO stays on deliberately: with it cmd prints the prompt (and the
+	// prompt mark f4 injects) in front of every batch line, which is what
+	// made the panels return while the batch was still running (#409).
+	// timeout spawns no child process, so the child check cannot help.
+	content := "echo started>started.marker\r\ntimeout /t 3 /nobreak >nul\r\necho finished>finished.marker\r\ntimeout /t 2 /nobreak >nul\r\n"
 	if err := os.WriteFile(script, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
