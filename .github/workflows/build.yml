@@ -1,4 +1,4 @@
-name: Build & Release
+name: CI
 
 on:
   push:
@@ -6,6 +6,14 @@ on:
     tags: [ "v*.*.*" ]
   pull_request:
     branches: [ "main" ]
+    # Docs-only pull requests skip CI entirely: nothing below compiles,
+    # packages or tests Markdown. A PR touching both code and docs still
+    # runs -- the filter only skips when EVERY changed file matches.
+    # Deliberately not on the push trigger: it also carries release tags,
+    # where a path filter could silently skip a release.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
     inputs:
       shuffle:
@@ -14,70 +22,85 @@ on:
         default: "on"
         type: string
 
+# A newer push supersedes the run in flight: with ~30 jobs per run and 20
+# concurrent runners on the free plan, two overlapping runs queue each other
+# into waves. Tag pushes publish releases, so those runs are never cancelled;
+# each tag is its own group anyway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
+  # The build matrix is data, not YAML: pull requests build only the cells
+  # whose artifacts anyone actually downloads from a PR (the three desktop
+  # platforms plus the musl flavor), while pushes to main, tags and manual
+  # runs build everything the release ships. Compilation of the exotic
+  # targets is still checked on every PR by the vet matrix below, which is
+  # what a cross-build of a platform nobody can execute proves anyway.
+  plan:
+    name: Plan build matrix
+    runs-on: ubuntu-latest
+    steps:
+    - name: Emit build matrix
+      id: emit
+      env:
+        FULL: ${{ github.event_name != 'pull_request' }}
+      run: |
+        # Cells beyond the desktop six:
+        # - The noffi rows are the extra architectures Go can cross-compile
+        #   Linux for; vtui's graphical/FFI backends are unavailable there,
+        #   so they use its ANSI-only noffi configuration.
+        # - The musl rows (Alpine, postmarketOS, ...) link against musl's
+        #   libc and keep FFI, unlike the fully static generic Linux cells;
+        #   built with -tags goffi_musl, see docs/MUSL.md in unxed/goffi.
+        cells='[
+          {"goos":"linux","goarch":"amd64"},
+          {"goos":"linux","goarch":"arm64"},
+          {"goos":"linux","goarch":"arm"},
+          {"goos":"windows","goarch":"amd64"},
+          {"goos":"windows","goarch":"arm64"},
+          {"goos":"darwin","goarch":"amd64"},
+          {"goos":"darwin","goarch":"arm64"},
+          {"goos":"freebsd","goarch":"amd64"},
+          {"goos":"freebsd","goarch":"arm64"},
+          {"goos":"dragonfly","goarch":"amd64"},
+          {"goos":"openbsd","goarch":"amd64"},
+          {"goos":"openbsd","goarch":"arm64"},
+          {"goos":"netbsd","goarch":"amd64"},
+          {"goos":"netbsd","goarch":"arm64"},
+          {"goos":"illumos","goarch":"amd64"},
+          {"goos":"solaris","goarch":"amd64"},
+          {"goos":"linux","goarch":"386","build_tags":"noffi"},
+          {"goos":"linux","goarch":"mips","build_tags":"noffi"},
+          {"goos":"linux","goarch":"mipsle","build_tags":"noffi"},
+          {"goos":"linux","goarch":"mips64","build_tags":"noffi"},
+          {"goos":"linux","goarch":"mips64le","build_tags":"noffi"},
+          {"goos":"linux","goarch":"riscv64","build_tags":"noffi"},
+          {"goos":"linux","goarch":"loong64","build_tags":"noffi"},
+          {"goos":"linux","goarch":"ppc64","build_tags":"noffi"},
+          {"goos":"linux","goarch":"ppc64le","build_tags":"noffi"},
+          {"goos":"linux","goarch":"amd64","libc":"musl"},
+          {"goos":"linux","goarch":"arm64","libc":"musl"}
+        ]'
+        if [ "$FULL" != "true" ]; then
+          # Desktop platforms on release architectures; this also keeps the
+          # two musl cells and drops every noffi row.
+          cells=$(jq -c '[ .[] | select(
+            (.goos == "linux" or .goos == "windows" or .goos == "darwin")
+            and (.goarch == "amd64" or .goarch == "arm64")
+          ) ]' <<<"$cells")
+        fi
+        echo "matrix=$(jq -c '{include: .}' <<<"$cells")" >> "$GITHUB_OUTPUT"
+    outputs:
+      matrix: ${{ steps.emit.outputs.matrix }}
+
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }}${{ matrix.libc == 'musl' && ' musl' || '' }})
     runs-on: ubuntu-latest
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        goos: [linux, windows, darwin, freebsd, dragonfly, openbsd, netbsd, illumos, solaris]
-        goarch: [amd64, arm64, arm]
-        # One value, so this multiplies nothing -- but it makes libc an
-        # *original* matrix key, and that is load-bearing. An include entry
-        # only creates a new combination when it disagrees with an original
-        # value; an entry that merely adds a new key is merged into the
-        # matching existing cells instead. Without this line, the musl
-        # include entries below would not add two cells -- they would
-        # silently convert the existing linux/amd64 and linux/arm64 cells to
-        # musl, and the release would ship musl binaries under the generic
-        # Linux names. (The smoke test asserts the libc of every artifact, so
-        # that failure mode is caught rather than published.)
-        libc: [glibc]
-        exclude:
-          - goos: dragonfly
-            goarch: arm64
-          - goos: illumos
-            goarch: arm64
-          - goos: solaris
-            goarch: arm64
-          - goos: windows
-            goarch: arm
-          - goos: darwin
-            goarch: arm
-          - goos: freebsd
-            goarch: arm
-          - goos: dragonfly
-            goarch: arm
-          - goos: openbsd
-            goarch: arm
-          - goos: netbsd
-            goarch: arm
-          - goos: illumos
-            goarch: arm
-          - goos: solaris
-            goarch: arm
-        # Linux is also cross-built for the additional architectures that
-        # Go supports. vtui's graphical/FFI backends are unavailable there,
-        # so these cells use its ANSI-only noffi configuration.
-        include:
-          - { goos: linux, goarch: 386,     build_tags: noffi }
-          - { goos: linux, goarch: mips,    build_tags: noffi }
-          - { goos: linux, goarch: mipsle,  build_tags: noffi }
-          - { goos: linux, goarch: mips64,  build_tags: noffi }
-          - { goos: linux, goarch: mips64le, build_tags: noffi }
-          - { goos: linux, goarch: riscv64, build_tags: noffi }
-          - { goos: linux, goarch: loong64, build_tags: noffi }
-          - { goos: linux, goarch: ppc64,  build_tags: noffi }
-          - { goos: linux, goarch: ppc64le, build_tags: noffi }
-          # musl targets (Alpine, postmarketOS, ...). The generic Linux cells
-          # above are fully static, which costs them FFI: no GPU, Wayland or
-          # Ebiten backend. These two cells instead link against musl's libc
-          # and keep FFI, so Alpine users get the same f4 that glibc users
-          # get. Built from the same sources with -tags goffi_musl; see
-          # docs/MUSL.md in unxed/goffi.
-          - { goos: linux, goarch: amd64, libc: musl }
-          - { goos: linux, goarch: arm64, libc: musl }
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       CGO_ENABLED: 0
       BUILD_TAGS: ${{ matrix.build_tags || '' }}
@@ -101,9 +124,15 @@ jobs:
         go-version: '1.26.6'
         cache-dependency-path: go.sum
 
+    - name: Compute build impact
+      id: affected
+      uses: ./.github/actions/affected-packages
+
     - name: Check formatting
       # The musl amd64 cell builds the same tree as the generic amd64
       # cell, so these repo-wide checks belong to one of them, not both.
+      # Deliberately not gated on build impact: gofmt covers test files too,
+      # so a tests-only pull request still needs this check.
       if: matrix.goos == 'linux' && matrix.goarch == 'amd64' && matrix.libc != 'musl'
       run: |
         if [ -n "$(gofmt -s -l .)" ]; then
@@ -116,13 +145,13 @@ jobs:
     - name: Check language file formatting
       # The musl amd64 cell builds the same tree as the generic amd64
       # cell, so these repo-wide checks belong to one of them, not both.
-      if: matrix.goos == 'linux' && matrix.goarch == 'amd64' && matrix.libc != 'musl'
+      if: steps.affected.outputs.build == 'yes' && matrix.goos == 'linux' && matrix.goarch == 'amd64' && matrix.libc != 'musl'
       run: go run ./tools/langfmt -check cmd/f4/lang/*.lng
 
     - name: Verify generated application icons
       # The musl amd64 cell builds the same tree as the generic amd64
       # cell, so these repo-wide checks belong to one of them, not both.
-      if: matrix.goos == 'linux' && matrix.goarch == 'amd64' && matrix.libc != 'musl'
+      if: steps.affected.outputs.build == 'yes' && matrix.goos == 'linux' && matrix.goarch == 'amd64' && matrix.libc != 'musl'
       run: |
         go generate ./cmd/f4
         git diff --exit-code -- \
@@ -131,6 +160,7 @@ jobs:
           cmd/f4/rsrc_windows_arm64.syso
 
     - name: Build binaries
+      if: steps.affected.outputs.build == 'yes'
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -235,9 +265,10 @@ jobs:
     # dependency cannot actually handle. --version returns before any
     # terminal setup, so no tty is needed.
     - name: Smoke test the binary
-      if: matrix.goos == 'linux'
+      if: steps.affected.outputs.build == 'yes' && matrix.goos == 'linux'
       env:
         GOARCH_CELL: ${{ matrix.goarch }}
+        QEMU_SMOKE: ${{ github.event_name != 'pull_request' }}
       run: |
         set -euo pipefail
 
@@ -285,6 +316,18 @@ jobs:
             exit 1
           fi
 
+          # The readelf assertions above catch the realistic breakage (the
+          # tag not applying, a glibc SONAME leaking in) and cost nothing.
+          # The rest of this branch -- executing the artifact against real
+          # musl and the flavor-specific updater tests -- guards what gets
+          # *published*, so it rides with pushes and tags, where the nightly
+          # and release jobs actually publish; a red run there blocks them
+          # via needs. Skipping it keeps ~40 seconds off every PR.
+          if [ "$QEMU_SMOKE" != "true" ]; then
+            echo "Pull request: readelf assertions only."
+            exit 0
+          fi
+
           # Now actually start it, against a real musl libc. qemu-user
           # resolves PT_INTERP inside the sysroot given with -L, so one
           # mechanism covers both architectures and needs no root, no
@@ -309,7 +352,11 @@ jobs:
           # shell, so the Build step's variables are gone by now -- GOARCH
           # included. Without it the test binary is built for the runner's
           # own amd64, and the arm64 cell hands qemu-aarch64 an x86_64 ELF.
-          GOOS=linux GOARCH="$GOARCH_CELL" go test -c -tags "${BUILD_TAGS:+$BUILD_TAGS,}goffi_musl" \
+          # -trimpath matches the Build step above: the build cache keys
+          # compiled packages by their flags, so without it every package
+          # compiles a second time here (~100 extra seconds) instead of
+          # reusing the objects that step just produced.
+          GOOS=linux GOARCH="$GOARCH_CELL" go test -c -trimpath -tags "${BUILD_TAGS:+$BUILD_TAGS,}goffi_musl" \
             -gcflags=github.com/go-webgpu/goffi/internal/dl=-std \
             -o /tmp/f4-libc.test ./cmd/f4
           "qemu-$QEMU-static" -L alpine-rootfs /tmp/f4-libc.test \
@@ -338,6 +385,7 @@ jobs:
         "qemu-$QEMU-static" build/f4 --version
 
     - name: Package
+      if: steps.affected.outputs.build == 'yes'
       run: |
         if [ "${{ matrix.goos }}" = "windows" ]; then
           (cd build && zip -r "../$ASSET.zip" .)
@@ -364,6 +412,7 @@ jobs:
         fi
 
     - name: Upload Artifact
+      if: steps.affected.outputs.build == 'yes'
       uses: actions/upload-artifact@v7
       with:
         name: ${{ env.ASSET }}
@@ -387,7 +436,7 @@ jobs:
   # с большой вероятностью начнёт конфликтовать (duplicate method) —
   # тогда этот шаг нужно будет просто удалить.
   build-win7:
-    name: Build (windows7/amd64, legacy toolchain)
+    name: Build (windows7/amd64)
     runs-on: ubuntu-latest
     env:
       CGO_ENABLED: 0
@@ -400,7 +449,18 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.6'
+        cache-dependency-path: go.sum
+
+    - name: Compute build impact
+      id: affected
+      uses: ./.github/actions/affected-packages
+
     - name: Download go-legacy-win7 toolchain
+      if: steps.affected.outputs.build == 'yes'
       run: |
         set -euo pipefail
         curl -fL --retry 5 --retry-delay 10 --retry-all-errors \
@@ -413,6 +473,7 @@ jobs:
         echo "$HOME/go-legacy-win7/go-legacy-win7/bin" >> "$GITHUB_PATH"
 
     - name: Restore missing sync/atomic Or/And methods (thongtech/go-legacy-win7#13)
+      if: steps.affected.outputs.build == 'yes'
       run: |
         cat > "$GOROOT/src/sync/atomic/or_and_win7compat.go" <<'EOF'
         // This file restores the Or/And methods on typed atomics (added
@@ -515,6 +576,7 @@ jobs:
         EOF
 
     - name: Build binaries
+      if: steps.affected.outputs.build == 'yes'
       run: |
         mkdir -p build/plugins/dummy_internal
         LDFLAGS="-s -w"
@@ -536,9 +598,11 @@ jobs:
         go build -trimpath -ldflags="$LDFLAGS" -o ../../build/plugins/dummy_internal/f4-internal-dummy-plugin.exe .
 
     - name: Package
+      if: steps.affected.outputs.build == 'yes'
       run: (cd build && zip -r ../f4-windows7-amd64.zip .)
 
     - name: Upload Artifact
+      if: steps.affected.outputs.build == 'yes'
       uses: actions/upload-artifact@v7
       with:
         name: f4-windows7-amd64
@@ -579,24 +643,22 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { target: windows/amd64 }
-          # Linux release builds carry goffi_static, so vet the files the build
-          # actually compiles -- the stubs, not the dlopen wrappers.
-          - { target: linux/arm, tags: goffi_static }
-          # ...and the musl cells carry goffi_musl, which compiles the real
-          # dlopen wrappers instead of those stubs. Nothing else in this
-          # matrix vets that code on Linux.
-          - { target: linux/amd64, tags: goffi_musl, gcflags: -gcflags=github.com/go-webgpu/goffi/internal/dl=-std }
-          - { target: darwin/arm64 }
-          # goffi's fakecgo shim needs the same flag the build step passes.
-          - { target: freebsd/amd64, gcflags: -gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std }
-          - { target: openbsd/amd64 }
-          - { target: netbsd/amd64 }
-          - { target: dragonfly/amd64 }
-          - { target: illumos/amd64 }
-          - { target: solaris/amd64 }
+      # Cell notes, in full-matrix order:
+      # - linux/arm carries goffi_static: Linux release builds use it, so vet
+      #   the files the build actually compiles -- the stubs, not the dlopen
+      #   wrappers. The only arm32 compile anywhere in a PR run, so it is the
+      #   one cell PRs keep.
+      # - linux/amd64 carries goffi_musl, which compiles the real dlopen
+      #   wrappers instead of those stubs; nothing else vets that code on
+      #   Linux. The gcflags mirror the build step (same for freebsd's
+      #   fakecgo shim below).
+      # Pull requests run only the linux/arm cell: every other target is
+      # already compiled in the same PR run by its build and test jobs (and
+      # go test runs vet's high-confidence checks natively), or -- for the
+      # BSDs/illumos/solaris -- is exotic enough to check on pushes and tags,
+      # like their builds. The full matrix runs everywhere else. One long
+      # line on purpose: actionlint chews minutes on a folded variant.
+      matrix: ${{ github.event_name == 'pull_request' && fromJSON('{"include":[{"target":"linux/arm","tags":"goffi_static"}]}') || fromJSON('{"include":[{"target":"windows/amd64"},{"target":"linux/arm","tags":"goffi_static"},{"target":"linux/amd64","tags":"goffi_musl","gcflags":"-gcflags=github.com/go-webgpu/goffi/internal/dl=-std"},{"target":"darwin/arm64"},{"target":"freebsd/amd64","gcflags":"-gcflags=github.com/go-webgpu/goffi/internal/fakecgo=-std"},{"target":"openbsd/amd64"},{"target":"netbsd/amd64"},{"target":"dragonfly/amd64"},{"target":"illumos/amd64"},{"target":"solaris/amd64"}]}') }}
     env:
       CGO_ENABLED: 0
     steps:
@@ -628,8 +690,11 @@ jobs:
         fi
         GOOS="${TARGET%/*}" GOARCH="${TARGET#*/}" go vet "${flags[@]}" ./...
 
+  # Quality and Lint used to be one job; its steps ran back to back and their
+  # sum (~2:40) sat right on the critical path of a PR run. Separate runners
+  # cost nothing here, so vet-and-scanners and the lint shards run side by side.
   quality:
-    name: Quality (vet and incremental lint)
+    name: Quality
     runs-on: ubuntu-latest
     env:
       CGO_ENABLED: 0
@@ -637,7 +702,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v7
       with:
-        fetch-depth: 0
         submodules: recursive
 
     - name: Set up Go
@@ -646,35 +710,38 @@ jobs:
         go-version: '1.26.6'
         cache-dependency-path: go.sum
 
+    - name: Restore Go build cache (quality)
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/go-build
+        key: quality-go-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          quality-go-
+
+    - name: Compute affected packages
+      id: affected
+      uses: ./.github/actions/affected-packages
+
     - name: Run go vet
-      run: go vet ./...
+      if: steps.affected.outputs.packages != ''
+      shell: bash
+      env:
+        AFFECTED: ${{ steps.affected.outputs.packages }}
+      run: |
+        if [ "$AFFECTED" = "all" ]; then
+          targets=(./...)
+        else
+          read -ra targets <<<"$AFFECTED"
+        fi
+        go vet "${targets[@]}"
 
-    - name: Run incremental golangci-lint
-      uses: golangci/golangci-lint-action@v9.3.0
-      with:
-        version: v2.13.1
-        args: --new-from-rev=origin/main
-
-    # The step above only reports findings on lines a pull request touched, so
-    # everything the linters have to say about existing code stays invisible —
-    # currently around 2450 findings. Rather than leave that permanently
-    # unspoken, each linter graduates here once its backlog is actually zero,
-    # and from then on it is checked across the whole tree and cannot regrow.
-    # Adding a linter to this list means clearing its debt first, in the same
-    # change.
-    - name: Run whole-tree golangci-lint for the linters with no backlog
-      uses: golangci/golangci-lint-action@v9.3.0
-      with:
-        version: v2.13.1
-        args: --config .golangci-strict.yml
-
-    # Unlike the linters above this one is not incremental: it reports only
+    # govulncheck is not incremental on purpose: it reports only
     # vulnerabilities the code actually reaches, so the whole tree is in scope
     # and the finding count stays at zero rather than accumulating a backlog.
     # The tool version is pinned; the vulnerability database it consults is
     # fetched at run time, so a newly published advisory turns this red without
     # any change here — which is the point.
-    # build.yml is approaching 800 lines, most of it shell embedded in run:
+    # build.yml is approaching 900 lines, most of it shell embedded in run:
     # blocks that nothing checked. actionlint validates the workflow schema and
     # every expression, and hands each run: block to shellcheck — which the
     # ubuntu image already ships, so it needs no setup here. Both classes of
@@ -685,23 +752,140 @@ jobs:
     - name: Run govulncheck
       run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
+  lint:
+    name: Lint (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { include: [{ shard: 'cmd/f4', cache-key: cmd-f4 }, { shard: rest, cache-key: rest }] }
+    env:
+      CGO_ENABLED: 0
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        # Full history: the incremental lint below diffs against origin/main.
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.6'
+        cache-dependency-path: go.sum
+
+    - name: Restore Go build cache (lint shard)
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/go-build
+        key: lint-${{ matrix.cache-key }}-go-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          lint-${{ matrix.cache-key }}-go-
+
+    - name: Compute affected packages
+      id: affected
+      uses: ./.github/actions/affected-packages
+
+    - name: Select incremental lint packages
+      id: lint-packages
+      shell: bash
+      env:
+        AFFECTED: ${{ steps.affected.outputs.packages }}
+        SHARD: ${{ matrix.shard }}
+      run: |
+        set -euo pipefail
+
+        module=$(go list -m)
+        if [ "$AFFECTED" = "all" ]; then
+          packages=$(go list ./...)
+        elif [ -z "$AFFECTED" ]; then
+          packages=""
+        else
+          packages=$(tr ' ' '\n' <<<"$AFFECTED")
+        fi
+
+        cmd_affected=no
+        rest_args=""
+        while IFS= read -r package; do
+          [ -n "$package" ] || continue
+          case "$package" in
+            "$module/cmd/f4"|"$module/cmd/f4"/*)
+              cmd_affected=yes
+              continue ;;
+            "$module")
+              relative=./ ;;
+            "$module"/*)
+              relative="./${package#"$module"/}" ;;
+            *)
+              echo "::error::affected package is outside $module: $package"
+              exit 1 ;;
+          esac
+          rest_args="${rest_args:+$rest_args }$relative"
+        done <<<"$packages"
+
+        if [ "$SHARD" = "cmd/f4" ]; then
+          if [ "$cmd_affected" != "yes" ]; then
+            echo "cmd/f4 is not affected by this diff; skipping incremental lint."
+            echo "run=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "args=./cmd/f4/..." >> "$GITHUB_OUTPUT"
+          echo "run=yes" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [ -z "$rest_args" ]; then
+          echo "No affected packages outside cmd/f4; skipping incremental lint."
+          echo "run=no" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "args=$rest_args" >> "$GITHUB_OUTPUT"
+        echo "run=yes" >> "$GITHUB_OUTPUT"
+
+    - name: Run incremental golangci-lint
+      if: steps.lint-packages.outputs.run == 'yes'
+      uses: golangci/golangci-lint-action@v9.3.0
+      with:
+        version: v2.13.1
+        args: --new-from-rev=origin/main ${{ steps.lint-packages.outputs.args }}
+
+    # The step above only reports findings on lines a pull request touched, so
+    # everything the linters have to say about existing code stays invisible —
+    # currently around 2450 findings. Rather than leave that permanently
+    # unspoken, each linter graduates here once its backlog is actually zero,
+    # and from then on it is checked across the whole tree and cannot regrow.
+    # Adding a linter to this list means clearing its debt first, in the same
+    # change.
+    - name: Run whole-tree golangci-lint for the linters with no backlog
+      if: matrix.shard == 'rest'
+      uses: golangci/golangci-lint-action@v9.3.0
+      with:
+        version: v2.13.1
+        args: --config .golangci-strict.yml
+
   # Эта джоба создает постоянные релизы при пуше тэгов v*.*.*
   test:
-    name: Test (${{ matrix.target }})
+    name: Test (${{ matrix.target }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        # One hosted runner per native os/arch cell, labeled to match the
-        # build matrix.
-        include:
-          - { os: ubuntu-latest,    target: linux/amd64 }
-          - { os: ubuntu-24.04-arm, target: linux/arm64 }
-          - { os: macos-latest,     target: darwin/arm64 }
-          - { os: macos-15-intel,   target: darwin/amd64 }
-          - { os: windows-latest,   target: windows/amd64 }
-          - { os: windows-11-arm,   target: windows/arm64 }
+      # One hosted runner per native os/arch cell, except that the slow
+      # darwin/arm64 and windows/amd64 cells split their tests by name.
+      # Pull requests skip the second-arch twin of the two
+      # desktop OSes: darwin/amd64 and windows/arm64 run on the slowest
+      # runners of the whole matrix (4-5 minutes against the ~2:40 the
+      # rest of a PR run takes) and only catch arch-specific breakage --
+      # rare enough to test on pushes, tags and manual runs, which is
+      # also where the published artifacts come from. linux/arm64 stays
+      # everywhere: its runner is fast. Inline conditional rather than a
+      # plan-job output because these jobs are the critical path, and a
+      # needs: edge would bill its scheduling latency to every cell.
+      # A-D/rest is the closest timing split after charging the A shard for
+      # the isolated TestAllDialogs_LayoutValidation pass a second time.
+      # The first regex also covers an exact "Test" name; the negated class
+      # puts every other non-standard Test* suffix in the second shard.
+      matrix: ${{ github.event_name == 'pull_request' && fromJSON('{"include":[{"os":"ubuntu-latest","target":"linux/amd64"},{"os":"ubuntu-24.04-arm","target":"linux/arm64"},{"os":"macos-latest","target":"darwin/arm64","shard":"A-D","run":"^Test([A-D]|$)"},{"os":"macos-latest","target":"darwin/arm64","shard":"rest","run":"^Test[^A-D]"},{"os":"windows-latest","target":"windows/amd64","shard":"A-D","run":"^Test([A-D]|$)"},{"os":"windows-latest","target":"windows/amd64","shard":"rest","run":"^Test[^A-D]"}]}') || fromJSON('{"include":[{"os":"ubuntu-latest","target":"linux/amd64"},{"os":"ubuntu-24.04-arm","target":"linux/arm64"},{"os":"macos-latest","target":"darwin/arm64","shard":"A-D","run":"^Test([A-D]|$)"},{"os":"macos-latest","target":"darwin/arm64","shard":"rest","run":"^Test[^A-D]"},{"os":"macos-15-intel","target":"darwin/amd64"},{"os":"windows-latest","target":"windows/amd64","shard":"A-D","run":"^Test([A-D]|$)"},{"os":"windows-latest","target":"windows/amd64","shard":"rest","run":"^Test[^A-D]"},{"os":"windows-11-arm","target":"windows/arm64"}]}') }}
     env:
       CGO_ENABLED: 0
       TEST_SHUFFLE: ${{ inputs.shuffle || 'on' }}
@@ -711,24 +895,75 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Move Go caches to the fast disk (Windows)
+      # C: is the OS disk and glacial at unpacking the ~650 MB Go cache --
+      # three of this job's five and a half minutes on windows-latest went
+      # into that alone; D: is the runner's local SSD. windows-11-arm images
+      # have no D:, hence the probe.
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        if (Test-Path 'D:\') {
+          Add-Content $env:GITHUB_ENV "GOCACHE=D:\go-build"
+          Add-Content $env:GITHUB_ENV "GOMODCACHE=D:\go-mod"
+        }
+
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
         go-version: '1.26.6'
-        cache-dependency-path: go.sum
+        # The salt file is part of the key on purpose: the cache stores
+        # absolute paths, so a cache saved before a GOCACHE/GOMODCACHE move
+        # above would restore to the old location -- and with the key
+        # unchanged, setup-go would see a "hit" and never save a good one.
+        # A salt rather than this workflow file, so that ordinary CI edits
+        # do not rotate every test cell into a cold compile.
+        cache-dependency-path: |
+          go.sum
+          .github/workflows/go-cache-salt
+
+    - name: Compute affected packages
+      id: affected
+      uses: ./.github/actions/affected-packages
 
     - name: Run Tests
       shell: bash
+      env:
+        AFFECTED: ${{ steps.affected.outputs.packages }}
+        RUN_FILTER: ${{ matrix.run || '' }}
       run: |
+        # Pull requests test only the packages their diff reaches through
+        # the import graph (see the affected-packages action); pushes, tags
+        # and manual runs always test everything.
+        if [ "$AFFECTED" = "all" ]; then
+          targets=(./...)
+        elif [ -z "$AFFECTED" ]; then
+          echo "No packages affected by this diff; skipping tests."
+          exit 0
+        else
+          read -ra targets <<<"$AFFECTED"
+        fi
         # Shuffle tests and subtests to expose order dependencies. Go prints
         # the seed on every run, so reproduce a failure with -shuffle=<seed>.
         # The seed selects a permutation of the test set, so it only reproduces
-        # while that set remains unchanged.
-        go test -shuffle="$TEST_SHUFFLE" -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
+        # while that set remains unchanged. Shuffle also pins go's test-result
+        # caching off, deliberately: a rolling-cache experiment showed this
+        # suite is uncacheable anyway -- the tests read per-run environment
+        # (temp dirs), so even an unchanged tree scored zero cache hits.
+        run_args=()
+        if [ -n "$RUN_FILTER" ]; then
+          run_args=(-run "$RUN_FILTER")
+        fi
+        go test -shuffle="$TEST_SHUFFLE" -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' "${run_args[@]}" "${targets[@]}"
         # Layout validation mutates shared UI registries from parallel
         # subtests. Go 1.26 schedules them aggressively enough to expose the
         # upstream race, so isolate that test in a single-threaded process.
-        GOMAXPROCS=1 go test -timeout 15m -run '^TestAllDialogs_LayoutValidation$' ./cmd/f4
+        if [ -z "$RUN_FILTER" ] || [[ "TestAllDialogs_LayoutValidation" =~ $RUN_FILTER ]]; then
+          case " ${targets[*]} " in
+            *" ./... "*|*" github.com/unxed/f4/cmd/f4 "*)
+              GOMAXPROCS=1 go test -timeout 15m -run '^TestAllDialogs_LayoutValidation$' ./cmd/f4 ;;
+          esac
+        fi
 
     - name: Dump crash reports on failure
       if: failure()
@@ -788,9 +1023,25 @@ jobs:
         exit 0
 
   race:
-    name: Race detector
+    name: Race (${{ matrix.scope }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # cmd/f4's suite alone takes as long under the detector as every
+        # other package combined, so it gets runners of its own -- split in
+        # three by test-name letter, because even alone it sat on the critical
+        # path. TestAllDialogs_LayoutValidation dominates the A range under
+        # the detector, so A cannot be split any further by first letter;
+        # B-L/rest is the closest split of the remaining measured time. The
+        # three app shards share a cache key on purpose: they compile identical
+        # objects, so whichever saves first serves all three.
+        include:
+          - { scope: 'cmd/f4 A', cache-key: app, run: '^TestA' }
+          - { scope: 'cmd/f4 B-L', cache-key: app, run: '^Test[B-L]' }
+          - { scope: 'cmd/f4 rest', cache-key: app, run: '^Test([^A-L]|$)' }
+          - { scope: packages, cache-key: packages }
     env:
       # The race detector requires cgo and the Ubuntu runner provides the
       # native compiler needed by the instrumented test binary.
@@ -801,15 +1052,50 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Restore Go caches (race-instrumented)
+      # The shared setup-go cache key is claimed by whichever ubuntu job
+      # saves first -- always one without -race -- so these jobs recompiled
+      # the whole tree under the detector on every run, ~2 minutes each.
+      # Race-instrumented objects get a key of their own; the app shards and
+      # package scope compile different package sets, so the key includes it.
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: race-${{ matrix.cache-key }}-go-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          race-${{ matrix.cache-key }}-go-
+
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
         go-version: '1.26.6'
-        cache-dependency-path: go.sum
+        cache: false
+
+    - name: Compute affected packages
+      id: affected
+      uses: ./.github/actions/affected-packages
 
     - name: Run race detector
       shell: bash
+      env:
+        SCOPE: ${{ matrix.scope }}
+        RUN_FILTER: ${{ matrix.run || '' }}
+        AFFECTED: ${{ steps.affected.outputs.packages }}
       run: |
+        if [ -n "$RUN_FILTER" ]; then
+          if [ "$AFFECTED" != "all" ] && [[ " $AFFECTED " != *" github.com/unxed/f4/cmd/f4 "* ]]; then
+            echo "cmd/f4 is not affected by this diff; skipping."
+            exit 0
+          fi
+          # 5m, not 15m: a warm shard runs in about a minute, and the known
+          # cmd/f4 hang (leaked FrameManager task pumps; TestMain stuck in a
+          # chan receive) otherwise burns the full timeout before the job
+          # can go red and be retried.
+          go test -race -shuffle=on -timeout 5m -run "$RUN_FILTER" ./cmd/f4
+          exit 0
+        fi
         # The FFI dependencies now keep Go-owned pointers typed and isolate
         # the genuinely foreign-pointer conversions behind nocheckptr helpers,
         # so luaplug can execute its FFI tests under the detector as well.
@@ -822,11 +1108,17 @@ jobs:
           echo "::error::no packages left to run under the race detector"
           exit 1
         fi
+        if [ "$AFFECTED" != "all" ]; then
+          mapfile -t packages < <(printf '%s\n' "${packages[@]}" | grep -Fx -f <(tr ' ' '\n' <<<"$AFFECTED") || true)
+          if [ ${#packages[@]} -eq 0 ] || [ -z "${packages[0]}" ]; then
+            echo "No affected packages outside cmd/f4; skipping."
+            exit 0
+          fi
+        fi
         go test -race -shuffle=on -timeout 15m "${packages[@]}"
-        go test -race -shuffle=on -timeout 15m ./cmd/f4
 
   release:
-    name: Create Official Release
+    name: Release
     needs: [build, build-win7, test, race]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -848,7 +1140,7 @@ jobs:
   # чтобы под macOS можно было поставить f4 одной командой:
   #   brew install <owner>/tap/f4
   homebrew:
-    name: Update Homebrew Tap
+    name: Homebrew tap
     needs: release
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -929,7 +1221,7 @@ jobs:
 
   # Эта джоба обновляет "плавающий" nightly релиз при каждом пуше в main
   nightly:
-    name: Update Nightly Release
+    name: Nightly
     needs: [build, build-win7, test, race]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
