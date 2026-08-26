@@ -111,16 +111,39 @@ input.
 
 The fix has to distinguish "a child is running and owns the terminal" from
 "a child is running and f4 should wait": an interactive child *is* the shell now,
-and its prompt is the one that matters. Note the outer prompt cannot be trusted
-to tell them apart — the nested `cmd` prints the same `$P$G`, and it inherits
-our injected `PROMPT`, so it emits our marks too. Candidate signals: the marks
-from the nested shell arrive with the outer shell's own prompt never redrawn, so
-a settled prompt whose text matches while a child exists means the child is
-prompting; alternatively drop the child veto for `cmd`/`powershell`/`pwsh` by
-image name. Neither is verified.
+and its prompt is the one that matters. The outer prompt cannot tell them apart —
+the nested `cmd` prints the same `$P$G`, and it inherits our injected `PROMPT`,
+so it emits our marks too.
+
+Two candidate signals were considered; a process probe run by a tester
+(`f4-probe.ps1`, Windows 11 26200) decided between them:
+
+* **Console title** — dead. cmd's "<title> - <command>" form is not readable
+  from outside: the conhost behind a pseudoconsole has no window, so the
+  title column came back empty for every process, running or not. The title
+  veto in `cmdShellSession.titleSaysRunning` can never fire and should go.
+* **Image name of the child** — works. While the nested shell sat at its
+  prompt, the child of f4's cmd was `cmd.exe`; while real commands ran it was
+  `PING.EXE` and `timeout.exe`. So: keep the child veto, but do not apply it
+  when the child is itself a shell (`cmd.exe`, `powershell.exe`, `pwsh.exe`,
+  and the interactive interpreters people nest — `python.exe`, `wsl.exe`,
+  `bash.exe`). For those, the settled prompt is the nested shell's own and
+  ends the outer command's wait: keystrokes then go to the nested shell as
+  they do to any busy child, and its `exit` brings the outer prompt back,
+  which settles in turn.
+
+Also observed by the tester: `Ctrl+O` while stuck brings the panels back and
+input works again. That confirms the diagnosis — nothing is wrong with the
+input path, only with `executing` never clearing.
+
+A second thing the same probe should settle (results pending): whether a GUI
+child like `notepad` reports a window handle. If it does, the child veto can
+skip GUI children too, which fixes the older "f4 stays busy while notepad is
+open" behaviour with the same change. `start notepad` detaches and probably
+does not appear in the tree at all.
 
 Until this is fixed, running a nested shell inside the f4 terminal on Windows
-hangs the terminal until the session is restarted.
+hangs the terminal until `Ctrl+O` or a session restart.
 
 Also: the local PTY read loop ending (shell died) ends any execution instead
 of leaving the panels hidden, and `PTY.SetSize` ignores 0x0 (TERMINAL.md rule
@@ -130,7 +153,24 @@ Not done yet, in the same session layer: making the directory sync creep-free
 by typing a short self-erasing `echo %F4E%[nA%F4E%[J...` cleanup line after
 the new prompt arrives (F4E holding ESC, like `$E` in PROMPT), so that the
 erase happens in conhost's own buffer and survives ConPTY repaints; and
-reading the shell's cwd back from the text between the A and B marks.
+reading the shell's cwd back from the text between the A and B marks. A
+tester confirmed the visible `cd /d "C:\F4" & rem f4_sync` now appears only
+once, at startup — the first sync goes out before the first prompt has
+settled, which is the one case the session accounting cannot yet hide.
+
+## 5. Plan, in order
+
+| # | Step | Status |
+| --- | --- | --- |
+| 1 | Settled-prompt completion (#409) | shipped, field-tested |
+| 2 | Nested shell: skip the child veto for shell/interpreter images; remove the dead title veto | next — signal confirmed by probe |
+| 3 | GUI children (`notepad`) do not count as busy | after probe results on `haswindow` |
+| 4 | Self-erasing directory sync cleanup (section 3) | after 2 |
+| 5 | Startup sync typed before the first prompt settles | with 4 |
+| 6 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | probe script fixed, results pending |
+
+Step 2 is small and the data is in. Do it first; it turns the terminal from
+"hangs on `cmd`" into usable.
 
 ## 4. Issue #362 — Ctrl+C does not interrupt in f4-gui
 

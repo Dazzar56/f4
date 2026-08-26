@@ -219,7 +219,12 @@ that here as an external constraint.
 ### Open questions
 
 * What `CreatePseudoConsole` does with flag `0x2` on Windows 10 1809 — ignore it
-  or fail. A fallback is needed either way.
+  or fail. A fallback is needed either way. A tester-run probe
+  (`f4-conpty-probe.ps1`: creates a pseudoconsole with flags 0 and 2, types a
+  line longer than the console, resizes, dumps the raw bytes) will answer this
+  and the soft-wrap question above for whatever build the tester has. Its first
+  run died on a PowerShell type accelerator before reaching ConPTY; the fixed
+  version is out, results pending.
 * What a full buffer reflow costs while the user drags the window border, and
   whether throttling (xterm.js, Fluent Terminal) is required.
 * Which programs are actually harmed by being re-wrapped without an alternate
