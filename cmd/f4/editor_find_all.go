@@ -2,8 +2,9 @@ package main
 
 // Editor "Find All", ported from Far Manager (far/editor.cpp, find_all_list):
 // the search dialog's [ All ] button collects every occurrence of the pattern
-// and lists them in a popup menu titled "Occurrences: N, lines: M". Enter
-// jumps to the occurrence, Ctrl+Enter jumps without closing the menu,
+// and lists each matching line once (Far lists every occurrence) in a popup
+// menu titled "Occurrences: N, lines: M". Enter jumps to the line's first
+// match, Ctrl+Enter jumps without closing the menu,
 // Ctrl+Up/Down scroll the editor behind the menu, F4 dumps the matching
 // lines into a new editor, F5 zooms the menu to (almost) full screen.
 
@@ -23,8 +24,9 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// matchSpan is one occurrence in the byte buffer. Collection runs in a
-// background goroutine, so the span carries no editor state.
+// matchSpan is one match in the byte buffer; in a collected list it is the
+// first match on its line. Collection runs in a background goroutine, so the
+// span carries no editor state.
 type matchSpan struct {
 	Off, Len int
 }
@@ -49,16 +51,9 @@ type findAllRow struct {
 	byteStart, byteEnd int
 }
 
-// findAllAnchor remembers where the last resolved row landed so the next one
-// can count runes from there.
-type findAllAnchor struct {
-	valid    bool
-	line     int
-	off, col int
-}
-
 // findAllFrame is the occurrences list. It renders straight out of the span
-// slice the search produced: VMenu keeps the scroll and selection state
+// slice the search produced (one span per matching line): VMenu keeps the
+// scroll and selection state
 // (ItemCount, TopPos, SelectPos, the scrollbar), but its Items slice stays
 // empty, because one MenuItem per occurrence costs ~2 µs and ~210 bytes and a
 // short pattern in a large file hits millions of times — 21M matches in a
@@ -80,27 +75,11 @@ type findAllFrame struct {
 	accentW    int // width of the "line│col│ " prefix as last painted
 	normalRect [4]int
 	zoomed     bool
-
-	anchor findAllAnchor
 }
 
-// columnAt returns the 1-based rune column of off within its line. Counting
-// starts from the previously resolved row when that row was on the same line,
-// which keeps scrolling through one minified megabyte-long line proportional
-// to the distance moved instead of rescanning from the line start per row.
-func (f *findAllFrame) columnAt(line, lineStart, off int) int {
-	var col int
-	switch a := f.anchor; {
-	case a.valid && a.line == line && off >= a.off:
-		col = a.col + utf8.RuneCount(f.ev.bufferRange(a.off, off-a.off))
-	case a.valid && a.line == line:
-		col = a.col - utf8.RuneCount(f.ev.bufferRange(off, a.off-off))
-	default:
-		col = 1 + utf8.RuneCount(f.ev.bufferRange(lineStart, off-lineStart))
-	}
-	col = max(col, 1)
-	f.anchor = findAllAnchor{valid: true, line: line, off: off, col: col}
-	return col
+// columnAt returns the 1-based rune column of off within its line.
+func (f *findAllFrame) columnAt(lineStart, off int) int {
+	return 1 + utf8.RuneCount(f.ev.bufferRange(lineStart, off-lineStart))
 }
 
 // resolveRow turns occurrence i into everything needed to paint its row.
@@ -127,7 +106,7 @@ func (f *findAllFrame) resolveRow(i int) findAllRow {
 			Off:  s.Off,
 			Len:  s.Len,
 			Line: line,
-			Col:  f.columnAt(line, lineStart, min(max(s.Off, lineStart), size)),
+			Col:  f.columnAt(lineStart, min(max(s.Off, lineStart), size)),
 		},
 		text: text,
 	}
@@ -230,11 +209,11 @@ func (f *findAllFrame) Show(scr *vtui.ScreenBuf) {
 	}
 }
 
-// GetItemCount reports the occurrence count. The embedded VMenu would answer
+// GetItemCount reports the listed line count. The embedded VMenu would answer
 // with len(Items), which this frame deliberately keeps at zero.
 func (f *findAllFrame) GetItemCount() int { return f.ItemCount }
 
-// activate jumps to occurrence idx and closes the menu. VMenu's own Enter and
+// activate jumps to row idx's match and closes the menu. VMenu's own Enter and
 // click paths read Items to find the action, so the frame runs them instead.
 func (f *findAllFrame) activate(idx int) {
 	if idx < 0 || idx >= len(f.spans) {
@@ -354,31 +333,32 @@ const findAllWidthSample = 1000
 // A var so the test can reach the cap without a file that large.
 var findAllDumpMaxLines = 100000
 
-// countMatchLines returns how many distinct lines the occurrences fall on.
-// Two consecutive matches sit on different lines exactly when a '\n' separates
-// them, so the whole list costs one forward pass over the bytes between the
-// first and the last match: the spans are ordered and non-overlapping, so the
-// gaps scanned are disjoint. Resolving each match against the line index
-// instead would be a locked binary search per occurrence, seconds of them at
-// the counts this path exists for. Runs on the collecting goroutine, off the
-// UI thread.
-func countMatchLines(ctx context.Context, data []byte, spans []matchSpan) int {
+// firstMatchPerLine keeps the first occurrence on each line, so the list shows
+// a line once however many times it matches. Two consecutive matches sit on
+// different lines exactly when a '\n' separates them, so the whole list costs
+// one forward pass over the bytes between the first and the last match: the
+// spans are ordered and non-overlapping, so the gaps scanned are disjoint.
+// Resolving each match against the line index instead would be a locked
+// binary search per occurrence, seconds of them at the counts this path
+// exists for. The filtering is done in place. Runs on the collecting
+// goroutine, off the UI thread.
+func firstMatchPerLine(ctx context.Context, data []byte, spans []matchSpan) []matchSpan {
 	if len(spans) == 0 {
-		return 0
+		return spans
 	}
-	lines := 1
+	kept := spans[:1]
 	off := min(max(spans[0].Off, 0), len(data))
 	for i, s := range spans[1:] {
 		if ctx != nil && i%1024 == 0 && ctx.Err() != nil {
-			return lines
+			return kept
 		}
 		end := min(max(s.Off, off), len(data))
 		if bytes.IndexByte(data[off:end], '\n') >= 0 {
-			lines++
+			kept = append(kept, s)
 		}
 		off = end
 	}
-	return lines
+	return kept
 }
 
 // findAllMatchSpans returns every non-overlapping occurrence of pattern in
@@ -468,8 +448,8 @@ var findAllWindow = 4 << 20
 // read as saying something about the next 64 MB, not about the next 8 GB.
 const findAllSampleTrust = 16
 
-// collectMatchSpans finds every occurrence of pattern in the buffer, and how
-// many distinct lines they fall on, reading the buffer a window at a time.
+// collectMatchSpans finds the first occurrence of pattern on every line of the
+// buffer, and how many occurrences there are, reading the buffer a window at a time.
 //
 // Handing the whole buffer to the matcher is what made Find All unusable on a
 // large file. On a mapped file it faults every page of the file into residency
@@ -502,7 +482,7 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, pt *
 		if err != nil {
 			return nil, 0, err
 		}
-		return spans, countMatchLines(ctx, data, spans), nil
+		return firstMatchPerLine(ctx, data, spans), len(spans), nil
 	}
 
 	size := pt.Size()
@@ -517,10 +497,10 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, pt *
 	buf := make([]byte, min(findAllWindow+overlap, size))
 
 	var spans []matchSpan
-	uniqueLines := 0
-	// Where the last reported match ended, and whether a newline has been seen
-	// since it — which is how a line is counted once however many times it
-	// matches, without asking the index per occurrence.
+	occurrences := 0
+	// Where the last match ended, and whether a newline has been seen since
+	// it — which is how a line is listed once however many times it matches,
+	// without asking the index per occurrence.
 	lastEnd := -1
 	sawNewline := false
 
@@ -542,43 +522,41 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, pt *
 			return nil, 0, err
 		}
 
-		// What has been scanned says how thickly this pattern occurs, which
+		// What has been scanned says how thickly matching lines occur, which
 		// is enough to ask for the result ahead of time instead of letting
-		// append copy it into place a dozen times over. A sample is only
-		// trusted so far, though: a dense header extrapolated over 8 GB asked
-		// for more spans than the machine had memory for, so the reservation
-		// covers at most findAllSampleTrust times the bytes measured, and is
-		// measured again, over more of the file, when it fills.
-		if len(spans)+len(found) > cap(spans) {
+		// append copy it into place a dozen times over. The density is that
+		// of spans actually kept, not of raw occurrences: a minified line
+		// matching a million times keeps one span, and sizing by occurrences
+		// would reserve the million. A sample is only trusted so far, though:
+		// a dense header extrapolated over 8 GB asked for more spans than the
+		// machine had memory for, so the reservation covers at most
+		// findAllSampleTrust times the bytes measured, and is measured again,
+		// over more of the file, when it fills. Until there is a sample of
+		// kept spans, append grows the slice by itself.
+		if len(spans) > 0 && len(spans)+len(found) > cap(spans) {
 			scanned := float64(pos + len(win))
-			perByte := float64(len(spans)+len(found)) / scanned
+			perByte := float64(len(spans)) / scanned
 			estimate := perByte * min(float64(size), scanned*findAllSampleTrust) * 1.1
-			want := len(spans) + len(found)
-			if estimate > float64(want) && estimate < float64(math.MaxInt32) {
-				want = int(estimate)
+			if estimate > float64(cap(spans)) && estimate < float64(math.MaxInt32) {
+				grown := make([]matchSpan, len(spans), int(estimate))
+				copy(grown, spans)
+				spans = grown
 			}
-			grown := make([]matchSpan, len(spans), want)
-			copy(grown, spans)
-			spans = grown
 		}
 
 		for _, m := range found {
 			abs := pos + from + m.Off
-			switch {
-			case len(spans) == 0:
-				uniqueLines = 1
-			case sawNewline:
-				uniqueLines++
-				sawNewline = false
-			default:
-				// The bytes between the previous match and this one are in
-				// hand from wherever this window starts; anything before
-				// that was checked when the window holding it was done with.
-				if bytes.IndexByte(win[max(lastEnd-pos, 0):abs-pos], '\n') >= 0 {
-					uniqueLines++
-				}
+			occurrences++
+			// A match opens a new listed line when it is the first ever, or a
+			// newline separates it from the previous match — seen either in
+			// an earlier window or in the bytes in hand since that match;
+			// anything before those was checked when the window holding it
+			// was done with.
+			if len(spans) == 0 || sawNewline ||
+				bytes.IndexByte(win[max(lastEnd-pos, 0):abs-pos], '\n') >= 0 {
+				spans = append(spans, matchSpan{abs, m.Len})
 			}
-			spans = append(spans, matchSpan{abs, m.Len})
+			sawNewline = false
 			lastEnd = abs + m.Len
 		}
 
@@ -597,7 +575,7 @@ func (ev *EditorView) collectMatchSpans(ctx *vtui.TaskContext, session int, pt *
 		}
 		pos += len(win) - overlap
 	}
-	return spans, uniqueLines, nil
+	return spans, occurrences, nil
 }
 
 // FindAll runs the search over the whole buffer and opens the occurrences
@@ -620,10 +598,10 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
 			defer ev.guardMapping("collecting occurrences")()
 
-			// The count of matching lines comes out of the same pass, so that
-			// opening the menu stays O(one screenful) however many occurrences
-			// there are.
-			spans, uniqueLines, err := ev.collectMatchSpans(ctx, session, pt, readFromFile, pattern, caseSensitive, useRegex, wholeWord)
+			// One span per matching line, plus the total occurrence count,
+			// come out of the same pass, so that opening the menu stays
+			// O(one screenful) however many occurrences there are.
+			spans, occurrences, err := ev.collectMatchSpans(ctx, session, pt, readFromFile, pattern, caseSensitive, useRegex, wholeWord)
 			if errors.Is(err, errSearchBuffer) {
 				if ctx.Err() != nil {
 					return // canceled; the dialog is already closing
@@ -662,13 +640,13 @@ func (ev *EditorView) FindAll(pattern string, caseSensitive, useRegex, wholeWord
 					vtui.ShowMessage(Msg("Search.Title"), Msg("Search.NotFound"), []string{Msg("vtui.Ok")})
 					return
 				}
-				ev.showFindAllMenu(pattern, spans, uniqueLines)
+				ev.showFindAllMenu(pattern, spans, occurrences)
 			})
 		})
 	})
 }
 
-func (ev *EditorView) showFindAllMenu(pattern string, spans []matchSpan, uniqueLines int) {
+func (ev *EditorView) showFindAllMenu(pattern string, spans []matchSpan, occurrences int) {
 	// Sizing the menu resolves a sample of rows, which reads the buffer here
 	// on the UI thread, mapping and all.
 	defer ev.guardMapping("sizing the occurrences list")()
@@ -682,7 +660,7 @@ func (ev *EditorView) showFindAllMenu(pattern string, spans []matchSpan, uniqueL
 		ev.ensureIndexedTo(spans[len(spans)-1].Off)
 	}
 
-	menuTitle := " " + fmt.Sprintf(Msg("Search.AllStatistics"), len(spans), uniqueLines) + " "
+	menuTitle := " " + fmt.Sprintf(Msg("Search.AllStatistics"), occurrences, len(spans)) + " "
 	menu := vtui.NewVMenu(menuTitle)
 	// The menu holds no items: it is a window onto the spans, and everything
 	// VMenu would read out of Items the frame answers from them instead.
@@ -708,7 +686,6 @@ func (ev *EditorView) showFindAllMenu(pattern string, spans []matchSpan, uniqueL
 		maxDisplayW = max(maxDisplayW, vtui.StringWidth(r.text))
 		frame.colW = max(frame.colW, len(strconv.Itoa(r.match.Col)))
 	}
-	frame.anchor = findAllAnchor{}
 	// Measured, not counted: '│' is East-Asian-Ambiguous and renders two
 	// cells wide under CJK locales, where a lineW+colW+3 guess would paint
 	// the highlight two columns off. The numbers formatted here do not matter,
@@ -828,10 +805,10 @@ func (ev *EditorView) showFindAllMenu(pattern string, spans []matchSpan, uniqueL
 	vtui.FrameManager.Push(frame)
 }
 
-// openFoundLinesEditor dumps the unique matching lines, each prefixed with
-// its 1-based line number, into a fresh editor (Far's F4 in the find-all
-// list). Unlike the list, this one materializes text, so it stops after
-// findAllDumpMaxLines and says how much it left out.
+// openFoundLinesEditor dumps the matching lines (the spans hold one match
+// per line), each prefixed with its 1-based line number, into a fresh editor
+// (Far's F4 in the find-all list). Unlike the list, this one materializes
+// text, so it stops after findAllDumpMaxLines and says how much it left out.
 func (ev *EditorView) openFoundLinesEditor(pattern string, spans []matchSpan) {
 	if len(spans) == 0 {
 		return
@@ -844,21 +821,15 @@ func (ev *EditorView) openFoundLinesEditor(pattern string, spans []matchSpan) {
 	size := ev.pt.Size()
 
 	var b strings.Builder
-	lines, i, lineEnd, prevLine := 0, 0, 0, -1
+	lines, i, prevLine := 0, 0, -1
 	for ; i < len(spans) && lines < findAllDumpMaxLines; i++ {
-		// Spans are ordered, so every match before the end of the line just
-		// written is on that line: skipping them by offset keeps a line with
-		// millions of matches from costing a line-index lookup each.
-		if lines > 0 && spans[i].Off < lineEnd {
-			continue
-		}
 		line := ev.li.GetLineAtOffset(spans[i].Off)
 		if line == prevLine {
 			continue // a still-indexing file can report a zero-length line
 		}
 		prevLine = line
 		lineStart := min(max(ev.li.GetLineOffset(line), 0), size)
-		lineEnd = min(lineStart+max(ev.getLineLength(line), 0), size)
+		lineEnd := min(lineStart+max(ev.getLineLength(line), 0), size)
 		raw := strings.TrimRight(ev.lineHead(lineStart, lineEnd), "\r\n")
 		fmt.Fprintf(&b, "%*d: %s\n", lineW, line+1, raw)
 		lines++
