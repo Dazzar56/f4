@@ -294,26 +294,6 @@ func TestCmdSessionIgnoresConsoleTitle(t *testing.T) {
 	})
 }
 
-// A prompt whose screen never settles must not strand the session: nothing
-// else clears pf.executing, and isPtyBusy reports executing as busy, which
-// disables every hotkey gated on a quiet terminal (Esc) while leaving the
-// ungated ones (Ctrl+O) alive.
-func TestCmdSessionReleasesAWaitThatNeverSettles(t *testing.T) {
-	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
-		oldMax := cmdPromptMaxAttempts
-		cmdPromptMaxAttempts = 3
-		t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
-		sim.start()
-		sim.run("weird")
-		sim.prompt("output that keeps the cursor off the prompt")
-		sim.wait(settledWithin + time.Duration(cmdPromptMaxAttempts+1)*cmdPromptRecheckDelay)
-		sim.expectExecuting(false, "after the release")
-		if !sim.pf.cmdSession.idle() {
-			t.Error("the session never released its wait")
-		}
-	})
-}
-
 // The directory sync is a typed line like any other: no second sync may be
 // typed until its prompt has settled.
 func TestCmdSessionSyncWaitsForPrompt(t *testing.T) {
@@ -370,4 +350,58 @@ func TestChildHoldsTerminal(t *testing.T) {
 			t.Errorf("childHoldsTerminal(%v) = %v, want %v", c.children, got, c.want)
 		}
 	}
+}
+
+// A batch step longer than the old five-second release bound must not return
+// the panels while it runs. This is the regression that made "batch files
+// run in the background": timeout /t 10 and a pause the user reads for more
+// than five seconds both left the screen non-prompt for longer than the
+// bound, and the release fired mid-batch. A busy screen is now waited on
+// without limit.
+func TestCmdSessionLongBatchStepIsNotCutOff(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		oldMax := cmdPromptMaxAttempts
+		cmdPromptMaxAttempts = 3 // if the bound applied here, it would fire fast
+		t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
+
+		sim.start()
+		sim.run("slow.bat")
+		sim.feed("\r\n")
+		sim.prompt("timeout /t 10\r\nWaiting for 10 seconds, press a key to continue ...")
+		// Far past cmdPromptMaxAttempts * cmdPromptRecheckDelay at test scale.
+		sim.wait(settledWithin + 10*cmdPromptRecheckDelay)
+		sim.expectExecuting(true, "while the batch step runs")
+
+		// When the batch finally reaches its closing prompt, it ends.
+		sim.feed("\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after the batch's final prompt")
+	})
+}
+
+// A prompt that is shaped but never stops changing is still released, so a
+// genuinely stuck settle cannot disable Esc forever. This is the case the
+// bound is for, and it must keep working.
+func TestCmdSessionFlickeringPromptIsReleased(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		oldMax := cmdPromptMaxAttempts
+		cmdPromptMaxAttempts = 3
+		t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
+
+		// Drive the checker directly: a prompt-shaped screen that differs at
+		// every look never settles, and must be released after the bound so
+		// that a stuck settle cannot keep Esc disabled. Driving retryOrRelease
+		// itself keeps the test independent of timer scheduling.
+		sim.pf.executing = true
+		sim.pf.cmdSession.pending = true
+		sim.pf.cmdSession.promptSeq = 5
+		sim.pf.cmdSession.sentSeq = 4
+		seq := sim.pf.cmdSession.promptSeq
+		for i := 0; i < cmdPromptMaxAttempts; i++ {
+			sim.pf.cmdSession.retryOrRelease(seq)
+		}
+		drainUITasks()
+		sim.expectExecuting(false, "after a prompt that never settled was released")
+	})
 }

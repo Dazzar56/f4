@@ -70,9 +70,12 @@ var cmdPromptSettleDelay = 150 * time.Millisecond
 // yet, or while a console child holds the terminal.
 var cmdPromptRecheckDelay = 250 * time.Millisecond
 
-// cmdPromptMaxAttempts bounds how long a prompt that keeps failing to settle
-// is waited on before the wait is released (roughly five seconds). It does
-// not bound the child veto, which lasts as long as the child does.
+// cmdPromptMaxAttempts bounds how long a prompt-shaped screen that will not
+// hold still is waited on before the wait is released (roughly five seconds).
+// It bounds only that flickering-prompt case: a busy shell is waited on
+// without limit (rescheduleWhileBusy), and a console child holds the terminal
+// for as long as it runs. A batch step longer than five seconds is therefore
+// no longer cut off -- that was the "batch runs in the background" bug.
 var cmdPromptMaxAttempts = 20
 
 // windowsShellPrompt marks the prompt start and end. The prompt end mark is
@@ -216,11 +219,28 @@ func (s *cmdShellSession) settle(seq uint64) {
 
 		// What is on screen now, not what was there when the mark arrived.
 		current := pf.termView.PromptSnapshot()
-		if pf.termView.UseAltScreen || !promptShaped(current.Text) || current != previous {
-			// Either the shell is busy with the next line (a batch echo, a
-			// command that took over), or the prompt is still being drawn:
-			// ConPTY can pass the mark through before the prompt text. Look
-			// again shortly, against what is on screen now.
+
+		if pf.termView.UseAltScreen || !promptShaped(current.Text) {
+			// The screen is not a prompt: an interactive full-screen program,
+			// a batch line still echoing, program output, or a batch step
+			// that is simply taking its time (`timeout /t 10`, a `pause` the
+			// user is reading). f4 waits, with no bound on how long -- a
+			// batch step is as long as it is, and returning the panels in the
+			// middle of one is the "batch runs in the background" bug over
+			// again. The escape hatch, if the shell truly wedged, is Ctrl+O,
+			// which is not gated on the terminal being busy. A later prompt
+			// mark reschedules a fresh look; failing that, keep polling.
+			s.rescheduleWhileBusy(seq)
+			return
+		}
+
+		if current != previous {
+			// The screen is prompt-shaped but changed since the last look:
+			// the prompt is still being drawn. ConPTY can pass the prompt
+			// mark through before the text in front of it, so the first look
+			// often lands here. This settles within a frame or two, so a
+			// short bounded retry is right -- and bounded so a prompt that
+			// flickers forever cannot strand the wait.
 			s.mu.Lock()
 			if !s.closed && seq == s.promptSeq {
 				s.observed = current
@@ -254,13 +274,26 @@ func (s *cmdShellSession) settle(seq uint64) {
 	})
 }
 
-// retryOrRelease looks at prompt seq again shortly, and stops looking after
-// cmdPromptMaxAttempts. Stopping means releasing the wait, not keeping it: a
-// stuck wait leaves pf.executing set, and because isPtyBusy reports that as
-// busy, every hotkey gated on the terminal being quiet stops working -- Esc
-// among them, while Ctrl+O keeps working because it is not gated. A terminal
-// that ends a command slightly too early is a much smaller problem than one
-// the user cannot get out of.
+// rescheduleWhileBusy looks again after cmdPromptRecheckDelay, with no
+// attempt limit: the shell is busy and f4 waits for as long as that lasts.
+// The attempt counter is reset so that the bounded settle-retry, once the
+// screen does become a prompt, gets its full budget of looks.
+func (s *cmdShellSession) rescheduleWhileBusy(seq uint64) {
+	s.mu.Lock()
+	if !s.closed && seq == s.promptSeq {
+		s.attempts = 0
+		s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
+	}
+	s.mu.Unlock()
+}
+
+// retryOrRelease looks at prompt seq again shortly while a prompt-shaped
+// screen is still settling, and after cmdPromptMaxAttempts releases the wait.
+// This bound applies only to a prompt that will not hold still -- never to a
+// busy shell, which rescheduleWhileBusy waits on without limit. Releasing
+// rather than holding matters because a stuck wait leaves pf.executing set,
+// and isPtyBusy reports that as busy, disabling every hotkey gated on a quiet
+// terminal (Esc) while leaving the ungated ones (Ctrl+O) alive.
 func (s *cmdShellSession) retryOrRelease(seq uint64) {
 	s.mu.Lock()
 	if s.closed || seq != s.promptSeq {

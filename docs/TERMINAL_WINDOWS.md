@@ -191,6 +191,33 @@ out of. Any future veto added to this path must fail the same way.
 Note also that `titleSaysRunning` can never fire (§3.1: the title is unreadable
 behind a pseudoconsole), so the title veto is now dead weight in this code.
 
+### 3.4. A batch step must not time out (the five-second release, narrowed)
+
+Field report after §3.1–3.3 shipped: "batch files don't run right." The
+five-second release from §3.2 was firing mid-batch. That release was written
+for a prompt that would not settle, but it fired for *any* screen that was not
+a settled prompt -- and a batch running `timeout /t 10`, or sitting at a
+`pause` the user reads for more than five seconds, presents a non-prompt
+screen for longer than the bound. So the panels came back while the batch was
+still going: the original "batch runs in the background" bug, reintroduced by
+its own fix.
+
+The two reasons a screen is "not a settled prompt" are now handled apart:
+
+  - **Not prompt-shaped** (`promptShaped` is false): the shell is busy -- a
+    full-screen program, a batch line echoing, program output, or a batch step
+    taking its time. f4 waits with no time bound (`rescheduleWhileBusy`). A
+    batch step is as long as it is; Ctrl+O is the escape hatch if a shell
+    truly wedges, since it is not gated on the terminal being busy.
+  - **Prompt-shaped but changed since the last look**: the prompt is still
+    being drawn (ConPTY can deliver the mark before the text, §3.3). This
+    settles within a frame or two, so the bounded retry still applies, and
+    stays bounded so a prompt that flickers forever cannot strand the wait and
+    disable Esc.
+
+The bound thus governs only the flickering-prompt case it was always meant
+for; nothing that is legitimately busy is cut off.
+
 ### 3.3. Five seconds on every `dir`: the mark arrives before its prompt
 
 Second field report (10.0.19045): every command, `dir` included, brought the
