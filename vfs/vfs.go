@@ -284,6 +284,19 @@ type PanelInfoProvider interface {
 type BulkCopier interface {
 	CopyBulk(ctx context.Context, srcPaths []string, dstVfs VFS, dstDir string, reporter TaskReporter) error
 }
+
+// BulkCopierAt copies paths relative to an explicit source directory. Unlike
+// BulkCopier, it is safe for queued and background work after a navigable VFS
+// has moved away from the directory where the operation was requested.
+type BulkCopierAt interface {
+	CopyBulkAt(ctx context.Context, srcDir string, srcPaths []string, dstVfs VFS, dstDir string, reporter TaskReporter) error
+}
+
+// BulkScannerAt gathers copy statistics relative to an explicit source
+// directory using the same access pattern as a snapshot-aware bulk copy.
+type BulkScannerAt interface {
+	ScanBulkAt(ctx context.Context, srcDir string, srcPaths []string, cb ScanCallback) (OpStats, error)
+}
 type ArchiveLockManager struct {
 	mu    sync.Mutex
 	conds map[string]*sync.Cond

@@ -1678,6 +1678,111 @@ func startProgressTicker(ctx context.Context, reporter vfs.TaskReporter, getStat
 }
 
 func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	return v.copyBulkFrom(ctx, "", false, srcPaths, dstVfs, dstDir, reporter)
+}
+
+func (v *ArchiveVFS) CopyBulkAt(ctx context.Context, srcDir string, srcPaths []string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	return v.copyBulkFrom(ctx, srcDir, true, srcPaths, dstVfs, dstDir, reporter)
+}
+
+func (v *ArchiveVFS) ScanBulkAt(ctx context.Context, srcDir string, srcPaths []string, cb vfs.ScanCallback) (vfs.OpStats, error) {
+	if err := ctx.Err(); err != nil {
+		return vfs.OpStats{}, err
+	}
+
+	v.mu.Lock()
+	if err := v.ensureFSLocked(); err != nil {
+		v.mu.Unlock()
+		if archive.IsPasswordError(err) {
+			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
+				return v.ScanBulkAt(ctx, srcDir, srcPaths, cb)
+			} else {
+				return vfs.OpStats{}, retryErr
+			}
+		}
+		return vfs.OpStats{}, err
+	}
+	innerPath, err := v.resolveInnerPath(srcDir)
+	if err != nil {
+		v.finishNonHandleOperationLocked()
+		v.mu.Unlock()
+		return vfs.OpStats{}, err
+	}
+	format := v.format
+	archiveName := v.Base(v.arcPath)
+	password := v.password
+	v.cancelCleanupLocked()
+	v.activeCount++
+	v.mu.Unlock()
+	defer v.decrementActive()
+
+	if format == "" {
+		format = archive.DetectFormat(archiveName)
+	}
+	if format != "tar" || strings.HasSuffix(strings.ToLower(archiveName), ".tar") {
+		return vfs.GenericScan(ctx, v, srcDir, srcPaths, cb)
+	}
+
+	selectedMap := make(map[string]bool, len(srcPaths))
+	for _, selectedPath := range srcPaths {
+		fullInner := strings.ReplaceAll(selectedPath, "\\", "/")
+		if innerPath != "." && innerPath != "" {
+			fullInner = path.Join(innerPath, fullInner)
+		}
+		cleanSelected, err := cleanArchiveExtractionPath(fullInner)
+		if err != nil {
+			return vfs.OpStats{}, fmt.Errorf("unsafe selected archive path %q: %w", selectedPath, err)
+		}
+		selectedMap[cleanSelected] = true
+	}
+
+	archiveFile, err := v.openArchiveFile(ctx)
+	if err != nil {
+		return vfs.OpStats{}, err
+	}
+	defer func() { _ = archiveFile.Close() }()
+
+	localFile, extractor, err := v.openBulkExtractor(ctx, archiveFile, password)
+	if err != nil {
+		return vfs.OpStats{}, err
+	}
+	defer func() { _ = localFile.Close() }()
+
+	var stats vfs.OpStats
+	err = extractor.Extract(ctx, localFile, func(ctx context.Context, info archives.FileInfo) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		cleanName, err := cleanArchiveExtractionPath(info.NameInArchive)
+		if err != nil {
+			return fmt.Errorf("unsafe archive entry %q: %w", info.NameInArchive, err)
+		}
+		if cleanName == "." || cleanName == "" || !archiveExtractionPathSelected(cleanName, selectedMap) {
+			return nil
+		}
+		size := info.Size()
+		if info.IsDir() {
+			stats.Dirs++
+			if size > 0 {
+				stats.DirBytes += size
+			}
+		} else {
+			stats.Files++
+			if size >= 0 {
+				stats.Bytes += size
+			} else {
+				stats.UnknownSizeFiles++
+			}
+		}
+		if cb != nil {
+			cb(archivePathJoin(v.arcPath, cleanName), stats)
+		}
+		return nil
+	})
+	return stats, err
+}
+
+func (v *ArchiveVFS) copyBulkFrom(ctx context.Context, srcDir string, useSrcDir bool, srcPaths []string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
 	if err := archiveOperationCancelled(ctx, reporter); err != nil {
 		return err
 	}
@@ -1686,16 +1791,25 @@ func (v *ArchiveVFS) CopyBulk(ctx context.Context, srcPaths []string, dstVfs vfs
 		v.mu.Unlock()
 		if archive.IsPasswordError(err) {
 			if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
-				return v.CopyBulk(ctx, srcPaths, dstVfs, dstDir, reporter)
+				return v.copyBulkFrom(ctx, srcDir, useSrcDir, srcPaths, dstVfs, dstDir, reporter)
 			} else {
 				return retryErr
 			}
 		}
 		return err
 	}
+	innerPath := v.innerPath
+	if useSrcDir {
+		var err error
+		innerPath, err = v.resolveInnerPath(srcDir)
+		if err != nil {
+			v.finishNonHandleOperationLocked()
+			v.mu.Unlock()
+			return err
+		}
+	}
 	v.cancelCleanupLocked()
 	v.activeCount++
-	innerPath := v.innerPath
 	absPath := v.activePath()
 	password := v.password
 	v.mu.Unlock()
@@ -2110,7 +2224,7 @@ func archiveProgressPercent(copied, total int64) int {
 	return int(float64(copied) * 100 / float64(total))
 }
 
-func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath, password string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+func (v *ArchiveVFS) openBulkExtractor(ctx context.Context, f vfs.ReadAtCloser, password string) (*os.File, archives.Extractor, error) {
 	var localPath string
 	if temp, ok := f.(*vfs.TempFileWrapper); ok && temp.TempPath != "" {
 		localPath = temp.TempPath
@@ -2120,15 +2234,13 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 
 	localF, err := os.Open(localPath)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	defer func() {
-		_ = localF.Close() // The fallback extractor opens the archive only for reading.
-	}()
 
 	format, _, err := archives.Identify(ctx, localPath, localF)
 	if err != nil {
-		return err
+		_ = localF.Close()
+		return nil, nil, err
 	}
 	if passwordFormat, ok := archivePasswordFormat(format, password); ok {
 		format = passwordFormat
@@ -2136,12 +2248,25 @@ func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, s
 
 	ex, ok := format.(archives.Extractor)
 	if !ok {
-		return fmt.Errorf("format %T does not support extraction", format)
+		_ = localF.Close()
+		return nil, nil, fmt.Errorf("format %T does not support extraction", format)
 	}
 
 	if _, err := localF.Seek(0, io.SeekStart); err != nil {
+		_ = localF.Close()
+		return nil, nil, err
+	}
+	return localF, ex, nil
+}
+
+func (v *ArchiveVFS) copyBulkFallback(ctx context.Context, f vfs.ReadAtCloser, selected map[string]bool, innerPath, password string, dstVfs vfs.VFS, dstDir string, reporter vfs.TaskReporter) error {
+	localF, ex, err := v.openBulkExtractor(ctx, f, password)
+	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = localF.Close() // The fallback extractor opens the archive only for reading.
+	}()
 
 	var mu sync.Mutex
 	lastAction := "Locating"
