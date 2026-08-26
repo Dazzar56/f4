@@ -1,6 +1,8 @@
 # Terminal under Windows — umbrella analysis (issue #425)
 
-Companion to `TERMINAL.md`, which describes the architecture. This file
+Companion to `TERMINAL.md`, which describes the architecture, and to
+`TERMINAL_REFLOW.md`, which surveys how other terminals reflow text and what
+`f4` should copy from them. This file
 describes what is currently broken in it and in what order it is meant to be
 fixed. It covers issues #165, #362, #409 and the terminal half of #424.
 
