@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os/exec"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,5 +105,62 @@ func TestPromptDrivenCommandAfterPromptSeen(t *testing.T) {
 
 	if pf.executing {
 		t.Fatal("executing is still set after the command's prompt marker")
+	}
+}
+
+// A command whose text is a syntax error must still let the wrapper report
+// completion. The shell parses the whole line before running any of it, so
+// without eval a bare ">" makes it reject the group -- OSC 133 markers and
+// all -- and f4 waits for a completion that will never be printed.
+func TestShellSingleQuote(t *testing.T) {
+	cases := map[string]string{
+		">":              "'>'",
+		"echo hi":        "'echo hi'",
+		"echo 'a'":       `'echo '\''a'\'''`,
+		`echo "unclosed`: `'echo "unclosed'`,
+	}
+	for in, want := range cases {
+		if got := shellSingleQuote(in); got != want {
+			t.Errorf("shellSingleQuote(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+// The quoting has to survive an actual shell, not just look right.
+func TestShellSingleQuoteRoundTripsThroughSh(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell quoting")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh available")
+	}
+	for _, payload := range []string{">", "echo 'quoted'", `echo "x"`, "a'b", "$HOME"} {
+		script := "printf '%s' " + shellSingleQuote(payload)
+		out, err := exec.Command("sh", "-c", script).Output()
+		if err != nil {
+			t.Fatalf("sh rejected the quoting of %q: %v", payload, err)
+		}
+		if string(out) != payload {
+			t.Errorf("sh saw %q, want %q", out, payload)
+		}
+	}
+}
+
+// End to end: the wrapper f4 sends must print its completion marker even when
+// the user's command cannot be parsed.
+func TestManagedWrapperReportsCompletionOnSyntaxError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix managed execution")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("no bash available")
+	}
+	for _, payload := range []string{">", `echo "unterminated`, "echo ok"} {
+		line := `{ printf "[C]"; eval ` + shellSingleQuote(payload) +
+			` ; R=$?; printf "[D]"; }`
+		out, _ := exec.Command("bash", "-c", line).CombinedOutput()
+		if !strings.Contains(string(out), "[D]") {
+			t.Errorf("no completion marker for %q; shell said: %s", payload, out)
+		}
 	}
 }

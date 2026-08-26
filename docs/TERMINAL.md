@@ -60,6 +60,28 @@ Before finalizing the `f4` architecture, we analyzed the source code of the most
 
     What remains genuinely hard is Windows, and for an unrelated reason: ConPTY runs its own reflow and repaints the whole viewport afterwards, so a second reflow in `f4` would fight it. That is what `PSEUDOCONSOLE_RESIZE_QUIRK` (flag `0x2`) exists for — it tells ConPTY not to invalidate on resize and to trust the terminal to re-wrap. Unverified for `f4`, and the 2024 ConPTY rewrite (microsoft/terminal#17510) admits it now emits `\r\n` on delayed EOL wrap, which can destroy the soft-wrap signal on recent builds. So: the Unix side is open, the Windows side needs those two experiments first. The full survey — how far2l, WezTerm, Alacritty and xterm.js each solve this, and which parts are worth copying — is in `TERMINAL_REFLOW.md`; the Windows bug list is in `TERMINAL_WINDOWS.md`.
 
+### Why the Unix managed command runs through `eval`
+
+A foreground command is sent wrapped in a group that carries the OSC 133
+markers f4 watches for:
+
+    { trap ...; printf "\033]133;C\007"; eval 'CMD' ; FARVTRESULT=$?; printf "\033]133;D\007"; ...; }
+
+The `eval` is load-bearing. A shell parses the whole line before running any of
+it, so if `CMD` were pasted in raw, a syntax error anywhere in it would make the
+shell reject the group entire — the `printf` that reports completion included.
+f4 would then wait forever for a marker that was never going to be printed, with
+the panels hidden and the terminal apparently hung. A bare `>` did exactly this.
+
+`eval` parses the user's text separately: a syntax error is reported, `eval`
+returns non-zero, and the wrapper around it still runs and reports completion.
+It also keeps an unterminated quote from dropping the shell into PS2
+continuation, where it would sit silently swallowing whatever was typed next.
+
+The command is single-quoted into the `eval` by `shellSingleQuote`. Anything
+that changes this wrapper must keep the property that **no input from the user
+can prevent the D marker from being printed**.
+
 ### Known bug: keyboard protocol modes outlive the shell that asked for them
 
 `TerminalView.Win32InputMode` and `TerminalView.KittyFlags` are set by `DECSET`

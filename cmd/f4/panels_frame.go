@@ -2423,12 +2423,27 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 							fullWireCmd = " " + cmd + "\r"
 						}
 					} else {
-						// Managed foreground command
+						// Managed foreground command.
+						//
+						// The command runs through eval, and it has to. The
+						// wrapper below carries the OSC 133 markers that tell
+						// f4 the command is over, and the shell parses the
+						// whole line before running any of it: a syntax error
+						// anywhere in it -- a bare ">", an unbalanced quote --
+						// makes the shell reject the group entire, markers
+						// included, and f4 waits forever for a completion that
+						// was never going to be printed. eval parses the user's
+						// text separately, so a syntax error in it is reported
+						// and returns non-zero while the wrapper around it
+						// still runs. It also keeps an unterminated quote from
+						// putting the shell into PS2 continuation, where it
+						// would sit swallowing everything typed next.
+						sqCmd := shellSingleQuote(cmd)
 						if path != "" {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqPath, cmd)
+							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; eval %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqPath, sqCmd)
 						} else {
-							fullWireCmd = fmt.Sprintf(" { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", cmd)
+							fullWireCmd = fmt.Sprintf(" { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; eval %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqCmd)
 						}
 						pf.beginManagedExecution()
 						pf.returnToPanels = pf.showPanels
@@ -4212,6 +4227,12 @@ func (pf *PanelsFrame) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
 		Primary:   panelPath(pf.panels[0]),
 		Secondary: panelPath(pf.panels[1]),
 	}
+}
+
+// shellSingleQuote wraps s so a POSIX shell passes it through as one literal
+// word, closing and reopening the quote around each embedded quote.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func workspaceCommandName(command string) string {
