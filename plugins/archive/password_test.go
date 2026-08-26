@@ -47,7 +47,9 @@ func TestArchiveVFS_PromptsForExternalEncrypted7z(t *testing.T) {
 		t.Fatal(err)
 	}
 	archivePath := filepath.Join(tmp, "secret.7z")
-	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-bd", archivePath, "secret.txt")
+	// Encrypt headers too so the wrong-password path is deterministic on every
+	// architecture supported by the test matrix.
+	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-mhe=on", "-bd", archivePath, "secret.txt")
 	cmd.Dir = tmp
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("create encrypted 7z: %v: %s", err, output)

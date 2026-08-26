@@ -56,7 +56,9 @@ func TestActionExtractArchive_Encrypted7zPromptsForPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	archivePath := filepath.Join(tmpDir, "secret.7z")
-	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-bd", archivePath, "secret.txt")
+	// Encrypt headers too: a wrong password must fail deterministically on all
+	// architectures instead of occasionally producing a decodable tiny payload.
+	cmd := exec.Command(sevenZip, "a", "-t7z", "-pCorrect", "-mhe=on", "-bd", archivePath, "secret.txt")
 	cmd.Dir = tmpDir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("create encrypted 7z: %v: %s", err, output)
