@@ -1051,7 +1051,10 @@ func TestFileSystemPanel_CursorMapping(t *testing.T) {
 }
 
 func TestFileSystemPanel_SelectName(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 
@@ -1076,6 +1079,9 @@ func TestFileSystemPanel_SelectName(t *testing.T) {
 }
 
 func TestFileSystemPanel_MultiSelect(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	// 1. Setup real TempDir with files
 	tmp := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmp, "file1.txt"), []byte("1"), 0600); err != nil {
@@ -2137,7 +2143,7 @@ func TestFileSystemPanel_RightClick_ResetOnRelease(t *testing.T) {
 }
 
 func TestFileSystemPanel_RightDragAppliesToSkippedRows(t *testing.T) {
-	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS("."))
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	fp.SetViewMode(ViewModeDetailed)
 	fp.entries = []*fileEntry{
@@ -2878,6 +2884,9 @@ func TestFileSystemPanel_ForkDuplication(t *testing.T) {
 	}
 }
 func TestFileSystemPanel_FastFind_MouseDeactivation(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	fp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(t.TempDir()))
 	waitForLoad(t, fp)
 	fp.fastFindMode = true

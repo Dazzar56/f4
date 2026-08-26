@@ -256,6 +256,7 @@ type PanelsFrame struct {
 	shellPromptReady      bool
 	ignoreNextPrompt      bool
 	returnToPanels        bool
+	cmdSession            *cmdShellSession // local cmd.exe completion tracking (Windows)
 	workspaceCommandTitle string
 
 	menuBar *vtui.MenuBar
@@ -441,27 +442,21 @@ func NewPanelsFrame() *PanelsFrame {
 					pf.ignoreNextPrompt = false
 				}
 				if pf.executing && !ignoredPrompt {
-					pf.executing = false
-					pf.workspaceCommandTitle = ""
-					if pf.returnToPanels {
-						pf.showPanels = true
-						if !pf.showLeftPanel && !pf.showRightPanel {
-							pf.showLeftPanel = true
-							pf.showRightPanel = true
-						}
-						pf.returnToPanels = false
-						if pf.shellMode == ShellModeHost {
-							pf.leaveHostConsole()
-						}
-						pf.RefreshAll()
-						vtui.FrameManager.Redraw()
-					}
+					pf.endExecution()
 				}
 			}
 			if localShell && !busy {
 				pf.catchUpProcessEnvironment(true)
 			}
 		})
+	}
+	if runtime.GOOS == "windows" {
+		pf.cmdSession = newCmdShellSession(pf)
+		pf.termView.OnShellMark = func(mark string, snap promptSnapshot) {
+			if pf.localShellIsActive() {
+				pf.cmdSession.handleMark(mark, snap)
+			}
+		}
 	}
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
@@ -1038,6 +1033,10 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 	pf.returnToPanels = false
 	pf.workspaceCommandTitle = ""
 	pf.lastPtyPath = ""
+	if pf.cmdSession != nil {
+		pf.cmdSession.close()
+		pf.cmdSession = newCmdShellSession(pf)
+	}
 	pf.lastPtyVFS = nil
 	if pf.termView != nil {
 		pf.termView.SetMuted(false)
@@ -1081,7 +1080,7 @@ func (pf *PanelsFrame) initPTY() {
 			}
 
 			if runtime.GOOS == "windows" {
-				os.Setenv("PROMPT", "$E]133;D$E\\$P$G")
+				os.Setenv("PROMPT", windowsShellPrompt)
 			}
 			inheritedEnvironmentGeneration := globalProcessEnvironment.currentGeneration()
 
@@ -1124,6 +1123,13 @@ func (pf *PanelsFrame) initPTY() {
 			n, err := p.Read(buf)
 			if err != nil {
 				vtui.DebugLog("PTY: Local read loop exited: %v", err)
+				// A shell that is gone cannot print the prompt that would
+				// end the command; do not leave the panels hidden for it.
+				uiFrames.PostTask(func() {
+					if pf.executing && pf.isLocalPTY(p) {
+						pf.endExecution()
+					}
+				})
 				return
 			}
 			pf.processEnvironmentShellOutput(buf[:n])
@@ -1199,6 +1205,7 @@ func (pf *PanelsFrame) Close() {
 	if pf.terminalRedraw != nil {
 		pf.terminalRedraw.stop()
 	}
+	pf.cmdSession.close()
 	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 		pf.leaveHostConsole()
 	}
@@ -1476,6 +1483,35 @@ func (pf *PanelsFrame) beginPromptDrivenExecution() {
 	pf.ignoreNextPrompt = !pf.shellPromptReady
 }
 
+// endExecution is the single place where a finished command hands the
+// screen back: to the panels if they were hidden for it, otherwise just
+// out of the busy state.
+func (pf *PanelsFrame) endExecution() {
+	pf.executing = false
+	pf.workspaceCommandTitle = ""
+	if pf.returnToPanels {
+		pf.showPanels = true
+		if !pf.showLeftPanel && !pf.showRightPanel {
+			pf.showLeftPanel = true
+			pf.showRightPanel = true
+		}
+		pf.returnToPanels = false
+		if pf.shellMode == ShellModeHost {
+			pf.leaveHostConsole()
+		}
+		pf.RefreshAll()
+		vtui.FrameManager.Redraw()
+	}
+}
+
+// noteLocalShellLineSent tells the cmd session that a line was typed into
+// the local shell, so that only a prompt printed after it can end it.
+func (pf *PanelsFrame) noteLocalShellLineSent(pty PtyBackend) {
+	if pf.cmdSession != nil && pf.isLocalPTY(pty) {
+		pf.cmdSession.noteSent()
+	}
+}
+
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
 		return
@@ -1490,7 +1526,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.ResizeConsole(pf.lastW, pf.lastH)
 	}
 
-	if !isBusy {
+	if !isBusy && pf.cmdSession.idle() {
 		if fsp := pf.getActivePanel(); fsp != nil {
 			currentPath := fsp.vfs.GetPath()
 			if currentPath != pf.lastPtyPath || !sameVFSInstance(fsp.vfs, pf.lastPtyVFS) {
@@ -2411,6 +2447,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 				pf.workspaceCommandTitle = workspaceCommandName(trimmedCmd)
 				pf.writePTY(activePty, []byte(fullWireCmd))
+				if isWindowsShell && integration == nil {
+					pf.noteLocalShellLineSent(activePty)
+				}
 			}
 
 			pf.cmdLine.Clear()
@@ -2796,6 +2835,17 @@ func (pf *PanelsFrame) processMiddleMouseGesture(e *vtinput.InputEvent) (handled
 	return false, false
 }
 
+// terminalWantsMouseEvent applies the DEC mouse-tracking mode selected by
+// the terminal application. SGR (1006) chooses the wire format; it does not
+// itself request mouse events. In normal tracking mode (1000), applications
+// receive button presses and releases only, not hover motion.
+func terminalWantsMouseEvent(mode int, e *vtinput.InputEvent) bool {
+	if mode == 0 || e == nil {
+		return false
+	}
+	return mode != 1000 || e.MouseEventFlags&vtinput.MouseMoved == 0
+}
+
 func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	// If panels are hidden, route relevant mouse events to PTY immediately
 	if !pf.showPanels {
@@ -2812,7 +2862,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 		}
 		active := pf.getActivePTY()
-		if active != nil && (pf.termView.MouseTrackingMode != 0 || pf.termView.MouseSGRMode) {
+		if active != nil && terminalWantsMouseEvent(pf.termView.MouseTrackingMode, e) {
 			seq := TranslateMouseInput(e)
 			pf.writePTY(active, []byte(seq))
 			return true
@@ -3867,6 +3917,7 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 
 	if isWindowsShell {
 		pf.writePTY(activePty, []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
+		pf.noteLocalShellLineSent(activePty)
 	} else {
 		sqPath := strings.ReplaceAll(path, "'", "'\\''")
 		// "&& true f4_sync" instead of "# f4_sync": stock zsh ships with

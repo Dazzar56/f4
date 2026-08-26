@@ -98,26 +98,26 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 		close(dispatchDone)
 	}()
 
-	// The server will not answer until allowResponse is closed below, so a
-	// dispatch that waited for the update check could never finish here.
-	// The deadline only guards against a hang; keep it generous so the
-	// synchronous click work (SaveConfig, dialog close) does not trip it
-	// on a loaded CI runner.
-	select {
-	case <-dispatchDone:
-	case <-time.After(10 * time.Second):
-		t.Fatal("manual update check blocked mouse dispatch")
-	}
-
 	select {
 	case <-requestStarted:
-	case <-time.After(1 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("manual update check did not start in the background")
+	}
+
+	// The server will not answer until allowResponse is closed below. Check
+	// dispatch only after the request has reached it, so slow goroutine and
+	// HTTP startup on emulated CI do not consume this deadline. Five seconds
+	// is still below CheckForUpdates' ten-second request timeout, so a
+	// synchronous click cannot pass merely because the request timed out.
+	select {
+	case <-dispatchDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("manual update check blocked mouse dispatch")
 	}
 	close(allowResponse)
 	select {
 	case <-requestFinished:
-	case <-time.After(1 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("manual update check did not finish after the response was released")
 	}
 
@@ -127,7 +127,7 @@ func TestActionUpdateSettings_ManualCheckDoesNotBlockMouseDispatch(t *testing.T)
 	select {
 	case task := <-vtui.FrameManager.TaskChan:
 		task()
-	case <-time.After(1 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("manual update check did not post its result")
 	}
 }

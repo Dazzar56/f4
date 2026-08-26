@@ -490,13 +490,23 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 		var totalStats vfs.OpStats
 		scanErr := error(nil)
 		lastScanUpdate := startTime
-		totalStats, scanErr = vfs.CalculateStats(ctx, srcVfs, srcBasePath, names, func(currentPath string, stats vfs.OpStats) {
+		scanCallback := func(currentPath string, stats vfs.OpStats) {
 			now := time.Now()
 			if now.Sub(lastScanUpdate) > 50*time.Millisecond {
 				lastScanUpdate = now
 				reporter.UpdateScan(currentPath, stats.Files, stats.Dirs)
 			}
-		})
+		}
+		bulkCopyEligible := !isMove && mask == "" && !sameVFSInstance(srcVfs, dstVfs) && transferNamesAreIdentity(srcVfs, dstVfs, srcBasePath, names)
+		if _, ok := srcVfs.(vfs.BulkCopierAt); ok && bulkCopyEligible {
+			if bulkScanner, ok := srcVfs.(vfs.BulkScannerAt); ok {
+				totalStats, scanErr = bulkScanner.ScanBulkAt(ctx, srcBasePath, names, scanCallback)
+			} else {
+				totalStats, scanErr = vfs.CalculateStats(ctx, srcVfs, srcBasePath, names, scanCallback)
+			}
+		} else {
+			totalStats, scanErr = vfs.CalculateStats(ctx, srcVfs, srcBasePath, names, scanCallback)
+		}
 		reporter.UpdateScan("", totalStats.Files, totalStats.Dirs)
 
 		if scanErr != nil {
@@ -640,22 +650,32 @@ func ExecuteFileOpAt(pf *PanelsFrame, srcVfs, dstVfs vfs.VFS, srcBasePath string
 		}
 
 		updateUI(true)
-		// OPTIMIZATION: Check if the source VFS supports bulk copying (e.g. for sequential archives)
-		// BulkCopier's legacy API is relative to mutable VFS state. Restrict it
-		// to foreground work, where the source panel cannot navigate underneath
-		// the operation; queued/background work uses captured absolute paths.
+		// OPTIMIZATION: Check if the source VFS supports bulk copying (e.g. for sequential archives).
+		// Snapshot-aware bulk copying is safe in every mode. BulkCopier's legacy
+		// API remains restricted to foreground work because it is relative to
+		// mutable VFS state.
 		// Bulk copy keeps the source names, so it cannot serve a mask.
-		if mode == 2 && !isMove && mask == "" && !sameVFSInstance(srcVfs, dstVfs) && transferNamesAreIdentity(srcVfs, dstVfs, srcBasePath, names) {
-			if bulkCopier, ok := srcVfs.(vfs.BulkCopier); ok {
-				err := bulkCopier.CopyBulk(ctx, names, dstVfs, destPath, wrapRep)
-				if err == nil {
+		if bulkCopyEligible {
+			var bulkErr error
+			bulkAttempted := false
+			if bulkCopier, ok := srcVfs.(vfs.BulkCopierAt); ok {
+				bulkAttempted = true
+				bulkErr = bulkCopier.CopyBulkAt(ctx, srcBasePath, names, dstVfs, destPath, wrapRep)
+			} else if mode == 2 {
+				if bulkCopier, ok := srcVfs.(vfs.BulkCopier); ok {
+					bulkAttempted = true
+					bulkErr = bulkCopier.CopyBulk(ctx, names, dstVfs, destPath, wrapRep)
+				}
+			}
+			if bulkAttempted {
+				if bulkErr == nil {
 					updateUI(true)
 					return nil
 				}
-				if operationMustNotRetry(err) {
-					return err
+				if operationMustNotRetry(bulkErr) {
+					return bulkErr
 				}
-				vtui.DebugLog("FILEOP: Bulk copy failed, falling back to sequential: %v", err)
+				vtui.DebugLog("FILEOP: Bulk copy failed, falling back to sequential: %v", bulkErr)
 			}
 		}
 

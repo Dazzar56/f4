@@ -187,15 +187,45 @@ placement gives it. The new `X11_GFX` line prints the rectangle drawn beside
 the rectangle asked for and settles it.
 
 **B2. Windows console: black rectangle and a frozen interface.** Issue #805,
-fixed. The console overlay had never been run on Windows, and the first report
-found the threading. `Place`, `Hide` and `SetBounds` made their window calls on
+**open**. Two faults have been found and fixed and neither of them was the
+whole of it: the reporter came back on the build that carries both and said
+nothing had changed. The console overlay had never been run on Windows, and
+the first report found the threading. `Place`, `Hide` and `SetBounds` made their window calls on
 the calling thread; on a window owned by another thread those calls wait for
 that thread, and the overlay's pump thread shares an input queue with conhost.
 `RenderExternal` runs with the screen locked, so f4 waited on conhost while
 conhost was what f4 needed to draw and to read keys. The window operations are
 now written into `wincon/overlay_state.go` and applied on the pump thread after
-one `PostMessageW`; see `WINCON.md` section 2 for the invariant and the rule
+one `PostThreadMessageW`; see `WINCON.md` section 2 for the invariant and the rule
 that keeps it.
+
+The black rectangle was the second half and did not go with the first. A frame
+places the window, reshapes it, and only then hands over the pixels, so the
+pump thread could show a window with nothing in it — and `WM_ERASEBKGND` is
+refused, so an unpainted window keeps whatever it last held, which the first
+time is black. It stayed that way for as long as scaling the photograph took.
+`overlayState.take` now holds the move back until the frame buffer has been
+replaced, so the window is shown, or resized, in the same wake-up that paints
+it; a resize needed the same rule because `paint` blits at the frame buffer's
+size and leaves the rest of a larger window alone.
+
+What the thread says now, and what has to be told apart before anything else
+is written, is that the three reports do not describe one fault:
+
+- Windows 10, conhost: black and wedged, unchanged by either fix.
+- Windows 11, console: black, but `Esc` comes straight back, and quick view is
+  black too. f4-gui shows the same files, so nothing is wrong with the decode.
+  The default terminal there is Windows Terminal, where the overlay is
+  deliberately never installed — so this is very likely the sixel path and not
+  this entry at all.
+- Some pictures show, and after a few of them the machine runs hot and `Esc`
+  is not answered until the process is killed.
+
+The instrumentation for that is in place: `WINCON:` summary lines, one a
+second, described in `WINCON.md` section 4. The three readings that separate
+these are `scale` (time on the thread holding the screen lock), `frames`
+against `new` (a rescale storm), and `blank` (paints that found no frame
+buffer). Nothing further should be guessed until one of those logs arrives.
 
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
@@ -240,7 +270,9 @@ capabilities do not claim it.
 **12b. A window over the Windows console.** Done for conhost, where `cmd.exe`
 lives and no image protocol exists; see `WINCON.md`. Windows Terminal is
 deliberately not covered, because it renders sixel and that is the better
-answer. Written but not yet run on Windows.
+answer. It has now been run on Windows once, by the reporter of issue #805,
+and both faults that run found are fixed; nothing since has come back from a
+real console.
 
 **12a. Done.** The overlay is installed as vtui's external graphics renderer,
 so quick view, the thumbnail grid, the file viewer and the pictures a program
@@ -266,19 +298,49 @@ under the glyphs — see the entry in section 8, which is the same blocker as
 kitty's negative `z` — or the receiver has to keep per row slices and erase
 them as cells are written, which is what `ImageSlice` does in Windows Terminal.
 
-**14. A full colour sixel encoder in vtui.** `graphics_sixel.go` quantises to a
-median cut palette of 255 colours for the whole picture. Redefining registers
-between bands would lift that limit entirely, and f4's receiver already honours
-it — the two halves of the protocol are asymmetric until this is done. Note
-that this is the vtui repository, not f4.
+**14. Full colour over sixel, both halves.** Done. The sender is vtui's, and
+it has two forms: a register redefined between bands, which every decoder that
+resolves registers as it reads them honours, and a stack of transparent
+single-palette images at one cell, for Windows Terminal, which does not.
+
+f4's receiver takes both. The redefinition was always immediate — see
+`TestSixelRegisterRedefinitionIsImmediate` — and the stack needed the
+placements to compose rather than replace. Two things carry it: the decoder
+already leaves an unpainted pixel at zero alpha under `P2=1`, and overlapping
+placements are kept in arrival order by `kittyAddPlacement`, which only
+replaces on a matching kitty image and placement id and a sixel has neither.
+What had to change was the composing: both overlay frame buffers copied the
+source bytes, so a layer erased the one under it and only the last one
+survived. They compose now, source over destination.
+
+This matters more than it looks: f4 running inside f4 inside Windows Terminal
+is a stack of layers arriving at f4's own built-in terminal, so the two halves
+of the protocol are asymmetric until the receiver takes what the sender emits.
+Note that the encoder is the vtui repository, not f4.
 
 Konsole's sixel decoder is not compatible with that full-colour form: it keeps
 indexed pixels and mutates the shared palette when a later band redefines a
 register, recolouring bands that were already decoded. f4 therefore selects
 vtui's existing kitty transport for Konsole 22.04 and later, where the terminal
-supports the raw RGB/RGBA subset used by the image viewer. This leaves the
-full-colour sixel path unchanged for terminals that handle it correctly, and a
-valid `VTUI_GRAPHICS` override still takes precedence.
+supports the raw RGB/RGBA subset used by the image viewer. The same transport
+is preferred when the environment identifies another Kitty-capable terminal
+(kitty, Ghostty, WezTerm, Contour, wayst, Rio, or Warp). Terminals without a
+known Kitty path keep the full-colour sixel path.
+
+Windows Terminal has the same boundary and no kitty path to fall back to, and
+**that case is no longer f4's**. f4 used to set `VTUI_SIXEL_PALETTE=adaptive`
+there — a single median-cut palette, which is banding on any photograph, and
+chosen by writing an environment variable into its own process to configure a
+library it links. vtui now sends several transparent DCS layers at one cell
+instead, each with a palette of its own, and picks that itself from
+`WT_SESSION` beside the check that already picks the raster cell geometry for
+the same terminal. See `../vtui/GRAPHICS.md`. The division that came out of
+it is worth keeping: **vtui knows terminals, f4 knows the user.**
+
+`graphics_compat.go` is still on the wrong side of that line — the table of
+Konsole, Ghostty, Contour, wayst, Rio and Warp is knowledge about terminals
+living in an application — and moving it into vtui's protocol detection, with
+only the override left here, is queued rather than done.
 
 **15. Nothing.** The device attributes answer used to be swallowed when a
 chunk ended on its final byte, which kept every client from ever asking for a
@@ -358,13 +420,16 @@ the other way round.
   their own algorithms, and they do not agree with each other either. A client
   that wants the text below the image sends a line feed.
 - **256 colour registers are reported, and that is what full colour needs.**
-  The decoder resolves a register at the moment it is used, so redefining one
-  between bands gives every band the colour it was drawn with. An encoder can
-  therefore paint an unlimited number of colours through 256 registers, which
-  is how full colour over sixel actually works and what Windows Terminal does.
-  Reporting a larger number through `XTSMGRAPHICS` would be true of our
-  decoder — the palette grows on demand — but it would invite an encoder to
-  quantise to a palette of that size for no gain.
+  A decoder that resolves a register at the moment it is used lets an encoder
+  redefine one between bands and paint an unlimited number of colours through
+  256 registers. That is the full-colour form used by f4's own receiver and by
+  terminals that preserve those changes as they arrive. Windows Terminal's
+  indexed raster buffer does not make that promise, and the answer there is
+  now layering rather than a smaller palette: several transparent images at
+  one cell, 255 colours each. Reporting a larger number through
+  `XTSMGRAPHICS` would be true of our decoder — the palette grows on demand —
+  but it would invite an encoder to quantise to a palette of that size for no
+  gain.
 - **The receiver uses the real cell size, not the VT340's 10x20.** Windows
   Terminal rasterises sixel into a fixed virtual cell to emulate the hardware.
   We cannot: `CSI 16 t` already tells the child what our cell really is, and a

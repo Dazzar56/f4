@@ -10,8 +10,8 @@ package wincon
 // text and delivers its keys.
 //
 // So the caller does not call them. It records what it wants here, posts one
-// message, and returns; the pump thread reads this and does the work. The
-// split lives in its own file for the same reason geometry.go does: it is
+// thread message, and returns; the pump thread reads this and does the work.
+// The split lives in its own file for the same reason geometry.go does: it is
 // arithmetic and judgement, it has no system calls in it, and it is therefore
 // testable on a machine with no Windows console anywhere near it.
 
@@ -111,6 +111,8 @@ func (s *overlayState) setRegion(rects []Rect) bool {
 }
 
 // touchPixels says the frame buffer has been replaced and wants repainting.
+// It is also what releases a move the pump thread is holding back, so the
+// window is shown or resized in the same wake-up that paints it.
 func (s *overlayState) touchPixels() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -146,12 +148,24 @@ func (s *overlayState) close() bool {
 // work, having already recorded it as done. Recording it here rather than
 // after the calls is deliberate — a change that arrives while the calls are
 // running sets the flag again and gets its own wake-up.
+//
+// Second rule of this file, after the one about waiting: the window is never
+// shown or moved except in the wake-up that also repaints it. See the comment
+// where the move is held back.
 func (s *overlayState) take() overlayOps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.woken = false
 
 	var ops overlayOps
+	if s.closed {
+		s.wantShow = false
+		s.wantRect = Rect{}
+		s.wantRegion = nil
+		s.regionSet = false
+		s.pixDirty = false
+		return ops
+	}
 	if !s.wantShow {
 		if s.shown {
 			ops.Hide = true
@@ -167,6 +181,22 @@ func (s *overlayState) take() overlayOps {
 		s.regionSet = false
 	}
 	if !s.shown || s.wantRect != s.placed {
+		if !s.pixDirty {
+			// The pixels for this rectangle have not arrived yet.
+			// Showing the window now would put an *unpainted* window
+			// over the console: WM_ERASEBKGND is refused, so what is
+			// on the screen until the next paint is whatever the
+			// window last held — black on the first picture, which is
+			// the other half of what issue #805 looked like. Resizing
+			// it early is the same fault with the old picture still
+			// in it, because paint blits at the frame buffer's size
+			// and leaves the rest of a larger window alone.
+			//
+			// A frame always draws after it places (see
+			// consoleImageOverlay.RenderExternal), so that Draw is at
+			// most one wake-up away. Wait for it and do both at once.
+			return ops
+		}
 		ops.Move = true
 		ops.Rect = s.wantRect
 		// Moving or showing the window invalidates it anyway, and the

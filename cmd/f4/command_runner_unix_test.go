@@ -79,7 +79,12 @@ func TestLocalCommandRunnerCancellationKillsProcessGroup(t *testing.T) {
 	for time.Now().Before(deadline) {
 		data, readErr := os.ReadFile(pidPath)
 		if readErr == nil {
-			childPID, err = strconv.Atoi(strings.TrimSpace(string(data)))
+			pidText := strings.TrimSpace(string(data))
+			if pidText == "" {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			childPID, err = strconv.Atoi(pidText)
 			if err != nil {
 				t.Fatalf("child pid %q: %v", data, err)
 			}

@@ -609,6 +609,71 @@ func TestVisualClustersInVisualOrderPreservesTerminalClustersInBidiParagraph(t *
 		t.Fatalf("visual clusters covered %d logical starts, want %d", len(seen), len(wantStarts))
 	}
 }
+
+func TestVisualClustersInVisualOrderKeepsLeadingThaanaBeforeLatinText(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "ދިވެހިބަސް - Divehi (Maldivian) - BiDi"
+	var got strings.Builder
+	for _, cluster := range VisualClustersInVisualOrder(text) {
+		got.WriteString(cluster.Text)
+	}
+
+	// A left to right line: the Thaana word is reversed in place, the rest
+	// of the line stays where it is (unxed/f4#546, "f4 changed the word
+	// order").
+	want := "ސްބަހިވެދި - Divehi (Maldivian) - BiDi"
+	if got.String() != want {
+		t.Fatalf("visual text = %q, want %q", got.String(), want)
+	}
+}
+
+func TestWrapEngine_BidiVisualMoveLeavesRTLRunInVisualDirection(t *testing.T) {
+	oldMode := vtui.DefaultBidiMode
+	vtui.DefaultBidiMode = vtui.BidiFull
+	t.Cleanup(func() { vtui.DefaultBidiMode = oldMode })
+
+	text := "abc אבג def"
+	logical := logicalTextClusters(text)
+	caret := buildVisualCaretMap(text)
+	if got, want := caret.LogicalToVisual[len(logical)-4], 4; got != want {
+		t.Fatalf("caret at the end of RTL run = %d, want visual boundary %d", got, want)
+	}
+
+	tests := []struct {
+		name      string
+		pos       int
+		direction int
+		want      int
+	}{
+		{
+			name:      "left leaves RTL run",
+			pos:       len([]byte("abc אבג")),
+			direction: -1,
+			want:      len([]byte("abc")),
+		},
+		{
+			name:      "right enters RTL run from its left edge",
+			pos:       len([]byte("abc אבג")),
+			direction: 1,
+			want:      len([]byte("abc אב")),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := fragmentVisualMove(text, test.pos, test.direction)
+			if !ok {
+				t.Fatalf("visual move was rejected at byte offset %d", test.pos)
+			}
+			if got != test.want {
+				t.Fatalf("visual move from %d in direction %d = %d, want %d", test.pos, test.direction, got, test.want)
+			}
+		})
+	}
+}
+
 func TestWrapEngine_LogicalToVisual_CappedLine(t *testing.T) {
 	// Tests safety when a logical line is massive (binary) and indexing is capped at 64KB.
 	// Create 100KB of data with NO newlines.

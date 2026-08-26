@@ -204,6 +204,64 @@ func TestGrabber_AltInsToggleCloses(t *testing.T) {
 	}
 }
 
+func mouseEvent(x, y int16, button uint32, moved, down bool) *vtinput.InputEvent {
+	e := &vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		MouseX:      x,
+		MouseY:      y,
+		ButtonState: button,
+		KeyDown:     down,
+	}
+	if moved {
+		e.MouseEventFlags |= vtinput.MouseMoved
+	}
+	return e
+}
+
+func TestGrabber_MouseDragSelectsArea(t *testing.T) {
+	scr := setupGrabberScreen(t)
+	g := NewGrabberFrame()
+	g.Show(scr)
+
+	// Press at (1,0) — anchors the selection.
+	g.ProcessMouse(mouseEvent(1, 0, vtinput.FromLeft1stButtonPressed, false, true))
+	if g.curX != 1 || g.curY != 0 || g.anchorX != 1 || g.anchorY != 0 {
+		t.Fatalf("after press: cur=(%d,%d) anchor=(%d,%d), want (1,0)/(1,0)",
+			g.curX, g.curY, g.anchorX, g.anchorY)
+	}
+
+	// Drag to (5,2) — extends the rectangle.
+	g.ProcessMouse(mouseEvent(5, 2, vtinput.FromLeft1stButtonPressed, true, true))
+	if g.curX != 5 || g.curY != 2 || g.anchorX != 1 || g.anchorY != 0 {
+		t.Fatalf("after drag: cur=(%d,%d) anchor=(%d,%d), want (5,2)/(1,0)",
+			g.curX, g.curY, g.anchorX, g.anchorY)
+	}
+
+	// Release stops the selection, keeping it highlighted.
+	g.ProcessMouse(mouseEvent(5, 2, 0, false, false))
+	if g.mouseSelecting {
+		t.Fatal("release should clear mouseSelecting")
+	}
+	if got := g.copyText(); got == "" {
+		t.Fatal("mouse drag should produce a non-empty selection")
+	}
+
+	// Subsequent pointer movement (button up) must NOT change the
+	// frozen rectangle.
+	g.ProcessMouse(mouseEvent(0, 5, 0, true, true))
+	if g.curX != 5 || g.curY != 2 || g.anchorX != 1 || g.anchorY != 0 {
+		t.Fatalf("after release hover: cur=(%d,%d) anchor=(%d,%d), want frozen (5,2)/(1,0)",
+			g.curX, g.curY, g.anchorX, g.anchorY)
+	}
+
+	// A new press starts a fresh selection again.
+	g.ProcessMouse(mouseEvent(2, 1, vtinput.FromLeft1stButtonPressed, false, true))
+	if g.anchorX != 2 || g.anchorY != 1 || g.curX != 2 || g.curY != 1 {
+		t.Fatalf("after re-press: cur=(%d,%d) anchor=(%d,%d), want (2,1)/(2,1)",
+			g.curX, g.curY, g.anchorX, g.anchorY)
+	}
+}
+
 func TestGrabber_JumpKeys(t *testing.T) {
 	scr := setupGrabberScreen(t)
 	g := NewGrabberFrame()

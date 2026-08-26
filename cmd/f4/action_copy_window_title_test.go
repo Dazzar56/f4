@@ -31,6 +31,9 @@ func TestAction_AppCopyWindowTitle(t *testing.T) {
 	origTemplate := AppConfig.ConsoleTitleTemplate
 	defer func() { AppConfig.ConsoleTitleTemplate = origTemplate }()
 	t.Cleanup(swapFrameManager(t))
+	origCopyWindowTitleToClipboard := copyWindowTitleToClipboard
+	copyWindowTitleToClipboard = vtui.SetClipboard
+	t.Cleanup(func() { copyWindowTitleToClipboard = origCopyWindowTitleToClipboard })
 
 	scr := vtui.NewScreenBuf()
 	scr.AllocBuf(80, 25)

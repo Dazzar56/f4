@@ -9,8 +9,10 @@ import (
 )
 
 func TestLayoutViewerTextRowKeepsIndicClustersTogether(t *testing.T) {
+	// स्कृ is one cluster of two cells (its column sum, what the terminal
+	// advances), so three columns hold exactly the first two clusters.
 	text := "संस्कृतम्\n"
-	first := layoutViewerTextRow([]byte(text), 2, 8, true)
+	first := layoutViewerTextRow([]byte(text), 3, 8, true)
 	if got, want := string([]byte(text)[:first.textLen]), "संस्कृ"; got != want {
 		t.Fatalf("first wrapped row = %q, want %q", got, want)
 	}
@@ -18,14 +20,14 @@ func TestLayoutViewerTextRowKeepsIndicClustersTogether(t *testing.T) {
 		t.Fatalf("first row metadata = %+v, want an intermediate wrapped row", first)
 	}
 
-	second := layoutViewerTextRow([]byte(text)[first.lineLen:], 2, 8, true)
+	second := layoutViewerTextRow([]byte(text)[first.lineLen:], 3, 8, true)
 	if !second.foundNewline || second.lineLen != len([]byte("तम्\n")) {
 		t.Fatalf("second row metadata = %+v, want the terminating row", second)
 	}
 
-	cells, _ := viewerTextCells(string([]byte(text)[:first.textLen]), 0, 8, 2)
-	if len(cells) != 2 {
-		t.Fatalf("first row rendered %d cells, want 2", len(cells))
+	cells, _ := viewerTextCells(string([]byte(text)[:first.textLen]), 0, 8, 3)
+	if len(cells) != 3 {
+		t.Fatalf("first row rendered %d cells, want 3", len(cells))
 	}
 }
 
@@ -54,9 +56,13 @@ func TestViewerTextCellsKeepsIndicClustersInsideBidiParagraph(t *testing.T) {
 
 	text := "संस्कृतम् ދިވެހިބަސް"
 	clusters := textlayout.VisualClustersInVisualOrder(text)
+	wantCells := 0
+	for _, cluster := range clusters {
+		wantCells += cluster.Width
+	}
 	cells, offsets := viewerTextCells(text, 0, 8, 100)
-	if len(cells) != len(clusters) || len(offsets) != len(clusters) {
-		t.Fatalf("rendered %d cells/%d offsets for %d clusters", len(cells), len(offsets), len(clusters))
+	if len(cells) != wantCells || len(offsets) != wantCells {
+		t.Fatalf("rendered %d cells/%d offsets for %d clusters of %d columns", len(cells), len(offsets), len(clusters), wantCells)
 	}
 	seen := make(map[int]bool, len(offsets))
 	for _, offset := range offsets {

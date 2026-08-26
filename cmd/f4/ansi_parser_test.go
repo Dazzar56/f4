@@ -951,4 +951,12 @@ func TestAnsiParser_DECSET_Modes(t *testing.T) {
 	if !tv.MouseSGRMode {
 		t.Error("CSI ? 1006 h failed to enable MouseSGRMode")
 	}
+
+	// htop enables SGR encoding and normal mouse tracking in one CSI.
+	tv.MouseTrackingMode = 0
+	tv.MouseSGRMode = false
+	p.Process([]byte("\x1b[?1006;1000h"))
+	if tv.MouseTrackingMode != 1000 || !tv.MouseSGRMode {
+		t.Errorf("CSI ? 1006;1000 h = mode %d, sgr %t; want normal tracking with SGR", tv.MouseTrackingMode, tv.MouseSGRMode)
+	}
 }

@@ -31,7 +31,7 @@ package wincon
 // its keys. Issue #805 is what that looks like from the outside: the picture
 // never arrives, the whole interface stops, and Esc is answered when Windows
 // breaks the wait, minutes later. So the calls below only write down what
-// they want (overlay_state.go) and post one message; every user32 and gdi32
+// they want (overlay_state.go) and post one thread message; every user32 and gdi32
 // call that touches the window happens on the pump thread and nowhere else.
 
 import (
@@ -54,23 +54,26 @@ var (
 	procGetStdHandle            = kernel32.NewProc("GetStdHandle")
 	procGetModuleHandleW        = kernel32.NewProc("GetModuleHandleW")
 
-	procIsWindowVisible  = user32.NewProc("IsWindowVisible")
-	procRegisterClassExW = user32.NewProc("RegisterClassExW")
-	procCreateWindowExW  = user32.NewProc("CreateWindowExW")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procDefWindowProcW   = user32.NewProc("DefWindowProcW")
-	procGetMessageW      = user32.NewProc("GetMessageW")
-	procTranslateMessage = user32.NewProc("TranslateMessage")
-	procDispatchMessageW = user32.NewProc("DispatchMessageW")
-	procPostMessageW     = user32.NewProc("PostMessageW")
-	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
-	procSetWindowPos     = user32.NewProc("SetWindowPos")
-	procShowWindow       = user32.NewProc("ShowWindow")
-	procGetClientRect    = user32.NewProc("GetClientRect")
-	procInvalidateRect   = user32.NewProc("InvalidateRect")
-	procBeginPaint       = user32.NewProc("BeginPaint")
-	procEndPaint         = user32.NewProc("EndPaint")
-	procSetWindowRgn     = user32.NewProc("SetWindowRgn")
+	procIsWindowVisible    = user32.NewProc("IsWindowVisible")
+	procRegisterClassExW   = user32.NewProc("RegisterClassExW")
+	procCreateWindowExW    = user32.NewProc("CreateWindowExW")
+	procDestroyWindow      = user32.NewProc("DestroyWindow")
+	procDefWindowProcW     = user32.NewProc("DefWindowProcW")
+	procGetMessageW        = user32.NewProc("GetMessageW")
+	procPeekMessageW       = user32.NewProc("PeekMessageW")
+	procTranslateMessage   = user32.NewProc("TranslateMessage")
+	procDispatchMessageW   = user32.NewProc("DispatchMessageW")
+	procPostMessageW       = user32.NewProc("PostMessageW")
+	procPostThreadMessageW = user32.NewProc("PostThreadMessageW")
+	procPostQuitMessage    = user32.NewProc("PostQuitMessage")
+	procGetCurrentThreadId = kernel32.NewProc("GetCurrentThreadId")
+	procSetWindowPos       = user32.NewProc("SetWindowPos")
+	procShowWindow         = user32.NewProc("ShowWindow")
+	procGetClientRect      = user32.NewProc("GetClientRect")
+	procInvalidateRect     = user32.NewProc("InvalidateRect")
+	procBeginPaint         = user32.NewProc("BeginPaint")
+	procEndPaint           = user32.NewProc("EndPaint")
+	procSetWindowRgn       = user32.NewProc("SetWindowRgn")
 
 	procStretchDIBits     = gdi32.NewProc("StretchDIBits")
 	procCreateRectRgn     = gdi32.NewProc("CreateRectRgn")
@@ -99,6 +102,7 @@ const (
 	wmApp         = 0x8000
 	wmOverlayQuit = wmApp + 1
 	wmOverlaySync = wmApp + 2
+	pmNoRemove    = 0x0000
 
 	htTransparent = ^uintptr(0) // HTTRANSPARENT is -1
 
@@ -248,13 +252,26 @@ type Overlay struct {
 
 	// mu guards the handle and the frame buffer, both of which the pump
 	// thread reads while it paints.
-	mu     sync.Mutex
-	parent uintptr
-	hwnd   uintptr
-	ready  chan error
-	pix    []byte
-	pixW   int
-	pixH   int
+	mu       sync.Mutex
+	parent   uintptr
+	hwnd     uintptr
+	threadID uint32
+	ready    chan error
+	pix      []byte
+	pixW     int
+	pixH     int
+
+	// stats is what the pump thread did; see stats.go for why it counts
+	// rather than logs.
+	stats counters
+}
+
+// Stats reads the counters. Safe from any thread.
+func (o *Overlay) Stats() Stats {
+	if o == nil {
+		return Stats{}
+	}
+	return o.stats.snapshot()
 }
 
 var (
@@ -382,6 +399,17 @@ func (o *Overlay) pump() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	// PostThreadMessageW only works after the target has a message queue. Make
+	// that guarantee before publishing the window through ready. A thread
+	// message also avoids routing the wake-up through a child HWND whose parent
+	// belongs to conhost.exe.
+	var m msg
+	procPeekMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0, pmNoRemove)
+	tid, _, _ := procGetCurrentThreadId.Call()
+	o.mu.Lock()
+	o.threadID = uint32(tid)
+	o.mu.Unlock()
+
 	inst, _, _ := procGetModuleHandleW.Call(0)
 	hwnd, _, err := procCreateWindowExW.Call(
 		0,
@@ -415,11 +443,20 @@ func (o *Overlay) pump() {
 		return
 	}
 
-	var m msg
 	for {
 		r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
 		if int32(r) <= 0 {
 			return
+		}
+		if m.HWnd == 0 {
+			switch m.Message {
+			case wmOverlaySync:
+				o.apply(hwnd)
+				continue
+			case wmOverlayQuit:
+				procDestroyWindow.Call(hwnd)
+				continue
+			}
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
@@ -435,10 +472,17 @@ func (o *Overlay) paint(hwnd uintptr) {
 	}
 	defer procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 
+	o.stats.paints.Add(1)
+
 	o.mu.Lock()
 	pix, w, h := o.pix, o.pixW, o.pixH
 	o.mu.Unlock()
 	if len(pix) == 0 || w <= 0 || h <= 0 {
+		// Nothing to paint, and WM_ERASEBKGND is refused, so the window
+		// keeps whatever it held. This is what the reported black
+		// rectangle is from in here, and it is worth counting even now
+		// that take() holds the move back until the pixels are here.
+		o.stats.blank.Add(1)
 		return
 	}
 
@@ -478,17 +522,17 @@ func (o *Overlay) Place(r Rect) error {
 }
 
 // post asks the pump thread to make the window agree with the state. It never
-// waits: PostMessageW leaves the message on the queue and returns, and that is
-// the whole difference between this and issue #805.
+// waits: PostThreadMessageW leaves the message on that thread's queue and
+// returns, and that is the whole difference between this and issue #805.
 func (o *Overlay) post() {
 	o.mu.Lock()
-	hwnd := o.hwnd
+	tid := o.threadID
 	o.mu.Unlock()
-	if hwnd == 0 {
+	if tid == 0 {
 		o.st.wakeFailed()
 		return
 	}
-	if r, _, _ := procPostMessageW.Call(hwnd, wmOverlaySync, 0, 0); r == 0 {
+	if r, _, _ := procPostThreadMessageW.Call(uintptr(tid), wmOverlaySync, 0, 0); r == 0 {
 		o.st.wakeFailed()
 	}
 }
@@ -500,20 +544,24 @@ func (o *Overlay) apply(hwnd uintptr) {
 	if ops.Empty() {
 		return
 	}
+	o.stats.applies.Add(1)
 	if ops.Hide {
 		procShowWindow.Call(hwnd, swHide)
 		return
 	}
 	if ops.SetRegion {
+		o.stats.regions.Add(1)
 		applyRegion(hwnd, ops.Region)
 	}
 	if ops.Move {
+		o.stats.moves.Add(1)
 		procSetWindowPos.Call(hwnd, 0,
 			uintptr(int32(ops.Rect.X)), uintptr(int32(ops.Rect.Y)),
 			uintptr(int32(ops.Rect.W)), uintptr(int32(ops.Rect.H)),
 			swpNoActivate|swpNoZOrder|swpShowWindow)
 	}
 	if ops.Invalidate {
+		o.stats.invalidates.Add(1)
 		procInvalidateRect.Call(hwnd, 0, 0)
 	}
 }
@@ -624,11 +672,17 @@ func (o *Overlay) Close() {
 	}
 	o.mu.Lock()
 	hwnd := o.hwnd
+	tid := o.threadID
 	o.hwnd = 0
+	o.threadID = 0
 	o.mu.Unlock()
-	if hwnd == 0 {
+	if hwnd == 0 && tid == 0 {
 		return
 	}
 	// Destroying a window has to happen on the thread that made it.
+	if tid != 0 {
+		procPostThreadMessageW.Call(uintptr(tid), wmOverlayQuit, 0, 0)
+		return
+	}
 	procPostMessageW.Call(hwnd, wmOverlayQuit, 0, 0)
 }

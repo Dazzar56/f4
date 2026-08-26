@@ -216,7 +216,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 
 		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
 		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
-			go vtui.SetClipboard(path)
+			setClipboardAsync(path)
 			return true
 		}
 		return false
@@ -384,7 +384,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 
 		// Ctrl+C / Ctrl+Ins: copy the selected entry to the clipboard.
 		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
-			go vtui.SetClipboard(rec.Name)
+			setClipboardAsync(rec.Name)
 			return true
 		}
 		return false
@@ -836,6 +836,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		editor = NewEditorView(pt, v, path)
 	}
 	editor.Codepage = cpID
+	editor.binaryFile = binary
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
 		editor.HexMode = true
@@ -1269,6 +1270,7 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	editor.asyncBuf = buf
 	editor.mapped = mapped
 	editor.Codepage = cpID
+	editor.binaryFile = vv.HexMode
 	editor.WordWrap = vv.WrapMode
 	editor.HexMode = vv.HexMode
 	editor.DecodeMode = vv.DecodeMode
@@ -1774,6 +1776,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 						pf.termView.SetMuted(true)
 					}
 					pf.writePTY(activePty, []byte(cmdToWire))
+					if isWindowsShell {
+						pf.noteLocalShellLineSent(activePty)
+					}
 					pf.showPanels = false
 				}
 			})
@@ -2334,6 +2339,31 @@ func actionEditorSettings(pf *PanelsFrame) {
 		height += len(checkCaptions) - checkRows
 		checkRows = len(checkCaptions)
 	}
+
+	// The external editor row is a checkbox, a label and an input field on
+	// one line. How much of it the two captions take depends on the
+	// language, so the field is sized from what they leave rather than from
+	// a constant that happens to fit in English: a translation whose
+	// captions are wider (Bengali, for one) pushed the field onto the
+	// dialog frame. When even a usable field does not fit, the row is
+	// stacked over three lines instead, and the dialog grows to match.
+	captionWidth := func(key string) int {
+		clean, _, _ := vtui.ParseAmpersandString(Msg(key))
+		return vtui.StringWidth(clean)
+	}
+	const minExternalCommandWidth = 20
+	extCheckWidth := 4 + captionWidth("EditorSettings.UseExternalEditor")
+	extLabelWidth := captionWidth("EditorSettings.ExternalCommand")
+	// The row spends, left to right: the checkbox, its right margin, the
+	// layout's spacing, the label's left margin, the label, its right
+	// margin, the spacing again; whatever is left over is the field.
+	const extRowSpacing = 1
+	extCmdWidth := (width - 4) - extCheckWidth - 1 - extRowSpacing - 2 - extLabelWidth - 1 - extRowSpacing
+	stackExternalRow := extCmdWidth < minExternalCommandWidth
+	if stackExternalRow {
+		extCmdWidth = width - 4
+		height += 2
+	}
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
 
@@ -2427,7 +2457,7 @@ func actionEditorSettings(pf *PanelsFrame) {
 		chkExtEdit.State = 1
 	}
 
-	editExtCmd := vtui.NewEdit(0, 0, 20, AppConfig.ExternalEditorCommand)
+	editExtCmd := vtui.NewEdit(0, 0, extCmdWidth, AppConfig.ExternalEditorCommand)
 	editExtCmd.PathHintsEnabled = true
 	attachHistory(editExtCmd, externalEditorHistoryID)
 	lblExtCmd := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommand"), editExtCmd)
@@ -2512,11 +2542,17 @@ func actionEditorSettings(pf *PanelsFrame) {
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
-	rowExt := vtui.NewHBoxLayout(0, 0, width-4, 1)
-	rowExt.Add(chkExtEdit, vtui.Margins{Right: 1}, vtui.AlignLeft)
-	rowExt.Add(lblExtCmd, vtui.Margins{Right: 1, Left: 2}, vtui.AlignLeft)
-	rowExt.Add(editExtCmd, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowExt, vtui.Margins{Top: 1}, vtui.AlignFill)
+	if stackExternalRow {
+		vbox.Add(chkExtEdit, vtui.Margins{Top: 1}, vtui.AlignLeft)
+		vbox.Add(lblExtCmd, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(editExtCmd, vtui.Margins{}, vtui.AlignFill)
+	} else {
+		rowExt := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		rowExt.Add(chkExtEdit, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		rowExt.Add(lblExtCmd, vtui.Margins{Right: 1, Left: 2}, vtui.AlignLeft)
+		rowExt.Add(editExtCmd, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(rowExt, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
 
 	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter

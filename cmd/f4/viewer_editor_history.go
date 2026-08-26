@@ -267,7 +267,7 @@ func actionViewerEditorHistory(pf *PanelsFrame) {
 			return true
 		}
 		if (e.VirtualKeyCode == vtinput.VK_C || e.VirtualKeyCode == vtinput.VK_INSERT) && ctrl && !alt && !shift {
-			go vtui.SetClipboard(entries[idx].Path)
+			setClipboardAsync(entries[idx].Path)
 			return true
 		}
 		return false

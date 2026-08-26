@@ -65,6 +65,7 @@ type EditorView struct {
 
 	WordWrap           bool
 	wordWrapSuppressed bool // Unsafe binary/long-line content forbids re-enabling wrapping.
+	binaryFile         bool // Binary files stay editable as text, but syntax parsers must not scan them.
 	HexMode            bool
 	DecodeMode         bool
 	HexTopOffset       int
@@ -174,6 +175,11 @@ type EditorView struct {
 	// one of the two is ever set.
 	targetOffset int
 	Codepage     int
+	// codepageRaw is the byte stream that codepage switching reinterprets.
+	// The piece table stores decoded UTF-8 text, so encoding that text through
+	// every intermediate codepage makes a cycle lossy (especially UTF-8 ->
+	// ANSI -> OEM -> UTF-8). Keep one source snapshot until the buffer changes.
+	codepageRaw []byte
 	// DisplayTitle overrides the temporary filename in frame and top-bar
 	// titles. It is used by internal editor round-trip workflows.
 	DisplayTitle string
@@ -185,16 +191,16 @@ type EditorView struct {
 	CursorVirtualSpaces int
 	UseEditorConfig     bool
 
-	// bidiCache avoids rescanning an unchanged long line on every cursor key.
-	// zoin-bot keys it by editSession and logical line, so edits and undo/redo
-	// invalidate the result without making the common LTR path line-sized.
-	bidiCacheSession int
-	bidiCacheLine    int
-	bidiCacheValue   bool
-	bidiCacheValid   bool
-
 	highlighting    bool
 	highlightCancel context.CancelFunc
+
+	// Colorer parses outside the UI goroutine. These fields are UI-owned and
+	// make an in-flight parse visible/cancellable without blocking rendering.
+	colorerIndexing bool
+	colorerProgress int
+	colorerTotal    int
+	colorerCancel   func()
+	colorerWorkID   uint64
 
 	// OnClose, if set, fires once after the editor has been torn down.
 	// Used by callers (e.g. the user menu's Ctrl+F4 handler) that want
@@ -363,6 +369,18 @@ func NewEditorViewIndexedLater(pt *piecetable.PieceTable, v vfs.VFS, path string
 	return newEditorView(pt, v, path, true, false)
 }
 
+// editorBufferHasNUL is the cheap constructor-time binary hint. The opener's
+// 16 KiB probe remains authoritative for files loaded from disk; this probe
+// also covers editors constructed directly in tests or by plugins.
+func editorBufferHasNUL(pt *piecetable.PieceTable) bool {
+	if pt == nil || pt.Size() == 0 {
+		return false
+	}
+	take := min(16*1024, pt.Size())
+	data, err := pt.GetRange(0, take)
+	return err == nil && bytes.IndexByte(data, 0) >= 0
+}
+
 func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorConfig, buildIndex bool) *EditorView {
 	li := piecetable.NewLineIndex()
 	if buildIndex {
@@ -388,6 +406,7 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		CursorBeyondEOL: AppConfig.EditorCursorBeyondEOL,
 		UseEditorConfig: useEditorConfig && AppConfig.EditorUseEditorConfig,
 		Codepage:        65001,
+		binaryFile:      editorBufferHasNUL(pt),
 	}
 	if ev.TabSize <= 0 {
 		ev.TabSize = 8
@@ -414,6 +433,10 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 	switch {
 	case strings.EqualFold(AppConfig.EditorHighlighter, "None"):
 		ev.highlighter = nil
+	case strings.EqualFold(AppConfig.EditorHighlighter, "Colorer") && ev.binaryFile:
+		// A binary remains editable in text mode, but feeding its bytes to a
+		// syntax parser can turn one long line into an unbounded CPU task.
+		ev.highlighter = nil
 	case strings.EqualFold(AppConfig.EditorHighlighter, "Colorer") && SchemasExist():
 		firstLine := ""
 		if probeLen := pt.Size(); probeLen > 0 {
@@ -429,6 +452,9 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 		ev.highlighter = newColorerHighlighter(ev, filepath.Base(path), firstLine, vtui.GetHighlighter(path, ""))
 	default:
 		ev.highlighter = vtui.GetHighlighter(path, "")
+	}
+	if ch, ok := ev.highlighter.(*ColorerHighlighter); ok {
+		ch.beginColorerStartup()
 	}
 	vtui.DebugLog("EDITOR_INIT: Path=%q, Highlighter=%T", path, ev.highlighter)
 	ev.scrollBar = vtui.NewScrollBar(0, 0, 0)
@@ -479,8 +505,19 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 			// While a scan is running the line number on the right is the one
 			// the index knows about, and the file may well have more. Say so
 			// rather than let it read as the whole truth.
+			if ev.colorerIndexing {
+				percent := 0
+				if ev.colorerTotal > 0 {
+					percent = ev.colorerProgress * 100 / ev.colorerTotal
+					if percent > 100 {
+						percent = 100
+					}
+				}
+				return fmt.Sprintf(" %s │ Colorer %d%% (Esc) │ %d,%d     ",
+					vfs.DisplayCodepageName(ev.Codepage), percent, ev.CursorLine+1, ev.CursorPos)
+			}
 			if st := ev.IndexState(); st.Phase == IndexScanning {
-				return fmt.Sprintf(" %s │ %s %d%% │ %d,%d     ",
+				return fmt.Sprintf(" %s │ %s %d%% (Esc) │ %d,%d     ",
 					vfs.DisplayCodepageName(ev.Codepage), Msg("Editor.Indexing"),
 					st.Percent(), ev.CursorLine+1, ev.CursorPos)
 			}
@@ -516,6 +553,7 @@ func (ev *EditorView) SetText(text string) {
 	ev.cancelIndexing()
 	ev.edited = true
 	ev.retireEditSession()
+	ev.codepageRaw = nil
 
 	ev.pt = piecetable.New([]byte(text))
 	ev.noteIndexRebuilt(ev.li.Rebuild(ev.pt))
@@ -575,6 +613,7 @@ func (ev *EditorView) Undo() {
 	}
 
 	ev.edited = true
+	ev.codepageRaw = nil
 	ev.cancelIndexing()
 	ev.retireEditSession()
 
@@ -610,6 +649,7 @@ func (ev *EditorView) Redo() {
 	}
 
 	ev.edited = true
+	ev.codepageRaw = nil
 	ev.cancelIndexing()
 	ev.retireEditSession()
 
@@ -1383,7 +1423,40 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	// Calculate crosshair parameters before usage
+	// Clear the entire editor text area
+	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
+
+	// Hex/decode views are byte-addressed and do not need the text layout. In
+	// particular, an unindexed binary file looks like one very long text line
+	// to WrapEngine; asking it for the caret position here would read a large
+	// chunk before the hex view gets a chance to render.
+	if ev.HexMode {
+		ev.renderHex(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			maxOffset := int(ev.pt.Size())
+			contentHeight := ev.Y2 - ev.Y1
+			if contentHeight > 0 {
+				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
+				maxOffset = lastLineOffset - (contentHeight-1)*16
+				if maxOffset < 0 {
+					maxOffset = 0
+				}
+			}
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
+			ev.scrollBar.Show(scr)
+		}
+		return
+	}
+	if ev.DecodeMode {
+		ev.renderDecode(scr, width, height-1)
+		if ev.scrollBar != nil && ev.pt.Size() > 0 {
+			ev.scrollBar.SetParams(ev.HexTopOffset, 0, ev.pt.Size())
+			ev.scrollBar.Show(scr)
+		}
+		return
+	}
+
+	// Text mode alone needs the text layout and crosshair coordinates.
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
 
@@ -1400,9 +1473,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		}
 	}
 
-	// Clear the entire editor text area
-	scr.FillRect(ev.X1, ev.Y1+1, ev.X2, ev.Y2, ' ', bgAttr)
-
 	// Horizontal line
 	if crossVRow != -1 {
 		cy := ev.Y1 + 1 + crossVRow - ev.ScrollTopRow
@@ -1417,67 +1487,6 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		if cx >= ev.X1 && cx < ev.X1+width {
 			scr.FillRect(cx, ev.Y1+1, cx, ev.Y2, ' ', vertCrossAttr)
 		}
-	}
-
-	if ev.HexMode {
-		ev.renderHex(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			maxOffset := int(ev.pt.Size())
-			contentHeight := ev.Y2 - ev.Y1
-			if contentHeight > 0 {
-				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
-				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-			}
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
-			ev.scrollBar.Show(scr)
-		}
-		return
-	}
-
-	if ev.HexMode {
-		ev.renderHex(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			maxOffset := int(ev.pt.Size())
-			contentHeight := ev.Y2 - ev.Y1
-			if contentHeight > 0 {
-				lastLineOffset := int((ev.pt.Size() - 1) &^ 0xF)
-				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-			}
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
-			ev.scrollBar.Show(scr)
-		}
-		return
-	}
-
-	if ev.DecodeMode {
-		ev.renderDecode(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, ev.pt.Size())
-			ev.scrollBar.Show(scr)
-		}
-		return
-	} else if ev.HexMode {
-		ev.renderHex(scr, width, height-1)
-		if ev.scrollBar != nil && ev.pt.Size() > 0 {
-			maxOffset := ev.pt.Size()
-			contentHeight := ev.Y2 - ev.Y1
-			if contentHeight > 0 {
-				lastLineOffset := (ev.pt.Size() - 1) &^ 0xF
-				maxOffset = lastLineOffset - (contentHeight-1)*16
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-			}
-			ev.scrollBar.SetParams(ev.HexTopOffset, 0, maxOffset)
-			ev.scrollBar.Show(scr)
-		}
-		return
 	}
 
 	scr.PushClipRect(ev.X1, ev.Y1+1, ev.X1+width-1, ev.Y2)
@@ -1498,73 +1507,75 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 		// Stateful Highlighting
 		var lineSyntax []uint64
-		if ch, isColorer := ev.highlighter.(*ColorerHighlighter); isColorer {
-			// Colorer is addressed by line number: its parser state cannot
-			// be carried in ev.lineStates, so it keeps its own anchor near
-			// the viewport instead. See HIGHLIGHT.md, phase 5.
-			if text, ok := ev.lineTextForHighlight(logIdx); ok {
-				lineSyntax = ch.HighlightLine(logIdx, text, bgAttr)
-			}
-		} else if ev.highlighter != nil {
-			// Catch up synchronously only if the uncomputed gap is small (<= 50 lines).
-			// For large jumps, render unhighlighted immediately and compute in background.
-			const syncHighlightGapLimit = 50
-			if logIdx >= len(ev.lineStates)+syncHighlightGapLimit {
-				ev.startHighlighting()
-
-				// Allow stateless highlighters (like Chroma) to provide instant colors
-				if _, isColorer := ev.highlighter.(*ColorerHighlighter); !isColorer {
-					lStart := ev.li.GetLineOffset(logIdx)
-					highlightLen := lineLen
-					if highlightLen > 64*1024 {
-						highlightLen = 64 * 1024
-					}
-					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
-					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
+		if !ev.binaryFile {
+			if ch, isColorer := ev.highlighter.(*ColorerHighlighter); isColorer {
+				// Colorer is addressed by line number: its parser state cannot
+				// be carried in ev.lineStates, so it keeps its own anchor near
+				// the viewport instead. See HIGHLIGHT.md, phase 5.
+				if text, ok := ev.lineTextForHighlight(logIdx); ok {
+					lineSyntax = ch.HighlightLine(logIdx, text, bgAttr)
 				}
-			} else {
-				for len(ev.lineStates) <= logIdx {
-					currIdx := len(ev.lineStates)
-					lStart := ev.li.GetLineOffset(currIdx)
-					lEnd := ev.pt.Size()
-					if currIdx+1 < ev.li.LineCount() {
-						lEnd = ev.li.GetLineOffset(currIdx + 1)
-					}
-					// Prevent highlighter from crashing on huge binary lines
-					if lEnd-lStart > 64*1024 {
-						lEnd = lStart + 64*1024
-					}
+			} else if ev.highlighter != nil {
+				// Catch up synchronously only if the uncomputed gap is small (<= 50 lines).
+				// For large jumps, render unhighlighted immediately and compute in background.
+				const syncHighlightGapLimit = 50
+				if logIdx >= len(ev.lineStates)+syncHighlightGapLimit {
+					ev.startHighlighting()
 
-					var prevState any
-					if currIdx > 0 {
-						prevState = ev.lineStates[currIdx-1]
+					// Allow stateless highlighters (like Chroma) to provide instant colors
+					if _, isColorer := ev.highlighter.(*ColorerHighlighter); !isColorer {
+						lStart := ev.li.GetLineOffset(logIdx)
+						highlightLen := lineLen
+						if highlightLen > 64*1024 {
+							highlightLen = 64 * 1024
+						}
+						lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+						lineSyntax, _ = ev.highlighter.Highlight(string(lineData), nil, bgAttr)
 					}
+				} else {
+					for len(ev.lineStates) <= logIdx {
+						currIdx := len(ev.lineStates)
+						lStart := ev.li.GetLineOffset(currIdx)
+						lEnd := ev.pt.Size()
+						if currIdx+1 < ev.li.LineCount() {
+							lEnd = ev.li.GetLineOffset(currIdx + 1)
+						}
+						// Prevent highlighter from crashing on huge binary lines
+						if lEnd-lStart > 64*1024 {
+							lEnd = lStart + 64*1024
+						}
 
-					lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
-					if err == piecetable.ErrLoading {
-						break // Wait for data
-					}
+						var prevState any
+						if currIdx > 0 {
+							prevState = ev.lineStates[currIdx-1]
+						}
 
-					attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
-					ev.lineStates = append(ev.lineStates, nextState)
-					if currIdx == logIdx {
-						lineSyntax = attrs
+						lineData, err := ev.pt.GetRange(lStart, lEnd-lStart)
+						if err == piecetable.ErrLoading {
+							break // Wait for data
+						}
+
+						attrs, nextState := ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
+						ev.lineStates = append(ev.lineStates, nextState)
+						if currIdx == logIdx {
+							lineSyntax = attrs
+						}
 					}
-				}
-				if logIdx < len(ev.lineStates) && lineSyntax == nil {
-					// State was already cached, but we need the actual attributes for the current visible line
-					lStart := ev.li.GetLineOffset(logIdx)
-					// Re-apply highlighter OOM protection for the rendering path
-					highlightLen := lineLen
-					if highlightLen > 64*1024 {
-						highlightLen = 64 * 1024
+					if logIdx < len(ev.lineStates) && lineSyntax == nil {
+						// State was already cached, but we need the actual attributes for the current visible line
+						lStart := ev.li.GetLineOffset(logIdx)
+						// Re-apply highlighter OOM protection for the rendering path
+						highlightLen := lineLen
+						if highlightLen > 64*1024 {
+							highlightLen = 64 * 1024
+						}
+						lineData, _ := ev.pt.GetRange(lStart, highlightLen)
+						var prevState any
+						if logIdx > 0 {
+							prevState = ev.lineStates[logIdx-1]
+						}
+						lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 					}
-					lineData, _ := ev.pt.GetRange(lStart, highlightLen)
-					var prevState any
-					if logIdx > 0 {
-						prevState = ev.lineStates[logIdx-1]
-					}
-					lineSyntax, _ = ev.highlighter.Highlight(string(lineData), prevState, bgAttr)
 				}
 			}
 		}
@@ -1707,10 +1718,15 @@ DoneRendering:
 // VetoActionKey reports modal input states in which the editor must see
 // the key before the global hotkey dispatcher. While autocomplete is
 // active, the keys it consumes (Tab/Esc) or uses to dismiss itself
-// (navigation, Enter) belong to the editor's own ProcessKey.
+// (navigation, Enter) belong to the editor's own ProcessKey. Escape also
+// belongs here while indexing so it can cancel the scan rather than reach a
+// frame-level action.
 func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
+	}
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && (ev.colorerIndexing || ev.indexing) {
+		return true
 	}
 	if !ev.acEnabled || len(ev.acMatches) == 0 {
 		return false
@@ -1881,6 +1897,18 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			e.VirtualKeyCode == vtinput.VK_RETURN {
 			ev.acMatches = nil
 		}
+	}
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.colorerIndexing {
+		ev.cancelColorer()
+		vtui.FrameManager.Redraw()
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE && ev.indexing {
+		ev.targetOffset = -1
+		ev.targetLine = -1
+		ev.cancelIndexing()
+		vtui.FrameManager.Redraw()
+		return true
 	}
 
 	// Allow FrameManager to handle Ctrl+Tab for workspace switching
@@ -2120,14 +2148,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				ev.CursorLine--
 				ev.CursorPos = ev.getLineLength(ev.CursorLine)
 			}
-		} else if ev.lineUsesVisualBidi() {
-			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-			newOffset := ev.engine.MoveVisual(currentOffset, -1)
-			if newOffset != currentOffset {
-				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-			}
 		} else {
+			// Left and Right move through the text in logical order, one
+			// cluster at a time, whatever direction the cluster is drawn in.
+			// Inside a right to left word the caret therefore walks
+			// leftwards on screen and turns back at the word's edges, as it
+			// does in Notepad (unxed/f4#546); the visual column comes from
+			// the caret map of textlayout.
 			if ev.CursorPos > 0 {
 				lineStart := ev.li.GetLineOffset(ev.CursorLine)
 				ev.CursorPos = ev.previousGraphemeBoundaryInLine(lineStart, ev.CursorPos)
@@ -2211,16 +2238,6 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			} else if ev.CursorLine < ev.li.LineCount()-1 {
 				ev.CursorLine++
 				ev.CursorPos = 0
-			}
-		} else if ev.lineUsesVisualBidi() {
-			currentOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-			newOffset := ev.engine.MoveVisual(currentOffset, 1)
-			if newOffset != currentOffset {
-				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
-				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
-				ev.CursorVirtualSpaces = 0
-			} else if ev.CursorBeyondEOL {
-				ev.CursorVirtualSpaces++
 			}
 		} else {
 			if ev.CursorPos < lineLen {
@@ -2734,6 +2751,31 @@ func (ev *EditorView) awaitOffset(offset int) bool {
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 	if !ev.indexing && !ev.indexIsComplete() {
+		ev.StartIndexing()
+	}
+	return true
+}
+
+// awaitOffsetAsync moves to an offset without doing the initial index read on
+// the UI goroutine. This is used for mode changes where indexing a large file
+// can otherwise make the editor appear to hang.
+func (ev *EditorView) awaitOffsetAsync(offset int) bool {
+	if offset < 0 {
+		return false
+	}
+	if ev.indexIsComplete() || ev.li.GetLineOffset(ev.li.LineCount()-1) > offset {
+		ev.targetOffset = -1
+		line := ev.li.GetLineAtOffset(offset)
+		ev.CursorLine = line
+		ev.CursorPos = offset - ev.li.GetLineOffset(line)
+		ev.updateDesiredVisualCol()
+		return false
+	}
+	ev.targetOffset = offset
+	ev.targetLine = -1
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	if !ev.indexing {
 		ev.StartIndexing()
 	}
 	return true
@@ -3921,6 +3963,7 @@ func (ev *EditorView) Replace(pattern, replacement string, caseSensitive, revers
 // line indexer is canceled and every editSession fence held by an in-flight
 // task goes stale.
 func (ev *EditorView) noteBufferEdit() {
+	ev.codepageRaw = nil
 	// A position waiting on the scan describes the text as it was; typing has
 	// since moved it, and the cursor is where the user put it.
 	ev.targetOffset = -1
@@ -4373,14 +4416,22 @@ func (ev *EditorView) ReloadWithCodepage(cpID int) {
 		return
 	}
 
-	bytes, err := ev.pt.Bytes()
-	if err != nil {
-		return
-	}
+	// The piece table contains decoded text, not the original file bytes.
+	// Build the source stream once and reinterpret that same stream on every
+	// subsequent switch. Re-encoding the result of the previous switch loses
+	// information when the intermediate codepage cannot represent all glyphs.
+	rawData := ev.codepageRaw
+	if rawData == nil {
+		bytes, err := ev.pt.Bytes()
+		if err != nil {
+			return
+		}
 
-	rawData, err := vfs.EncodeBytes(bytes, ev.Codepage)
-	if err != nil {
-		rawData = bytes // Fallback
+		rawData, err = vfs.EncodeBytes(bytes, ev.Codepage)
+		if err != nil {
+			rawData = bytes // Fallback
+		}
+		ev.codepageRaw = append([]byte(nil), rawData...)
 	}
 
 	decoded, err := vfs.DecodeBytes(rawData, cpID)
@@ -4398,6 +4449,10 @@ func (ev *EditorView) ReloadWithCodepage(cpID int) {
 	oldVirtualSpaces := ev.CursorVirtualSpaces
 
 	ev.SetText(string(decoded))
+	// SetText invalidates edit-derived snapshots. Restore the source snapshot
+	// because this wholesale replacement is the codepage view itself, not a
+	// user edit.
+	ev.codepageRaw = rawData
 
 	ev.CursorLine = oldLine
 	if ev.CursorLine >= ev.li.LineCount() {
@@ -4522,6 +4577,7 @@ func (ev *EditorView) showConvertCodepageDialog() {
 		menu.Close()
 		if idx >= 0 && idx < len(menu.Items) {
 			if cpID, ok := menu.Items[idx].UserData.(int); ok {
+				ev.codepageRaw = nil
 				ev.Codepage = cpID
 				ev.modified = true
 				vtui.ShowToast(fmt.Sprintf("Will be saved as: %s", vfs.DisplayCodepageName(cpID)), 2*time.Second)
@@ -5066,6 +5122,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				}
 				ev.mapped = newMapped
 				ev.pt = newPt
+				ev.codepageRaw = nil
 				ev.cleanState = newPt.GetState()
 				ev.engine = newEngine
 				ev.retireEditSession()
@@ -5090,6 +5147,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				ev.unsavedBaseline = false
 				ev.createNewTarget = false
 				ev.cleanState = ev.pt.GetState()
+				ev.codepageRaw = nil
 				ev.edited = false
 				vtui.ShowMessage(" Warning ", fmt.Sprintf("File content was saved, but the file could not be reopened:\n%v", err), []string{"&Ok"})
 			}

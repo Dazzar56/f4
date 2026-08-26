@@ -355,6 +355,9 @@ func TestPanelsFrame_ArkanoidHotkey(t *testing.T) {
 	t.Cleanup(arkFrame.Close)
 }
 func TestPanelsFrame_SelectionByMask(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -3475,6 +3478,9 @@ func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 }
 
 func TestPanelsFrame_CommandRouting_FKeys(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	pf := NewPanelsFrame()
 	defer pf.Close()
 	// Mock exit behavior to check F10
@@ -4685,6 +4691,46 @@ func TestPanelsFrame_MouseForwarding_ToPTY(t *testing.T) {
 	if !strings.Contains(pty.String(), expected) {
 		t.Errorf("PTY did not receive expected mouse sequence. Got: %q, want to contain: %q", pty.String(), expected)
 	}
+
+	// Normal tracking mode (1000), which htop selects, does not request
+	// hover motion from the terminal.
+	move := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          12,
+		MouseY:          11,
+		MouseEventFlags: vtinput.MouseMoved,
+	}
+	beforeMove := pty.String()
+	if pf.ProcessMouse(move) {
+		t.Fatal("Normal mouse tracking must not capture hover motion")
+	}
+	if got := pty.String(); got != beforeMove {
+		t.Errorf("PTY received hover motion in normal tracking mode: got %q, want %q", got, beforeMove)
+	}
+}
+
+func TestPanelsFrame_MouseForwarding_AnyEventTracking(t *testing.T) {
+	pf := setupMockPanelsFrame(t)
+	pty := pf.pty.(*mockPty)
+	defer pf.Close()
+
+	pf.showPanels = false
+	pf.termView.MouseTrackingMode = 1003
+	pf.termView.MouseSGRMode = true
+
+	move := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		MouseX:          12,
+		MouseY:          11,
+		MouseEventFlags: vtinput.MouseMoved,
+	}
+	if !pf.ProcessMouse(move) {
+		t.Fatal("Any-event mouse tracking must capture hover motion")
+	}
+	moveExpected := "\x1b[<35;13;12M"
+	if !strings.Contains(pty.String(), moveExpected) {
+		t.Errorf("PTY did not receive expected mouse move sequence. Got: %q, want to contain: %q", pty.String(), moveExpected)
+	}
 }
 func TestPanelsFrame_NoCtrlOInterception_InAltScreen(t *testing.T) {
 	pf := setupMockPanelsFrame(t)
@@ -5000,12 +5046,16 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 	oldHotkeys := GlobalHotkeysMgr
 	GlobalHotkeysMgr = NewHotkeyManager("")
 	defer func() { GlobalHotkeysMgr = oldHotkeys }()
-	macroFilter := &MacroManager{Macros: make(map[string]map[string][]*vtinput.InputEvent)}
+	oldMacroMgr := MacroMgr
+	MacroMgr = &MacroManager{Macros: make(map[string]map[string][]*vtinput.InputEvent)}
+	defer func() { MacroMgr = oldMacroMgr }()
 	rightCtrl3 := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: '3', ControlKeyState: vtinput.RightCtrlPressed}
-	if macroFilter.Filter(rightCtrl3) {
+	if MacroMgr.Filter(rightCtrl3) {
 		t.Fatal("RightCtrl+3 was consumed by the configurable hotkey filter")
 	}
-	pressKey(pf, rightCtrl3)
+	if !pressKey(pf, rightCtrl3) {
+		t.Fatal("RightCtrl+3 was not handled by bookmarks")
+	}
 	if fsp.viewMode != ViewModeMedium {
 		t.Fatalf("RightCtrl+3 changed panel mode to %v", fsp.viewMode)
 	}

@@ -172,6 +172,16 @@ func acquireColorerSession(configsDir string) (*colorer.Session, error) {
 	return colorer.NewSession(context.Background(), catalogPath, configsDir)
 }
 
+// A pooled Session owns the context it was created with. Colorer parsing gets
+// a private context instead, so Esc can interrupt an in-flight ParseLine.
+func acquireCancelableColorerSession(ctx context.Context, configsDir string) (*colorer.Session, error) {
+	ensureRadiolaSchema(configsDir)
+
+	catalogPath := "/base/catalog.xml"
+	vtui.DebugLog("COLORER: Initializing cancellable session with catalog %q, configs %q", catalogPath, configsDir)
+	return colorer.NewSession(ctx, catalogPath, configsDir)
+}
+
 func releaseColorerSession(session *colorer.Session, configsDir string) {
 	if session == nil {
 		return
@@ -310,18 +320,30 @@ func ColorerSchemeGeneration() uint64 {
 
 const colorerBackgroundRegion = "def:Text"
 
+var colorerBackgroundCache struct {
+	sync.Mutex
+	generation uint64
+	configsDir string
+	ready      bool
+	loading    bool
+	define     *colorer.RegionDefine
+}
+
 // We need a helper to get region definition globally from the active scheme.
 func colorerGetRegionDefine(region string) *colorer.RegionDefine {
 	configsDir := ColorerConfigsDir()
+	schemeMu.Lock()
+	activeScheme := schemeName
+	schemeMu.Unlock()
+	return colorerGetRegionDefineFor(region, configsDir, activeScheme)
+}
+
+func colorerGetRegionDefineFor(region, configsDir, activeScheme string) *colorer.RegionDefine {
 	session, err := acquireColorerSession(configsDir)
 	if err != nil {
 		return nil
 	}
 	defer releaseColorerSession(session, configsDir)
-
-	schemeMu.Lock()
-	activeScheme := schemeName
-	schemeMu.Unlock()
 
 	if activeScheme == "" {
 		activeScheme = "default"
@@ -340,7 +362,41 @@ func ColorerEditorBaseAttr(base uint64) uint64 {
 		return base
 	}
 
-	rd := colorerGetRegionDefine(colorerBackgroundRegion)
+	gen := ColorerSchemeGeneration()
+	configsDir := ColorerConfigsDir()
+	colorerBackgroundCache.Lock()
+	if colorerBackgroundCache.ready && colorerBackgroundCache.generation == gen && colorerBackgroundCache.configsDir == configsDir {
+		rd := colorerBackgroundCache.define
+		colorerBackgroundCache.Unlock()
+		return applyColorerBackground(base, rd)
+	}
+	if !colorerBackgroundCache.loading {
+		colorerBackgroundCache.loading = true
+		frames := vtui.FrameManager
+		requestedGeneration := gen
+		requestedConfigsDir := configsDir
+		schemeMu.Lock()
+		requestedScheme := schemeName
+		schemeMu.Unlock()
+		go func() {
+			rd := colorerGetRegionDefineFor(colorerBackgroundRegion, requestedConfigsDir, requestedScheme)
+			colorerBackgroundCache.Lock()
+			colorerBackgroundCache.define = rd
+			colorerBackgroundCache.generation = requestedGeneration
+			colorerBackgroundCache.configsDir = requestedConfigsDir
+			colorerBackgroundCache.ready = true
+			colorerBackgroundCache.loading = false
+			colorerBackgroundCache.Unlock()
+			if frames != nil {
+				frames.Redraw()
+			}
+		}()
+	}
+	colorerBackgroundCache.Unlock()
+	return base
+}
+
+func applyColorerBackground(base uint64, rd *colorer.RegionDefine) uint64 {
 	if rd == nil {
 		return base
 	}
@@ -358,12 +414,16 @@ func ColorerEditorBaseAttr(base uint64) uint64 {
 func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback vtui.Highlighter) *ColorerHighlighter {
 	SetColorerScheme(AppConfig.EditorColorerScheme)
 
+	sessionCtx, sessionCancel := context.WithCancel(context.Background())
 	ch := &ColorerHighlighter{
-		fallback:   fallback,
-		filename:   filename,
-		firstLine:  firstLine,
-		starting:   true,
-		configsDir: ColorerConfigsDir(),
+		fallback:      fallback,
+		filename:      filename,
+		firstLine:     firstLine,
+		starting:      true,
+		configsDir:    ColorerConfigsDir(),
+		owner:         ev,
+		sessionCtx:    sessionCtx,
+		sessionCancel: sessionCancel,
 	}
 	if ev != nil {
 		ch.SetLineSource(ev.lineTextForHighlight)
@@ -373,11 +433,15 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 	// work outlives the call, and reading the global from it races
 	// anything that reassigns vtui.FrameManager meanwhile.
 	frames := vtui.FrameManager
+	ch.postTask = frames.PostTask
+	ch.redraw = frames.Redraw
 	go func() {
-		session, err := acquireColorerSession(ch.configsDir)
+		session, err := acquireCancelableColorerSession(sessionCtx, ch.configsDir)
 		if err != nil {
 			vtui.DebugLog("COLORER: Failed to init session: %v", err)
-			ch.useFallback(ev)
+			if !ch.closed {
+				ch.useFallback(ev)
+			}
 			return
 		}
 
@@ -393,18 +457,20 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		selected, sErr := session.SelectType(filename, firstLine)
 		vtui.DebugLog("COLORER: SelectType(%q, len=%d) -> selected=%v, err=%v", filename, len(firstLine), selected, sErr)
 		if sErr != nil || !selected {
-			releaseColorerSession(session, ch.configsDir)
-			ch.useFallback(ev)
+			session.Close()
+			if !ch.closed {
+				ch.useFallback(ev)
+			}
 			return
 		}
 
 		frames.PostTask(func() {
-			if ch.closed {
-				releaseColorerSession(session, ch.configsDir)
+			if ch.closed || ch.disabled {
+				session.Close()
 				return
 			}
 			if ev != nil && ev.highlighter != vtui.Highlighter(ch) {
-				releaseColorerSession(session, ch.configsDir)
+				session.Close()
 				return
 			}
 			if closer, ok := ch.fallback.(io.Closer); ok {
@@ -415,7 +481,9 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 			ch.starting = false
 			ch.attrCache = nil
 			ch.parsedIdx = 0
+			ch.startWorker(session)
 			if ev != nil {
+				ev.finishColorerWork(ch.startupWorkID)
 				ev.invalidateStates(0)
 			}
 			frames.Redraw()
@@ -427,7 +495,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 
 func (ch *ColorerHighlighter) useFallback(ev *EditorView) {
 	vtui.FrameManager.PostTask(func() {
-		if !ch.starting {
+		if !ch.starting || ch.closed || ch.disabled {
 			return
 		}
 		ch.starting = false
@@ -440,6 +508,7 @@ func (ch *ColorerHighlighter) useFallback(ev *EditorView) {
 				ch.fallback = nil
 				ev.highlighter = fb
 			}
+			ev.finishColorerWork(ch.startupWorkID)
 			ev.invalidateStates(0)
 		}
 		vtui.FrameManager.Redraw()
@@ -451,37 +520,33 @@ type ColorerHighlighter struct {
 	fallback   vtui.Highlighter
 	attrCache  map[int][]uint64
 	bgCache    map[int]uint64
-	baseAttr   uint64
-	baseKnown  bool
-	schemeGen  uint64
 	parsedIdx  int
 	filename   string
 	firstLine  string
 	configsDir string
 	closed     bool
 	starting   bool
+	owner      *EditorView
+	postTask   func(func())
+	redraw     func()
+
+	// The session and its worker share this context. The worker is the only
+	// goroutine allowed to call ParseLine/Reset/SelectType on the live session;
+	// the UI only queues immutable line snapshots and consumes results.
+	sessionCtx     context.Context
+	sessionCancel  context.CancelFunc
+	workerJobs     chan colorerJob
+	workerDone     chan struct{}
+	pending        bool
+	disabled       bool
+	forceReset     bool
+	workGeneration uint64
+	startupWorkID  uint64
 
 	// lineAt hands over the text of any logical line, so re-anchoring can
 	// read the context it needs straight from the document instead of the
 	// highlighter keeping a second copy of the file.
 	lineAt func(idx int) (string, bool)
-	// anchor is the first line the session has seen since the last reset.
-	// Lines below it are not in its cache, and it cannot be walked back to
-	// them: parsedIdx - anchor is the session's own line number, and the
-	// two must never drift apart.
-	anchor int
-
-	// forgottenUpTo is the last line forgetBehind released the session's
-	// hold on. Lines below it may already be gone from the wasm heap; lines
-	// at or above it are still there whether or not forgetBehind has ever
-	// run, which is why it starts at the same value as anchor.
-	forgottenUpTo int
-	// forgetDisabled is set once colorer_forget_before turns out not to be
-	// exported by the embedded wasm (an older colorer4go). Forgetting is
-	// an optimization, not a correctness requirement, so the highlighter
-	// falls back to the old behaviour — a reset stays the only thing that
-	// releases memory — instead of logging the same failure forever.
-	forgetDisabled bool
 }
 
 // SetLineSource gives the highlighter a way to read the document.
@@ -506,32 +571,7 @@ func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uin
 	return nil, nil
 }
 
-// syncScheme picks up a change of colour scheme or of the editor's base
-// attribute. Only the colours are affected, never the parse position.
-func (ch *ColorerHighlighter) syncScheme(baseAttr uint64) {
-	gen := ColorerSchemeGeneration()
-	if ch.baseKnown && ch.baseAttr == baseAttr && ch.schemeGen == gen {
-		return
-	}
-	ch.baseAttr = baseAttr
-	ch.baseKnown = true
-	ch.schemeGen = gen
-	ch.attrCache = nil
-	ch.bgCache = nil
-
-	schemeMu.Lock()
-	activeScheme := schemeName
-	schemeMu.Unlock()
-
-	if activeScheme == "" {
-		activeScheme = "default"
-	}
-	ch.session.SetHRD("rgb", activeScheme)
-}
-
-// attrsFor turns the regions of one parsed line into cell attributes, and
-// reports the background the line carries past its last character.
-func (ch *ColorerHighlighter) attrsFor(line string, regions []colorer.Region, baseAttr uint64) ([]uint64, uint64) {
+func (ch *ColorerHighlighter) attrsForSyntax(line string, regions []colorer.Region, baseAttr uint64, syntax bool) ([]uint64, uint64) {
 	lineRunes := colorerLineRuneCount(line)
 	attrs := make([]uint64, lineRunes)
 	for i := range attrs {
@@ -540,7 +580,7 @@ func (ch *ColorerHighlighter) attrsFor(line string, regions []colorer.Region, ba
 
 	eolBg := baseAttr
 	for _, reg := range regions {
-		if !AppConfig.EditorColorerSyntax {
+		if !syntax {
 			continue
 		}
 
@@ -569,33 +609,20 @@ func (ch *ColorerHighlighter) attrsFor(line string, regions []colorer.Region, ba
 // a Colorer session cannot provide: instead of carrying a state from line to
 // line, the session is parked next to the viewport and fed forward from there.
 func (ch *ColorerHighlighter) HighlightLine(idx int, line string, baseAttr uint64) []uint64 {
-	if ch.session == nil || idx < 0 {
+	if ch.session == nil || idx < 0 || ch.closed || ch.disabled {
 		return nil
 	}
 
-	ch.syncScheme(baseAttr)
 	if attrs, ok := ch.attrCache[idx]; ok {
 		return attrs
 	}
 
-	ch.ensureContext(idx)
-	if ch.parsedIdx != idx {
-		// The context could not be read — the line index is still growing,
-		// or the piece table is still loading. Plain for this frame.
-		return nil
-	}
-
-	regions, err := ch.session.ParseLine(line)
-	ch.parsedIdx = idx + 1
-	if err != nil {
-		vtui.DebugLog("COLORER: ParseLine failed at line %d: %v", idx, err)
-		return nil
-	}
-
-	attrs, eolBg := ch.attrsFor(line, regions, baseAttr)
-	ch.storeAttrs(idx, attrs, eolBg)
-	ch.forgetBehind()
-	return attrs
+	// ParseLine can execute arbitrary Colorer grammar code and is therefore
+	// never allowed to run from DisplayObject's UI render path. queueLine makes
+	// a bounded snapshot of the required context and the worker does all WASM
+	// calls asynchronously.
+	ch.queueLine(idx, line, baseAttr)
+	return nil
 }
 
 // colorerContextPlan decides how the session gets to idx: fed forward from
@@ -631,81 +658,6 @@ func colorerForgetPlan(parsedIdx, forgottenUpTo int) (keepFrom int, do bool) {
 	return keepFrom, true
 }
 
-// forgetBehind releases the session's hold on lines that are behind the parse
-// position by more than hlColorerKeepBehind, batched so a long forward scroll
-// pays for it roughly once every hlColorerForgetEvery lines instead of on
-// every ParseLine call.
-//
-// This is what keeps holding PgDn from filling the wasm heap with the whole
-// file now that a reset is not the only way to release it (colorer4go
-// v0.1.12, colorer_forget_before / HIGHLIGHT.md item 9). Safe for the same
-// reason ForgetBefore documents on its own side: the parser only ever reads
-// forward from ch.parsedIdx, so nothing below hlColorerKeepBehind lines back
-// from there will be asked for again before the next reset.
-func (ch *ColorerHighlighter) forgetBehind() {
-	if ch.session == nil || ch.forgetDisabled {
-		return
-	}
-	keepFrom, do := colorerForgetPlan(ch.parsedIdx, ch.forgottenUpTo)
-	if !do {
-		return
-	}
-	if err := ch.session.ForgetBefore(keepFrom); err != nil {
-		vtui.DebugLog("COLORER: ForgetBefore unsupported, disabling for this session: %v", err)
-		ch.forgetDisabled = true
-		return
-	}
-	ch.forgottenUpTo = keepFrom
-}
-
-func (ch *ColorerHighlighter) ensureContext(idx int) {
-	if ch.session == nil || ch.lineAt == nil || ch.parsedIdx == idx {
-		return
-	}
-	if start, reset := colorerContextPlan(ch.parsedIdx, idx); reset {
-		ch.resetSessionAt(start)
-	}
-	// Falling short here means the document could not be read that far —
-	// the line index is still growing, or the piece table is still loading.
-	// Re-anchoring would hit the same wall, so leave it for the next frame.
-	ch.parseThrough(idx)
-	ch.forgetBehind()
-}
-
-// parseThrough feeds the session every line up to, but not including, idx.
-func (ch *ColorerHighlighter) parseThrough(idx int) {
-	for ch.parsedIdx < idx {
-		line, ok := ch.lineAt(ch.parsedIdx)
-		if !ok {
-			return
-		}
-		if _, err := ch.session.ParseLine(line); err != nil {
-			return
-		}
-		ch.parsedIdx++
-	}
-}
-
-// resetSessionAt empties the session and declares start to be its first line.
-// The reset is what releases the lines and the parse cache the session has
-// accumulated, so it is also how this highlighter stays bounded on a large
-// file.
-func (ch *ColorerHighlighter) resetSessionAt(start int) {
-	ch.session.Reset()
-
-	firstLine := ch.firstLine
-	if ch.lineAt != nil {
-		if line, ok := ch.lineAt(0); ok {
-			firstLine = line
-		}
-	}
-	_, _ = ch.session.SelectType(ch.filename, firstLine)
-
-	ch.anchor = start
-	ch.parsedIdx = start
-	ch.forgottenUpTo = start
-}
-
 // DropFrom forgets everything the highlighter knows from line idx on. An edit
 // invalidates the colours below it, and it invalidates the session itself
 // whenever the session has already parsed past that line: its cache cannot be
@@ -715,9 +667,12 @@ func (ch *ColorerHighlighter) DropFrom(idx int) {
 		idx = 0
 	}
 	ch.dropCacheFrom(idx)
-	if ch.session != nil && ch.parsedIdx > idx {
-		ch.resetSessionAt(0)
-	}
+	// The worker may currently be inside ParseLine. Do not touch its session
+	// from the UI; invalidate that result and let the next frame enqueue a
+	// fresh anchored snapshot.
+	ch.forceReset = true
+	ch.workGeneration++
+	ch.parsedIdx = 0
 }
 
 func (ch *ColorerHighlighter) GetLineBackground(idx int, defaultAttr uint64) uint64 {
@@ -775,15 +730,22 @@ func (ch *ColorerHighlighter) dropCacheFrom(idx int) {
 
 func (ch *ColorerHighlighter) Close() error {
 	ch.closed = true
+	ch.disabled = true
+	if ch.sessionCancel != nil {
+		ch.sessionCancel()
+	}
+	ch.stopWorker()
 	ch.attrCache = nil
 	ch.parsedIdx = 0
 	if closer, ok := ch.fallback.(io.Closer); ok {
 		closer.Close()
 	}
 	ch.fallback = nil
-	if ch.session != nil {
+	// Worker-owned sessions are closed by runWorker. A highlighter created by
+	// tests or a caller without a worker still uses the old pooled lifecycle.
+	if ch.session != nil && ch.workerDone == nil {
 		releaseColorerSession(ch.session, ch.configsDir)
-		ch.session = nil
 	}
+	ch.session = nil
 	return nil
 }

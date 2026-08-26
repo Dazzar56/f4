@@ -240,7 +240,7 @@ type F4Config struct {
 	HistoryShowTimes       [historyTypeCount]int
 	HistoryDirsPrefixLen   int // command-history directory prefix width
 	SlideShowDelay         int
-	ImageX11Overlay        bool
+	ImageOverlay           bool
 	VideoPauseOnFocusLoss  bool
 	ImageX11OffsetX        int
 	ImageX11OffsetY        int
@@ -384,7 +384,7 @@ var AppConfig = F4Config{
 	HistoryShowTimes:         [historyTypeCount]int{historyShowDateTime, historyShowDateTime, historyShowDateTime},
 	HistoryDirsPrefixLen:     24,
 	SlideShowDelay:           defaultSlideShowDelay,
-	ImageX11Overlay:          true,
+	ImageOverlay:             true,
 	TTYXKeys:                 true,
 	TTYXKeyList:              defaultTTYXKeyList,
 	ImageExternalTimeout:     defaultImageExternalTimeout,
@@ -675,7 +675,7 @@ func LoadConfig() {
 	if AppConfig.ImageExternalTimeout <= 0 {
 		AppConfig.ImageExternalTimeout = defaultImageExternalTimeout
 	}
-	AppConfig.ImageX11Overlay = ini.GetString("Images", "X11Overlay", "1") == "1"
+	AppConfig.ImageOverlay = overlayEnabled(ini.GetString)
 	AppConfig.VideoPauseOnFocusLoss = ini.GetString("Video", "PauseOnFocusLoss", "0") == "1"
 	AppConfig.ImageX11OffsetX, AppConfig.ImageX11OffsetY = 0, 0
 	fmt.Sscanf(ini.GetString("Images", "X11OverlayOffsetX", "0"), "%d", &AppConfig.ImageX11OffsetX)

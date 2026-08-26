@@ -146,11 +146,34 @@ func blitInto(dst []byte, dstW, dstH int, src []byte, srcW, srcH, srcStride, atX
 			}
 			s := y*srcStride + x*4
 			d := row + dx*4
-			// RGBA in, BGRA out.
-			dst[d+0] = src[s+2]
-			dst[d+1] = src[s+1]
-			dst[d+2] = src[s+0]
-			dst[d+3] = src[s+3]
+			a := uint32(src[s+3])
+			if a == 0xFF {
+				// RGBA in, BGRA out.
+				dst[d+0] = src[s+2]
+				dst[d+1] = src[s+1]
+				dst[d+2] = src[s+0]
+				dst[d+3] = 0xFF
+				continue
+			}
+			if a == 0 {
+				continue
+			}
+			// Source over destination, straight alpha. A picture that
+			// arrives in pieces -- a stack of transparent sixel layers
+			// from a program in the built-in terminal -- is composed
+			// here, and a copy would let each layer erase the one
+			// under it.
+			dst[d+0] = overByte(dst[d+0], src[s+2], a)
+			dst[d+1] = overByte(dst[d+1], src[s+1], a)
+			dst[d+2] = overByte(dst[d+2], src[s+0], a)
+			dst[d+3] = byte(a + uint32(dst[d+3])*(255-a)/255)
 		}
 	}
+}
+
+// overByte is one channel of source-over with straight (non-premultiplied)
+// alpha, rounded rather than truncated so a stack of layers does not drift
+// darker with every one of them.
+func overByte(dst, src byte, a uint32) byte {
+	return byte((uint32(src)*a + uint32(dst)*(255-a) + 127) / 255)
 }

@@ -585,18 +585,19 @@ func TestEditorFindAll_NarrowTerminalKeepsText(t *testing.T) {
 
 // --- the list is a window onto the spans, not a copy of them ---
 
-func TestCountMatchLines(t *testing.T) {
+func TestFirstMatchPerLine(t *testing.T) {
 	cases := []struct {
 		name    string
 		data    string
 		pattern string
-		want    int
+		want    []int // offsets of the kept occurrences
 	}{
-		{"one per line", "aa\naa\naa\n", "aa", 3},
-		{"several per line", "aa aa aa\nbb\naa aa\n", "aa", 2},
-		{"all on one line", "aa aa aa aa", "aa", 1},
-		{"single match", "xx\nyy aa\n", "aa", 1},
-		{"match ends a line", "aa\nbb aa\naa cc\n", "aa", 3},
+		{"one per line", "aa\naa\naa\n", "aa", []int{0, 3, 6}},
+		{"several per line", "aa aa aa\nbb\naa aa\n", "aa", []int{0, 12}},
+		{"all on one line", "aa aa aa aa", "aa", []int{0}},
+		{"single match", "xx\nyy aa\n", "aa", []int{6}},
+		{"match ends a line", "aa\nbb aa\naa cc\n", "aa", []int{0, 6, 9}},
+		{"nothing", "xx", "aa", nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -604,10 +605,35 @@ func TestCountMatchLines(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := countMatchLines(context.Background(), []byte(c.data), spans); got != c.want {
-				t.Errorf("countMatchLines = %d, want %d (%d occurrences)", got, c.want, len(spans))
+			got := firstMatchPerLine(context.Background(), []byte(c.data), spans)
+			if len(got) != len(c.want) {
+				t.Fatalf("firstMatchPerLine = %v, want offsets %v", got, c.want)
+			}
+			for i, s := range got {
+				if s.Off != c.want[i] {
+					t.Errorf("kept %d = %+v, want offset %d", i, s, c.want[i])
+				}
 			}
 		})
+	}
+}
+
+// TestEditorFindAll_OneItemPerLine: a line that matches three times is listed
+// once, at its first occurrence; the title still counts every occurrence.
+func TestEditorFindAll_OneItemPerLine(t *testing.T) {
+	for _, regex := range []bool{false, true} {
+		ev := newFindAllEditor(t, "unit unit unit\nnone\nunit unit")
+		frame := openFindAllMenu(t, ev, "unit", false, regex, false)
+		if got := frame.GetItemCount(); got != 2 {
+			t.Fatalf("regex=%v: expected 2 items, got %d", regex, got)
+		}
+		if !strings.Contains(frame.GetTitle(), "5") || !strings.Contains(frame.GetTitle(), "2") {
+			t.Errorf("regex=%v: title should read 5 occurrences on 2 lines, got %q", regex, frame.GetTitle())
+		}
+		if got := paintFindAll(t, frame); got[0] != "1│1│ unit unit unit" || got[1] != "3│1│ unit unit" {
+			t.Errorf("regex=%v: unexpected painted rows %q", regex, got[:2])
+		}
+		frame.Close()
 	}
 }
 
@@ -627,7 +653,7 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	}
 
 	start := time.Now()
-	ev.showFindAllMenu("aaa", spans, countMatchLines(context.Background(), data, spans))
+	ev.showFindAllMenu("aaa", spans, len(spans))
 	elapsed := time.Since(start)
 
 	frame, ok := vtui.FrameManager.GetTopFrame().(*findAllFrame)
@@ -662,20 +688,6 @@ func TestEditorFindAll_LargeListOpensWithoutMaterializing(t *testing.T) {
 	last := rows[len(rows)-1]
 	if want := "500000│1│ aaa bbbbb"; last != want {
 		t.Errorf("last row = %q, want %q", last, want)
-	}
-}
-
-func TestEditorFindAll_ColumnsResolveInAnyOrder(t *testing.T) {
-	// One long line, many matches: columns are counted from wherever the last
-	// resolved row left off, so they have to come out right whichever way the
-	// list is scrolled.
-	ev := newFindAllEditor(t, strings.Repeat("word ", 50))
-	frame := openFindAllMenu(t, ev, "word", false, false, false)
-
-	for _, i := range []int{0, 5, 3, 49, 2, 48, 0} {
-		if got := frame.resolveRow(i).match.Col; got != i*5+1 {
-			t.Errorf("row %d column = %d, want %d", i, got, i*5+1)
-		}
 	}
 }
 
@@ -932,16 +944,17 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantLines := countMatchLines(context.Background(), data, want)
 		if len(want) == 0 {
 			t.Fatal("corpus matches nothing")
 		}
+		wantOccurrences := len(want)
+		want = firstMatchPerLine(context.Background(), data, want)
 
 		for _, window := range []int{7, 64, 1000, 4096, len(data) * 2} {
 			ev := newFindAllEditor(t, content)
 			restore := findAllWindow
 			findAllWindow = window
-			got, gotLines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(),
+			got, gotOccurrences, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(),
 				"needle", caseSensitive, false, false)
 			findAllWindow = restore
 			if err != nil {
@@ -949,7 +962,7 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 			}
 
 			if len(got) != len(want) {
-				t.Fatalf("window %d, caseSensitive=%v: %d occurrences, want %d",
+				t.Fatalf("window %d, caseSensitive=%v: %d lines, want %d",
 					window, caseSensitive, len(got), len(want))
 			}
 			for i := range want {
@@ -958,9 +971,9 @@ func TestCollectMatchSpans_WindowsMatchTheWholeBuffer(t *testing.T) {
 						window, caseSensitive, i, got[i], want[i])
 				}
 			}
-			if gotLines != wantLines {
-				t.Errorf("window %d, caseSensitive=%v: %d matching lines, want %d",
-					window, caseSensitive, gotLines, wantLines)
+			if gotOccurrences != wantOccurrences {
+				t.Errorf("window %d, caseSensitive=%v: %d occurrences, want %d",
+					window, caseSensitive, gotOccurrences, wantOccurrences)
 			}
 		}
 	}
@@ -976,16 +989,16 @@ func TestCollectMatchSpans_NewlineInMatchlessWindow(t *testing.T) {
 	findAllWindow = 64
 	defer func() { findAllWindow = restore }()
 
-	spans, lines, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(),
+	spans, occurrences, err := ev.collectMatchSpans(taskContextForTest(t), ev.editSession, ev.pt, ev.chunkReader(),
 		"X", true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(spans) != 2 {
-		t.Fatalf("found %d occurrences, want 2", len(spans))
+	if occurrences != 2 {
+		t.Fatalf("found %d occurrences, want 2", occurrences)
 	}
-	if lines != 2 {
-		t.Errorf("counted %d matching lines, want 2", lines)
+	if len(spans) != 2 {
+		t.Errorf("listed %d matching lines, want 2", len(spans))
 	}
 }
 

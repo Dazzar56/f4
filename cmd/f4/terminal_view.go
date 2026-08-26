@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -84,6 +85,9 @@ type TerminalView struct {
 
 	OnTitleChange func(string)
 	OnBusyChange  func(bool)
+	// OnShellMark receives every OSC 133 mark (A, B, C, D, E...) together
+	// with the cursor state at that moment. It runs on the PTY goroutine.
+	OnShellMark func(mark string, snap promptSnapshot)
 
 	// --- Mouse-driven text selection over the visible viewport ---
 	// Coordinates are absolute (screen) columns/rows, chosen so the
@@ -193,7 +197,10 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
 	tv.KittyFlags = other.KittyFlags
 	tv.KittyFlagsStack = append([]int(nil), other.KittyFlagsStack...)
-	tv.pty = other.pty
+	// The PTY is an ownership handle, not terminal display state. A cloned
+	// PanelsFrame starts its own shell asynchronously; copying this field would
+	// briefly route input from the clone into the source workspace until that
+	// shell wins the race.
 	tv.images = append([]terminalImage(nil), other.images...)
 
 	vtui.DebugLog("TERM_VIEW: CloneStateFrom completed. Cleaning active row for new shell.")
@@ -1280,6 +1287,22 @@ func (tv *TerminalView) URLAt(x, y int) (string, bool) {
 	return link.URL, true
 }
 
+// terminalReflowEnabled gates re-wrapping the live grid on a width change.
+//
+// It is off on Windows, and the reason is not that reflow cannot be done
+// there. ConPTY runs a reflow of its own and then repaints the whole viewport
+// with absolute coordinates, so a second reflow here would be fighting it and
+// losing. Turning this on for Windows means first creating the pseudoconsole
+// with PSEUDOCONSOLE_RESIZE_QUIRK, which tells ConPTY to leave the buffer
+// alone and trust the terminal to re-wrap it. See docs/TERMINAL_REFLOW.md.
+var terminalReflowEnabled = runtime.GOOS != "windows"
+
+// maxReflowHistoryPull bounds how far back into GridHistory a reflow reaches
+// for the rows that soft-wrap into the top of the viewport. Without a bound a
+// pathological stream of never-broken lines would pull the entire history into
+// one relayout.
+const maxReflowHistoryPull = 256
+
 func (tv *TerminalView) Resize(w, h int) {
 	if tv.Width == w && tv.Height == h {
 		return
@@ -1289,6 +1312,15 @@ func (tv *TerminalView) Resize(w, h int) {
 	defer tv.mu.Unlock()
 
 	tv.engine.SetWidth(w)
+
+	// A width change re-wraps the primary screen. A height-only change does
+	// not: the rows keep their contents, and the existing path below moves
+	// them between the viewport and GridHistory, which is what keeps the
+	// terminal's vertical "accordion" behaviour lossless.
+	if terminalReflowEnabled && !tv.UseAltScreen && w != tv.Width && w > 0 && h > 0 {
+		tv.reflowLocked(w, h)
+		return
+	}
 
 	makeBuf := func() [][]vtui.CharInfo {
 		b := make([][]vtui.CharInfo, h)
@@ -1425,6 +1457,262 @@ func (tv *TerminalView) Resize(w, h int) {
 	}
 	tv.lastCharWasCR = (tv.CursorX == 0)
 }
+
+// logicalLine is a run of cells that the shell wrote as one line, with the
+// soft wraps that split it across rows already removed.
+type logicalLine struct {
+	cells  []vtui.CharInfo
+	cursor int // offset of the cursor within this line, or -1
+}
+
+// significantWidthLocked returns how much of row carries information.
+//
+// A row that soft-wraps into the next one carries all of it: text reached the
+// right edge, so every cell up to that edge was written, trailing spaces
+// included. Those spaces are the column alignment of things like `ls -la`, and
+// trimming them glues the columns of the next row onto the previous one.
+//
+// A row that ended by itself is trimmed of its trailing default-attribute
+// blanks. A blank that changes the background still counts as significant, or
+// shrinking the window would eat coloured fills.
+func significantWidthLocked(row []vtui.CharInfo, wrapped bool) int {
+	if wrapped {
+		return len(row)
+	}
+	w := len(row)
+	for w > 0 {
+		c := row[w-1]
+		if c.Char != ' ' || c.Attributes != DefaultTermAttr {
+			break
+		}
+		w--
+	}
+	return w
+}
+
+// unwrapLocked flattens the primary screen into logical lines, joining rows
+// that a soft wrap split. It reaches back into GridHistory for the rows that
+// wrap into the top of the viewport, so that a line broken across the boundary
+// is re-wrapped as the single line it is.
+//
+// The cursor is carried as an offset inside its logical line rather than as a
+// pair of coordinates. Recomputing (x, y) arithmetically is what makes a live
+// reflow desync from the shell; pinning the cursor to a position in the text
+// survives the relayout, and the shell redraws its prompt on SIGWINCH anyway.
+func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
+	// Rows of the viewport worth carrying: everything up to the last row with
+	// text, and never less than the cursor row.
+	lastRow := 0
+	for y := tv.Height - 1; y >= 0; y-- {
+		if tv.rowHasText(y) {
+			lastRow = y
+			break
+		}
+	}
+	if tv.CursorY > lastRow {
+		lastRow = tv.CursorY
+	}
+
+	type sourceRow struct {
+		cells   []vtui.CharInfo
+		wrapped bool
+		cursorX int // -1 when the cursor is not on this row
+	}
+	var rows []sourceRow
+	for y := 0; y <= lastRow && y < tv.Height; y++ {
+		wrapped := y < len(tv.WrapFlags) && tv.WrapFlags[y]
+		width := significantWidthLocked(tv.Lines[y], wrapped)
+		cursorX := -1
+		if y == tv.CursorY {
+			cursorX = tv.CursorX
+			// The cursor may sit past the text, on the blanks a prompt left
+			// behind. Keep enough of them for its offset to exist.
+			if cursorX > width {
+				width = cursorX
+			}
+		}
+		if width > len(tv.Lines[y]) {
+			width = len(tv.Lines[y])
+		}
+		cells := make([]vtui.CharInfo, width)
+		copy(cells, tv.Lines[y][:width])
+		rows = append(rows, sourceRow{cells: cells, wrapped: wrapped, cursorX: cursorX})
+	}
+
+	// Pull rows back out of GridHistory, for two reasons. A history row that
+	// soft-wraps into what follows is half of a line and has to be re-wrapped
+	// with its other half. And re-wrapping to a wider grid produces fewer rows
+	// than it consumed, so without more material the viewport would come back
+	// part empty with its earlier output stranded in the history.
+	pulled := 0
+	for len(tv.GridHistory) > 0 && pulled < maxReflowHistoryPull {
+		last := len(tv.GridHistory) - 1
+		wrapped := tv.GridHistoryWrap[last]
+		if !wrapped && len(rows) >= h {
+			break
+		}
+		row := tv.GridHistory[last]
+		width := significantWidthLocked(row, wrapped)
+		cells := make([]vtui.CharInfo, width)
+		copy(cells, row[:width])
+		rows = append([]sourceRow{{cells: cells, wrapped: wrapped, cursorX: -1}}, rows...)
+		tv.GridHistory = tv.GridHistory[:last]
+		tv.GridHistoryWrap = tv.GridHistoryWrap[:last]
+		pulled++
+	}
+
+	var lines []logicalLine
+	current := logicalLine{cursor: -1}
+	started := false
+	for _, row := range rows {
+		if row.cursorX >= 0 {
+			current.cursor = len(current.cells) + row.cursorX
+		}
+		current.cells = append(current.cells, row.cells...)
+		started = true
+		if !row.wrapped {
+			lines = append(lines, current)
+			current = logicalLine{cursor: -1}
+			started = false
+		}
+	}
+	if started {
+		lines = append(lines, current)
+	}
+	return lines
+}
+
+// reflowLocked re-wraps the primary screen to width w and height h.
+func (tv *TerminalView) reflowLocked(w, h int) {
+	lines := tv.unwrapLocked(h)
+
+	blank := vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
+	padTo := func(row []vtui.CharInfo, n int) []vtui.CharInfo {
+		for len(row) < n {
+			row = append(row, blank)
+		}
+		return row
+	}
+
+	type outRow struct {
+		cells    []vtui.CharInfo
+		wrapped  bool
+		cursorAt int // column of the cursor on this row, or -1
+	}
+	var out []outRow
+	for _, line := range lines {
+		for start := 0; ; {
+			end := start + w
+			if end >= len(line.cells) {
+				end = len(line.cells)
+			} else if line.cells[end].Char == vtui.WideCharFiller {
+				// Never split a wide character from its filler cell.
+				end--
+			}
+			cells := make([]vtui.CharInfo, end-start)
+			copy(cells, line.cells[start:end])
+			row := outRow{cells: padTo(cells, w), wrapped: end < len(line.cells), cursorAt: -1}
+			if line.cursor >= start && (line.cursor < end || (end == len(line.cells) && line.cursor <= end)) {
+				if col := line.cursor - start; col <= w {
+					row.cursorAt = col
+				}
+			}
+			out = append(out, row)
+			start = end
+			if start >= len(line.cells) {
+				break
+			}
+		}
+	}
+
+	// Rows that no longer fit are the oldest ones; they leave through the
+	// same door as any scrolled-off row.
+	if len(out) > h {
+		for _, row := range out[:len(out)-h] {
+			tv.pushRowLocked(row.cells, row.wrapped)
+		}
+		out = out[len(out)-h:]
+	}
+
+	newLines := make([][]vtui.CharInfo, h)
+	newWrap := make([]bool, h)
+	cursorX, cursorY := 0, 0
+	cursorFound := false
+	for y := 0; y < h; y++ {
+		if y < len(out) {
+			newLines[y] = out[y].cells
+			newWrap[y] = out[y].wrapped
+			if out[y].cursorAt >= 0 && !cursorFound {
+				cursorX, cursorY = out[y].cursorAt, y
+				cursorFound = true
+			}
+		} else {
+			row := make([]vtui.CharInfo, w)
+			for x := range row {
+				row[x] = blank
+			}
+			newLines[y] = row
+		}
+	}
+	if !cursorFound {
+		// The cursor's row was pushed into history: park it on the first row
+		// that still exists.
+		cursorY = 0
+		if len(out) > 0 {
+			cursorY = len(out) - 1
+		}
+	}
+	if cursorX >= w {
+		cursorX = w - 1
+	}
+	if cursorY >= h {
+		cursorY = h - 1
+	}
+
+	newAlt := make([][]vtui.CharInfo, h)
+	for y := 0; y < h; y++ {
+		row := make([]vtui.CharInfo, w)
+		for x := range row {
+			row[x] = blank
+		}
+		if y < tv.Height && y < len(tv.AltLines) {
+			n := w
+			if tv.Width < n {
+				n = tv.Width
+			}
+			copy(row[:n], tv.AltLines[y][:n])
+		}
+		newAlt[y] = row
+	}
+
+	oldHeight := tv.Height
+	tv.Lines = newLines
+	tv.AltLines = newAlt
+	tv.WrapFlags = newWrap
+	tv.Width, tv.Height = w, h
+	tv.ScrollTop, tv.ScrollBottom = 0, h-1
+	tv.CursorX, tv.CursorY = cursorX, cursorY
+	tv.lastCharWasCR = (cursorX == 0)
+
+	tv.kittyResizePlacements(h-oldHeight, h)
+	tv.kittyRecomputeSpans()
+}
+
+// pushRowLocked sends an already-built row to GridHistory, extruding the
+// oldest entry into the PieceTable when the buffer is full. It is
+// pushRowToGridHistory for rows that are not (or are no longer) in tv.Lines.
+func (tv *TerminalView) pushRowLocked(cells []vtui.CharInfo, wrapped bool) {
+	lineCopy := make([]vtui.CharInfo, len(cells))
+	copy(lineCopy, cells)
+	tv.GridHistory = append(tv.GridHistory, lineCopy)
+	tv.GridHistoryWrap = append(tv.GridHistoryWrap, wrapped)
+	if len(tv.GridHistory) > 2000 {
+		tv.extrudeGridHistoryRow(0)
+		tv.GridHistory = tv.GridHistory[1:]
+		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
+	}
+}
+
 func (tv *TerminalView) IsModal() bool         { return false }
 func (tv *TerminalView) RequestFocus() bool    { return true }
 func (tv *TerminalView) Close()                {}
@@ -1528,8 +1816,78 @@ func (tv *TerminalView) HandleKittyAPC(s string) {
 	tv.kittyGraphics().Handle(s)
 }
 
+// promptSnapshot is where the cursor stood, and what the shell had printed
+// before it, at the moment an OSC 133 mark crossed the parser. The prompt
+// text is the run of cells that ends at the cursor, joined across soft-wrapped
+// rows, so that a prompt longer than the window still compares whole.
+type promptSnapshot struct {
+	Row, Col int
+	Text     string
+}
+
+// textBeforeCursorLocked returns the text on the cursor's row up to the
+// cursor, with the previous rows prepended for as long as they soft-wrap
+// into it. Trailing blanks of the row stay out of the answer.
+func (tv *TerminalView) textBeforeCursorLocked() string {
+	buf := tv.getBuffer()
+	y, x := tv.CursorY, tv.CursorX
+	if y < 0 || y >= len(buf) {
+		return ""
+	}
+	if x > len(buf[y]) {
+		x = len(buf[y])
+	}
+	var parts []string
+	parts = append(parts, cellsText(buf[y][:x]))
+	for y > 0 && !tv.UseAltScreen && y-1 < len(tv.WrapFlags) && tv.WrapFlags[y-1] {
+		y--
+		parts = append(parts, cellsText(buf[y]))
+	}
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	return strings.Join(parts, "")
+}
+
+func cellsText(cells []vtui.CharInfo) string {
+	var sb strings.Builder
+	for _, c := range cells {
+		if c.Char == vtui.WideCharFiller {
+			continue
+		}
+		sb.WriteString(vtui.CellString(c.Char))
+	}
+	return sb.String()
+}
+
+// PromptSnapshot captures the cursor and the text in front of it.
+func (tv *TerminalView) PromptSnapshot() promptSnapshot {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return promptSnapshot{Row: tv.CursorY, Col: tv.CursorX, Text: tv.textBeforeCursorLocked()}
+}
+
+// CursorRestsOnPrompt reports whether the cursor still sits right after the
+// prompt text of snap. Position alone is not enough: a repaint can move the
+// prompt to another row, and a batch line echoes the prompt at the same place
+// with the command text after it — so the text ending at the cursor is what
+// is compared.
+func (tv *TerminalView) CursorRestsOnPrompt(snap promptSnapshot) bool {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.UseAltScreen || snap.Text == "" {
+		return false
+	}
+	text := tv.textBeforeCursorLocked()
+	return strings.HasSuffix(text, snap.Text)
+}
+
 func (tv *TerminalView) HandleOSC133(payload string) {
 	vtui.DebugLog("TERM_OSC133: %s", payload)
+	if tv.OnShellMark != nil {
+		mark, _, _ := strings.Cut(payload, ";")
+		tv.OnShellMark(mark, tv.PromptSnapshot())
+	}
 	if payload == "C" {
 		tv.SetMuted(false)
 		if tv.OnBusyChange != nil {

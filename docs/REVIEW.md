@@ -120,11 +120,11 @@ human decision at review time:
       section 7.1 rather than a guess.
       ## `CloneStateFrom` copies the PTY handle along with the screen
 
-      `TerminalView.CloneStateFrom` assigns `other.pty` to the clone, while the
-      clone's own `initPTY` goroutine assigns its freshly created PTY to the same
-      field. Which one wins is a race. A PTY is ownership rather than visual state
-      and has no business in a state clone. Left alone here because it belongs to
-      the terminal umbrella (#425); recorded in `TERMINAL_WINDOWS.md` section 5.
+      `TerminalView.CloneStateFrom` now copies terminal display state while
+      leaving `pty` owned by the destination `PanelsFrame`. The clone's own
+      `initPTY` goroutine therefore cannot race with the source workspace. The
+      regression is covered by `TestTerminalView_CloneStateFromDoesNotSharePTY`;
+      the broader terminal follow-up remains in `TERMINAL_WINDOWS.md` section 5.
 
       ## The sync excision also mangles commands a human typed
 

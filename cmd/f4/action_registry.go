@@ -1068,7 +1068,7 @@ func init() {
 					// SetClipboard can block up to ~4s on far2l IPC or
 					// while shelling out to xclip/wl-copy — do it off the
 					// UI goroutine (matches Grabber's copyAndExit).
-					go vtui.SetClipboard(strings.Join(names, "\n"))
+					setClipboardAsync(strings.Join(names, "\n"))
 				}
 			}
 		}),
@@ -1090,7 +1090,7 @@ func init() {
 					// far2l note: with the cursor on ".." this action
 					// treats it as the name of the current folder.
 					if cursorOnParent(fsp) {
-						go vtui.SetClipboard(base)
+						setClipboardAsync(base)
 					}
 					return
 				}
@@ -1098,7 +1098,7 @@ func init() {
 				for _, n := range names {
 					paths = append(paths, fsp.vfs.Join(base, n))
 				}
-				go vtui.SetClipboard(strings.Join(paths, "\n"))
+				setClipboardAsync(strings.Join(paths, "\n"))
 			}
 		}),
 	})
@@ -1128,7 +1128,7 @@ func init() {
 					// far2l note: with the cursor on ".." this action
 					// treats it as the name of the current folder.
 					if cursorOnParent(fsp) {
-						go vtui.SetClipboard(resolve(base))
+						setClipboardAsync(resolve(base))
 					}
 					return
 				}
@@ -1136,7 +1136,7 @@ func init() {
 				for _, n := range names {
 					paths = append(paths, resolve(fsp.vfs.Join(base, n)))
 				}
-				go vtui.SetClipboard(strings.Join(paths, "\n"))
+				setClipboardAsync(strings.Join(paths, "\n"))
 			}
 		}),
 	})
@@ -2246,12 +2246,10 @@ func init() {
 				// the cursor may be "line 0, column five million". Text mode
 				// needs the real line, counted as far as the cursor before
 				// it is shown; the scan then carries on from there.
-				// awaitOffset places the cursor now when the index can say
-				// where that byte is, and hands the offset to the scan when it
-				// cannot — rather than answering with the last line the index
-				// knows and a column counted from there, which is the very
-				// "column five million" this is here to get rid of.
-				ev.awaitOffset(ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos)
+				// Do not perform the initial index read synchronously here:
+				// switching a large binary to text must leave the editor
+				// responsive while the index is built in the background.
+				ev.awaitOffsetAsync(ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos)
 			}
 			ev.ensureCursorVisible()
 			vtui.FrameManager.Redraw()

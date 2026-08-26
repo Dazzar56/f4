@@ -79,7 +79,7 @@ func InstallX11Overlay() {
 // there is nothing to connect to, when the terminal window could not be
 // identified, or when the option is off.
 func newX11ImageOverlay() *x11ImageOverlay {
-	if !AppConfig.ImageX11Overlay {
+	if !AppConfig.ImageOverlay {
 		return nil
 	}
 	sess := sharedTTYXSession()
@@ -326,8 +326,14 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// blitInto copies one scaled picture into the frame buffer at an offset,
+// blitInto composes one scaled picture into the frame buffer at an offset,
 // clipped to it.
+//
+// Composes rather than copies. A picture can arrive in pieces that overlap:
+// a program in the built-in terminal drawing a stack of transparent sixel
+// layers sends the same rectangle several times, each carrying the pixels the
+// layer before got wrong, and a copy would let every layer erase the one
+// under it and leave the last one alone on the screen.
 func blitInto(dst []byte, dstW, dstH int, src []byte, srcW, srcH, srcStride, atX, atY int) {
 	for y := 0; y < srcH; y++ {
 		dy := atY + y
@@ -341,9 +347,27 @@ func blitInto(dst []byte, dstW, dstH int, src []byte, srcW, srcH, srcStride, atX
 			}
 			s := y*srcStride + x*4
 			d := (dy*dstW + dx) * 4
-			copy(dst[d:d+4], src[s:s+4])
+			a := uint32(src[s+3])
+			if a == 0xFF {
+				copy(dst[d:d+4], src[s:s+4])
+				continue
+			}
+			if a == 0 {
+				continue
+			}
+			dst[d+0] = overByte(dst[d+0], src[s+0], a)
+			dst[d+1] = overByte(dst[d+1], src[s+1], a)
+			dst[d+2] = overByte(dst[d+2], src[s+2], a)
+			dst[d+3] = byte(a + uint32(dst[d+3])*(255-a)/255)
 		}
 	}
+}
+
+// overByte is one channel of source-over with straight (non-premultiplied)
+// alpha, rounded rather than truncated so a stack of layers does not drift
+// darker with every one of them.
+func overByte(dst, src byte, a uint32) byte {
+	return byte((uint32(src)*a + uint32(dst)*(255-a) + 127) / 255)
 }
 
 // overlayFrameKey is what was last drawn: every picture, where it came from

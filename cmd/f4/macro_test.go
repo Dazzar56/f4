@@ -361,15 +361,23 @@ func TestConfiguredHotkeyActionExplicitCtrlOverridesBuiltInRightCtrl(t *testing.
 
 func TestConfigurableHotkeyCanOverrideRightCtrlBookmark(t *testing.T) {
 	hm := NewHotkeyManager("")
+	for _, key := range []uint16{vtinput.VK_1, vtinput.VK_2, vtinput.VK_3, vtinput.VK_4} {
+		e := &vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  key,
+			ControlKeyState: vtinput.RightCtrlPressed,
+		}
+		if configurableHotkeyOwnsPanelBookmark(hm, "Shell", e) {
+			t.Fatalf("built-in Ctrl%c should leave RightCtrl+%c owned by bookmarks", key, key)
+		}
+	}
+
 	rightCtrl3 := &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_3,
 		ControlKeyState: vtinput.RightCtrlPressed,
-	}
-
-	if configurableHotkeyOwnsPanelBookmark(hm, "Shell", rightCtrl3) {
-		t.Fatal("built-in Ctrl3 should leave RightCtrl+3 owned by bookmarks")
 	}
 
 	hm.Bind("Shell", "Ctrl3", "File.Attributes")

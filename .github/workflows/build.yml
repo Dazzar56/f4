@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      shuffle:
+        description: "go test shuffle seed (or on for a random seed)"
+        required: false
+        default: "on"
+        type: string
 
 jobs:
   build:
@@ -92,7 +98,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.x'
+        go-version: '1.26.6'
         cache-dependency-path: go.sum
 
     - name: Check formatting
@@ -367,10 +373,10 @@ jobs:
   # Эта джоба собирает Windows-бинарник тулчейном thongtech/go-legacy-win7,
   # чтобы f4 можно было запускать на Windows 7/8/8.1 (см. issue #514).
   #
-  # Тулчейн go-legacy-win7-1.26.3-1 в остальном полноценен, но в его
+  # Тулчейн go-legacy-win7-1.26.6-1 в остальном полноценен, но в его
   # sync/atomic отсутствуют методы Or/And у типизированных атомиков
   # (добавлены в Go 1.23, см. https://go.dev/issue/61395) — это баг
-  # именно сборки тулчейна, а не самого Go 1.26.3
+  # именно сборки тулчейна, а не самого Go 1.26.6
   # (см. https://github.com/thongtech/go-legacy-win7/issues/13, ещё не
   # исправлено апстримом). Без них не собираются github.com/gogpu/gg и
   # github.com/ncruces/go-sqlite3. Вместо патчинга каждой такой
@@ -399,8 +405,8 @@ jobs:
         set -euo pipefail
         curl -fL --retry 5 --retry-delay 10 --retry-all-errors \
           -o go-legacy-win7.tar.gz \
-          https://github.com/thongtech/go-legacy-win7/releases/download/v1.26.3-1/go-legacy-win7-1.26.3-1.linux_amd64.tar.gz
-        echo "8a1acb588fa3ab7827ce7b1be5795b356be65a500c70af297ad94ab2b3370ea6  go-legacy-win7.tar.gz" | sha256sum -c -
+          https://github.com/thongtech/go-legacy-win7/releases/download/v1.26.6-1/go-legacy-win7-1.26.6-1.linux_amd64.tar.gz
+        echo "a197a93c1ec009f600155d20f4c8cc388560cbc55748f99c1c0dd5b29ef52c05  go-legacy-win7.tar.gz" | sha256sum -c -
         mkdir -p "$HOME/go-legacy-win7"
         tar -xzf go-legacy-win7.tar.gz -C "$HOME/go-legacy-win7"
         echo "GOROOT=$HOME/go-legacy-win7/go-legacy-win7" >> "$GITHUB_ENV"
@@ -411,8 +417,8 @@ jobs:
         cat > "$GOROOT/src/sync/atomic/or_and_win7compat.go" <<'EOF'
         // This file restores the Or/And methods on typed atomics (added
         // upstream in Go 1.23, see https://go.dev/issue/61395) that are
-        // missing from the go-legacy-win7-1.26.3-1 toolchain despite it
-        // being based on Go 1.26.3. See
+        // missing from the go-legacy-win7-1.26.6-1 toolchain despite it
+        // being based on Go 1.26.6. See
         // https://github.com/thongtech/go-legacy-win7/issues/13.
         // Remove this file once that's fixed upstream.
         package atomic
@@ -602,7 +608,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.x'
+        go-version: '1.26.6'
         cache-dependency-path: go.sum
 
     - name: Run go vet
@@ -637,7 +643,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.x'
+        go-version: '1.26.6'
         cache-dependency-path: go.sum
 
     - name: Run go vet
@@ -698,6 +704,7 @@ jobs:
           - { os: windows-11-arm,   target: windows/arm64 }
     env:
       CGO_ENABLED: 0
+      TEST_SHUFFLE: ${{ inputs.shuffle || 'on' }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
@@ -707,7 +714,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.x'
+        go-version: '1.26.6'
         cache-dependency-path: go.sum
 
     - name: Run Tests
@@ -717,7 +724,7 @@ jobs:
         # the seed on every run, so reproduce a failure with -shuffle=<seed>.
         # The seed selects a permutation of the test set, so it only reproduces
         # while that set remains unchanged.
-        go test -shuffle=on -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
+        go test -shuffle="$TEST_SHUFFLE" -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
         # Layout validation mutates shared UI registries from parallel
         # subtests. Go 1.26 schedules them aggressively enough to expose the
         # upstream race, so isolate that test in a single-threaded process.
@@ -797,7 +804,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.x'
+        go-version: '1.26.6'
         cache-dependency-path: go.sum
 
     - name: Run race detector
