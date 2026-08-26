@@ -63,6 +63,13 @@ var associationsFilePathFn = defaultAssociationsFilePath
 func AssociationsFilePath() string { return associationsFilePathFn() }
 
 func defaultAssociationsFilePath() string {
+	// In portable mode (UseSystemProfiles=0) write under <exeDir>/Profile;
+	// otherwise use the system %AppData%/f4/settings path as before. Read
+	// userConfigDir live in non-portable mode so tests overriding the seam
+	// keep working.
+	if IsPortableProfile() {
+		return filepath.Join(GetF4ConfigDir(), "settings", "associations.ini")
+	}
 	configDir, _ := userConfigDir()
 	return filepath.Join(configDir, "f4", "settings", "associations.ini")
 }

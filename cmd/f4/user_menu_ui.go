@@ -64,8 +64,10 @@ func (u *userMenuFrame) Show(scr *vtui.ScreenBuf) {
 // between ~/.config/far2l/settings/user_menu.ini and the f4 directory
 // without renaming.
 func MainMenuFilePath() string {
-	configDir, _ := userConfigDir()
-	return filepath.Join(configDir, "f4", "settings", "user_menu.ini")
+	// In portable mode (UseSystemProfiles=0) write under <exeDir>/Profile;
+	// otherwise use the system %AppData%/f4/settings path as before, matching
+	// the other config INIs that resolve through GetF4ConfigDir.
+	return filepath.Join(GetF4ConfigDir(), "settings", "user_menu.ini")
 }
 
 // findLocalFarMenu walks startDir upward looking for FarMenu.ini.

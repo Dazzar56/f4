@@ -36,6 +36,13 @@ type BookmarkSet [10]Bookmark
 // ~/.config/far2l/settings/bookmarks.ini and the f4 directory without
 // renaming.
 func BookmarksFilePath() string {
+	// In portable mode (UseSystemProfiles=0) write under <exeDir>/Profile;
+	// otherwise use the system %AppData%/f4/settings path as before. Read
+	// userConfigDir live in non-portable mode so tests overriding the seam
+	// keep working.
+	if IsPortableProfile() {
+		return filepath.Join(GetF4ConfigDir(), "settings", "bookmarks.ini")
+	}
 	configDir, _ := userConfigDir()
 	return filepath.Join(configDir, "f4", "settings", "bookmarks.ini")
 }

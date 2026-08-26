@@ -429,6 +429,13 @@ var getUserConfigIniPath = func() string {
 
 var getConfigIniPaths = func() []string {
 	userPath := getUserConfigIniPath()
+	if IsPortableProfile() {
+		// In portable mode (UseSystemProfiles=0) all config lives under
+		// <exeDir>/Profile, so skip the machine-wide paths: otherwise system
+		// settings from ProgramData (Windows) or /etc/f4 (Unix) would leak into
+		// the isolated portable profile.
+		return []string{userPath}
+	}
 	if runtime.GOOS == "windows" {
 		progData := os.Getenv("ProgramData")
 		if progData != "" {
