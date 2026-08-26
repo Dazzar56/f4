@@ -621,32 +621,171 @@ func TestTerminalView_Resize_VerticalPreservation(t *testing.T) {
 }
 
 func TestTerminalView_Resize_HorizontalPreservation(t *testing.T) {
+	if terminalReflowEnabled {
+		t.Skip("horizontal preservation is the fallback for platforms where the live grid is not re-wrapped")
+	}
 	tv := NewTerminalView(10, 5)
 	defer tv.Close()
 	tv.SetCursor(0, 0)
 
-	// Пишем строку, которая при ресайзе выйдет за пределы
 	text := "12345678"
 	for _, r := range text {
 		tv.PutChar(r, 0)
 	}
 
-	// Сужаем окно до 5 колонок
+	// Without reflow the visible width shrinks but the cells survive, so that
+	// widening the window brings the text back rather than losing its tail.
 	tv.Resize(5, 5)
-
-	// VTE Mirror реализует Horizontal Preservation: визуальный массив сузился логически,
-	// но физически данные в слайсе сохраняются `copyLen = max(w, len(srcLine))`
 	if len(tv.Lines[0]) < 8 {
-		t.Errorf("Horizontal preservation failed: line length shrank to %d", len(tv.Lines[0]))
+		t.Fatalf("Horizontal preservation failed: line length shrank to %d", len(tv.Lines[0]))
 	}
 	if tv.Lines[0][7].Char != '8' {
 		t.Errorf("Hidden data lost: expected '8' at index 7, got '%c'", tv.Lines[0][7].Char)
 	}
 
-	// Расширяем обратно до 10 колонок
 	tv.Resize(10, 5)
 	if tv.Lines[0][7].Char != '8' {
 		t.Errorf("Restored data lost: expected '8' at index 7, got '%c'", tv.Lines[0][7].Char)
+	}
+}
+
+// rowText renders a grid row as a string with its trailing blanks removed.
+func rowText(row []vtui.CharInfo) string {
+	var sb strings.Builder
+	for _, c := range row {
+		sb.WriteString(vtui.CellString(c.Char))
+	}
+	return strings.TrimRight(sb.String(), " ")
+}
+
+// Narrowing the window re-wraps a line that no longer fits instead of hiding
+// its tail, and widening it again joins the pieces back into one row. The
+// soft wrap is what makes the second half findable: a hard break would leave
+// "678" stranded on its own row forever.
+func TestTerminalView_Reflow_NarrowAndWiden(t *testing.T) {
+	if !terminalReflowEnabled {
+		t.Skip("live grid reflow is off on this platform")
+	}
+	tv := NewTerminalView(10, 5)
+	defer tv.Close()
+	tv.SetCursor(0, 0)
+	for _, r := range "12345678" {
+		tv.PutChar(r, 0)
+	}
+
+	tv.Resize(5, 5)
+	var rows []string
+	for y := 0; y < tv.Height; y++ {
+		if txt := rowText(tv.Lines[y]); txt != "" {
+			rows = append(rows, txt)
+		}
+	}
+	if len(rows) != 2 || rows[0] != "12345" || rows[1] != "678" {
+		t.Fatalf("narrowing did not re-wrap the line: %q", rows)
+	}
+	if len(tv.Lines[0]) != 5 {
+		t.Errorf("row width is %d, want 5", len(tv.Lines[0]))
+	}
+
+	tv.Resize(10, 5)
+	joined := ""
+	for y := 0; y < tv.Height; y++ {
+		if txt := rowText(tv.Lines[y]); txt != "" {
+			joined += txt
+		}
+	}
+	if joined != "12345678" {
+		t.Errorf("widening did not rejoin the wrapped line: %q", joined)
+	}
+}
+
+// A hard line break survives the reflow: two lines the shell ended itself
+// must not be glued together just because they would now fit on one row.
+func TestTerminalView_Reflow_KeepsHardBreaks(t *testing.T) {
+	if !terminalReflowEnabled {
+		t.Skip("live grid reflow is off on this platform")
+	}
+	tv := NewTerminalView(10, 5)
+	defer tv.Close()
+	tv.SetCursor(0, 0)
+	for _, r := range "abc" {
+		tv.PutChar(r, 0)
+	}
+	tv.PutChar('\r', 0)
+	tv.PutChar('\n', 0)
+	for _, r := range "def" {
+		tv.PutChar(r, 0)
+	}
+
+	tv.Resize(40, 5)
+	var rows []string
+	for y := 0; y < tv.Height; y++ {
+		if txt := rowText(tv.Lines[y]); txt != "" {
+			rows = append(rows, txt)
+		}
+	}
+	if len(rows) != 2 || rows[0] != "abc" || rows[1] != "def" {
+		t.Fatalf("hard breaks were not preserved through the reflow: %q", rows)
+	}
+}
+
+// The cursor rides through the reflow attached to its position in the text,
+// not to a pair of coordinates. This is the property the whole design rests
+// on: get it wrong and the shell's next keystroke overwrites earlier output.
+func TestTerminalView_Reflow_CarriesCursor(t *testing.T) {
+	if !terminalReflowEnabled {
+		t.Skip("live grid reflow is off on this platform")
+	}
+	tv := NewTerminalView(10, 5)
+	defer tv.Close()
+	tv.SetCursor(0, 0)
+	for _, r := range "12345678" {
+		tv.PutChar(r, 0)
+	}
+	// The cursor sits just past the '8', where a shell would leave it.
+
+	tv.Resize(5, 5)
+	if got := rowText(tv.Lines[tv.CursorY]); got != "678" {
+		t.Fatalf("cursor landed on row %d (%q), want the row holding the line's tail", tv.CursorY, got)
+	}
+	if tv.CursorX != 3 {
+		t.Errorf("cursor column is %d, want 3 (just past the '8')", tv.CursorX)
+	}
+
+	// Typing continues where the cursor is, appending rather than overwriting.
+	tv.PutChar('9', DefaultTermAttr)
+	if got := rowText(tv.Lines[tv.CursorY]); got != "6789" {
+		t.Errorf("typing after the reflow corrupted the line: %q", got)
+	}
+}
+
+// A line that wrapped across the top edge of the viewport is stored partly in
+// GridHistory. The reflow pulls those rows back so the line is re-wrapped
+// whole, instead of leaving a seam at the boundary.
+func TestTerminalView_Reflow_RejoinsAcrossHistory(t *testing.T) {
+	if !terminalReflowEnabled {
+		t.Skip("live grid reflow is off on this platform")
+	}
+	tv := NewTerminalView(4, 2)
+	defer tv.Close()
+	tv.SetCursor(0, 0)
+	for _, r := range "abcdefghij" {
+		tv.PutChar(r, 0)
+	}
+	if len(tv.GridHistory) == 0 {
+		t.Fatal("the wrapped line did not reach GridHistory")
+	}
+
+	tv.Resize(12, 2)
+	joined := ""
+	for y := 0; y < tv.Height; y++ {
+		joined += rowText(tv.Lines[y])
+	}
+	for _, hist := range tv.GridHistory {
+		joined = rowText(hist) + joined
+	}
+	if joined != "abcdefghij" {
+		t.Errorf("the line was not rejoined across the history boundary: %q", joined)
 	}
 }
 

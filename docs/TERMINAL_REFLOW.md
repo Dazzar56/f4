@@ -6,9 +6,12 @@ survey of how other terminal emulators solve **reflow** — re-wrapping text whe
 the window changes width — so that the next person to look at it does not have
 to repeat the reading.
 
-Nothing here is implemented in `f4` yet. The point of writing it down is that
-the survey turned up a design that works and a specific reason our own
-documentation used to say it could not be done.
+**Status:** the Unix half is implemented — see `terminalReflowEnabled` and
+`reflowLocked` in `cmd/f4/terminal_view.go`. A width change now re-wraps the
+live primary grid; a height-only change still takes the old path, because
+that one is about moving rows between the viewport and `GridHistory` and was
+never broken. Windows keeps Horizontal Preservation until the two experiments
+in section 3 have answers.
 
 ## 1. far2l: the reference implementation to copy
 
@@ -154,12 +157,18 @@ over the same flag.
 The raw material is already here: `WrapFlags`, `GridHistory`, and a `PieceTable`
 with a `WrapEngine`. Three differences from far2l, all worth adopting:
 
-1. **Move the wrap marker from the row to the cell and invert it** — mark the
-   hard break, not the soft wrap. It then survives scrolling and horizontal
-   truncation with no separate bookkeeping.
-2. **Reflow as flatten-and-relayout, with the cursor as an offset into the
-   stream.** Do not recompute `(x, y)`.
-3. **Choose reflow vs truncation by output mode**, not only by alternate screen.
+1. **Reflow as flatten-and-relayout, with the cursor as an offset into the
+   stream.** Done: `unwrapLocked` joins soft-wrapped rows into logical lines,
+   reaching back into `GridHistory` for a line that wrapped across the top
+   edge, and `reflowLocked` lays them out at the new width. The cursor is
+   carried as an offset inside its logical line.
+2. **Move the wrap marker from the row to the cell and invert it** — mark the
+   hard break, not the soft wrap. Not done. `WrapFlags[y]` still has to be
+   shifted by hand in `scrollUp`, `scrollDown` and `Resize`; a cell-level
+   marker would delete all three of those parallel updates.
+3. **Choose reflow vs truncation by output mode**, not only by alternate
+   screen. Not done: a raw-mode TUI that raised no alternate screen (a Python
+   REPL) is still re-wrapped under it.
 
 ### Order of work
 
@@ -167,7 +176,7 @@ with a `WrapEngine`. Three differences from far2l, all worth adopting:
 | --- | --- | --- | --- |
 | 1 | Confirm the #409 fix on real Windows | — | users |
 | 2 | Self-erasing cleanup of the directory sync (stop the upward creep) | low | 1 |
-| 3 | Unix reflow: cell marker, flatten and relayout | medium | — |
+| 3 | Unix reflow: flatten and relayout | medium | done |
 | 4 | Experiment: does ConPTY with flag `0x2` stop re-emitting the viewport | low | — |
 | 5 | Experiment: does the soft-wrap signal survive on current Windows builds | low | 4 |
 | 6 | Windows reflow | high | 3, 4, 5 |
