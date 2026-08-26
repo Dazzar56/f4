@@ -1,6 +1,7 @@
 # Project Structure
 
     .
+    ├── AGENTS.md
     ├── cmd
     │   └── f4
     │       ├── action_copyname_parent_test.go
@@ -88,10 +89,14 @@
     │       ├── bookmarks_test.go
     │       ├── child_env.go
     │       ├── child_env_test.go
+    │       ├── clipboard_async.go
     │       ├── cloudfox_real_archive_test.go
     │       ├── cloudfox_real_cross_cloud_test.go
     │       ├── cloudfox_real_large_f5_test.go
     │       ├── cloudfox_real_ui_test.go
+    │       ├── cmd_session.go
+    │       ├── cmd_session_test.go
+    │       ├── colorer_async.go
     │       ├── colorer_downloader.go
     │       ├── colorer_plugin.go
     │       ├── colorer_plugin_test.go
@@ -143,6 +148,8 @@
     │       ├── command_runner_windows_test.go
     │       ├── commands.go
     │       ├── config.go
+    │       ├── config_overlay.go
+    │       ├── config_overlay_test.go
     │       ├── config_test.go
     │       ├── console_ctrl_handler_other.go
     │       ├── console_ctrl_handler_windows.go
@@ -168,6 +175,7 @@
     │       ├── editor_base64.go
     │       ├── editor_base64_test.go
     │       ├── editor_binary_open_test.go
+    │       ├── editor_codepage_test.go
     │       ├── editor_delta_test.go
     │       ├── editor_fade.go
     │       ├── editor_fade_test.go
@@ -254,6 +262,8 @@
     │       ├── gpu_info_windows.go
     │       ├── grabber.go
     │       ├── grabber_test.go
+    │       ├── graphics_compat.go
+    │       ├── graphics_compat_test.go
     │       ├── gui_backend_capability_ffi.go
     │       ├── gui_backend_capability.go
     │       ├── gui_backend_capability_stub.go
@@ -262,6 +272,7 @@
     │       ├── gui_font_catalog_test.go
     │       ├── gui_font_catalog_unix.go
     │       ├── gui_font_catalog_windows.go
+    │       ├── gui_font_combo.go
     │       ├── gui_font.go
     │       ├── gui_font_notwindows.go
     │       ├── gui_font_test.go
@@ -321,6 +332,8 @@
     │       ├── hotkeys_ui_test.go
     │       ├── image_bmp.go
     │       ├── image_console_overlay.go
+    │       ├── image_console_stats.go
+    │       ├── image_console_stats_test.go
     │       ├── image_decode.go
     │       ├── image_decode_test.go
     │       ├── image_external.go
@@ -356,6 +369,7 @@
     │       ├── issue54_test.go
     │       ├── issue561_test.go
     │       ├── issue631_test.go
+    │       ├── issue815_test.go
     │       ├── keybar_injected_test.go
     │       ├── kitty_graphics.go
     │       ├── kitty_graphics_test.go
@@ -428,16 +442,20 @@
     │       ├── mem_info_linux.go
     │       ├── mem_info_other.go
     │       ├── mem_info_windows.go
+    │       ├── menu_history.go
+    │       ├── menu_history_test.go
     │       ├── misc.go
     │       ├── module_root_test.go
     │       ├── navigation_mode.go
     │       ├── navigation_mode_test.go
     │       ├── nested_input_mode_test.go
+    │       ├── numeric_conversions_test.go
     │       ├── panel_actions.go
     │       ├── panel_actions_test.go
     │       ├── panel_menu_test.go
     │       ├── panel_plugins.go
     │       ├── panel_plugins_test.go
+    │       ├── panels_frame_drivecursor_windows_test.go
     │       ├── panels_frame.go
     │       ├── panels_frame_pty_test.go
     │       ├── panels_frame_test.go
@@ -498,6 +516,8 @@
     │       ├── quick_view_panel_test.go
     │       ├── quick_view_provider_api.go
     │       ├── quick_view_provider_test.go
+    │       ├── race_disabled_test.go
+    │       ├── race_enabled_test.go
     │       ├── reconnect.go
     │       ├── reconnect_test.go
     │       ├── remote_command.go
@@ -533,6 +553,7 @@
     │       ├── shell_integration_test.go
     │       ├── shell_mode.go
     │       ├── shell_mode_test.go
+    │       ├── shell_session_test.go
     │       ├── should_try_gui_test.go
     │       ├── simple_exec.go
     │       ├── simple_exec_other.go
@@ -540,6 +561,7 @@
     │       ├── simple_exec_windows.go
     │       ├── sixel_decode.go
     │       ├── sixel_decode_test.go
+    │       ├── sixel_layers_test.go
     │       ├── sixel_terminal.go
     │       ├── sixel_terminal_test.go
     │       ├── solaris_pty_alloc_test.go
@@ -691,6 +713,8 @@
     │   │   ├── ISSUE_397_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_411_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_453_SOLUTION_REVIEW.md
+    │   │   ├── ISSUE_492_SOLUTION_REVIEW.md
+    │   │   ├── ISSUE_493_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_523_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_526_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_546_FOLLOWUP_SOLUTION_REVIEW.md
@@ -707,6 +731,8 @@
     │   │   ├── ISSUE_725_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_727_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_744_SOLUTION_REVIEW.md
+    │   │   ├── ISSUE_793_SOLUTION_REVIEW.md
+    │   │   ├── ISSUE_807_SOLUTION_REVIEW.md
     │   │   ├── ISSUE_87_SOLUTION_REVIEW.md
     │   │   └── ISSUE_95_SOLUTION_REVIEW.md
     │   ├── L10N_REPORT_GUIDE.md
@@ -718,6 +744,7 @@
     │   ├── PORTABILITY_BSD.md
     │   ├── REVIEW.md
     │   ├── TERMINAL.md
+    │   ├── TERMINAL_REFLOW.md
     │   ├── TERMINAL_WINDOWS.md
     │   ├── TEST_OPTIMIZATION_PLAN.md
     │   ├── TTYX.md
@@ -773,13 +800,15 @@
     │   │   ├── ttyx_test.go
     │   │   └── watch.go
     │   └── wincon
+    │       ├── blit_test.go
     │       ├── geometry.go
     │       ├── overlay_other.go
+    │       ├── overlay_state.go
+    │       ├── overlay_state_test.go
     │       ├── overlay_windows.go
+    │       ├── stats.go
+    │       ├── stats_windows.go
     │       └── wincon_test.go
-    ├── ISSUE_492_SOLUTION_REVIEW.md
-    ├── ISSUE_493_SOLUTION_REVIEW.md
-    ├── ISSUE_793_SOLUTION_REVIEW.md
     ├── LICENSE
     ├── luaplug
     │   ├── convert.go
@@ -831,9 +860,13 @@
     │   │   ├── archive_plugin_test.go
     │   │   ├── archive_test.go
     │   │   ├── archive_write_regression_test.go
+    │   │   ├── clone_test.go
     │   │   ├── compressed_regular_test.go
     │   │   ├── extraction_security_test.go
+    │   │   ├── issue815_f3_test.go
     │   │   ├── materialize.go
+    │   │   ├── password.go
+    │   │   ├── password_test.go
     │   │   ├── production_regression_test.go
     │   │   ├── provider.go
     │   │   ├── provider_special_unix_test.go
@@ -1059,6 +1092,7 @@
     │   │   │   ├── patch_test.go
     │   │   │   ├── paths.go
     │   │   │   ├── paths_test.go
+    │   │   │   ├── random_fixture_test.go
     │   │   │   ├── read.go
     │   │   │   ├── read_test.go
     │   │   │   ├── script.go
@@ -1078,6 +1112,7 @@
     │   │   ├── fish_reconnect_test.go
     │   │   ├── fish_vfs.go
     │   │   ├── fish_vfs_test.go
+    │   │   ├── ftp_clone_test.go
     │   │   ├── ftp_vfs.go
     │   │   ├── lang_test.go
     │   │   ├── netfox.go
@@ -1297,4 +1332,4 @@
         ├── session_test.go
         └── vfs.go
     
-    72 directories, 1224 files
+    72 directories, 1259 files
