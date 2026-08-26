@@ -706,6 +706,23 @@ func (w *archiveReadWrapper) LocalPath() (string, bool) {
 }
 
 func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
+	// Keep the tar.FileSystem path first: it can use zipper's external or
+	// embedded gzip index for O(1)-ish random access. Only a failed compressed
+	// read is retried through the sequential extractor below.
+	randomErr := w.extractToTempRandom(ctx)
+	if randomErr == nil {
+		return nil
+	}
+	if !w.canFallbackToSequential(randomErr) {
+		return randomErr
+	}
+	if err := w.extractToTempSequential(ctx); err != nil {
+		return errors.Join(randomErr, err)
+	}
+	return nil
+}
+
+func (w *archiveReadWrapper) extractToTempRandom(ctx context.Context) error {
 	w.mu.Lock()
 	v := w.v
 	fsPath := w.fsPath
@@ -851,7 +868,6 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 				_ = w.f.Close() // The archive member was opened only for reading.
 				w.f = nil
 			}
-			w.err = loopErr
 		}
 		return loopErr
 	} else {
@@ -866,41 +882,190 @@ func (w *archiveReadWrapper) extractToTemp(ctx context.Context) error {
 	}
 }
 
-func (w *archiveReadWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+func (w *archiveReadWrapper) canFallbackToSequential(err error) bool {
+	if err == nil || archive.IsPasswordError(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	if !strings.Contains(message, "corrupt input") && !strings.Contains(message, "unexpected eof") && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return false
+	}
+
 	w.mu.Lock()
-	for !w.extracted && w.err == nil {
+	v := w.v
+	w.mu.Unlock()
+	if v == nil {
+		return false
+	}
+	v.mu.Lock()
+	format := v.format
+	archiveName := v.displayName
+	v.mu.Unlock()
+	if format == "" {
+		format = archive.DetectFormat(archiveName)
+	}
+	return format == "tar" && !strings.HasSuffix(strings.ToLower(archiveName), ".tar")
+}
+
+func (w *archiveReadWrapper) extractToTempSequential(ctx context.Context) error {
+	w.mu.Lock()
+	v := w.v
+	fsPath := w.fsPath
+	readPos := w.readPos
+	w.mu.Unlock()
+	if v == nil {
+		return errors.New("archive VFS is unavailable for sequential extraction")
+	}
+
+	v.mu.Lock()
+	password := v.password
+	v.mu.Unlock()
+	localFile, extractor, err := v.openBulkExtractor(ctx, w, password)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = localFile.Close() }()
+
+	tmp, err := os.CreateTemp("", "f4arc-open-fallback-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	removeTemp := true
+	defer func() {
+		_ = tmp.Close()
+		if removeTemp {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	found := false
+	err = extractor.Extract(ctx, localFile, func(ctx context.Context, info archives.FileInfo) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		cleanName, err := cleanArchiveExtractionPath(info.NameInArchive)
+		if err != nil {
+			return fmt.Errorf("unsafe archive entry %q: %w", info.NameInArchive, err)
+		}
+		if cleanName != fsPath {
+			return nil
+		}
+		if info.IsDir() {
+			return fmt.Errorf("archive member is a directory: %s", fsPath)
+		}
+		member, err := info.Open()
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(tmp, member)
+		closeErr := member.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		found = true
+		return fs.SkipAll
+	})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("archive member not found: %s", fsPath)
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	readTmp, err := os.Open(filepath.Clean(tmpName))
+	if err != nil {
+		return err
+	}
+	if _, err := readTmp.Seek(readPos, io.SeekStart); err != nil {
+		_ = readTmp.Close() // The materialized archive member was reopened only for reading.
+		return err
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.f != nil {
+		_ = w.f.Close() // The archive member was opened only for reading.
+		w.f = nil
+	}
+	if w.size <= 0 {
+		if info, statErr := readTmp.Stat(); statErr == nil {
+			w.size = info.Size()
+		}
+	}
+	w.tmpPath = tmpName
+	w.tmpFile = readTmp
+	w.extracted = true
+	removeTemp = false
+	return nil
+}
+
+func (w *archiveReadWrapper) materialize(ctx context.Context, sequential bool) error {
+	for {
+		w.mu.Lock()
+		if w.extracted {
+			w.mu.Unlock()
+			return nil
+		}
+		if w.err != nil {
+			err := w.err
+			w.mu.Unlock()
+			return err
+		}
 		if w.extracting {
 			ch := w.doneChan
 			w.mu.Unlock()
 			select {
 			case <-ch:
 			case <-ctx.Done():
-				return 0, ctx.Err()
+				return ctx.Err()
 			}
-			w.mu.Lock()
 			continue
 		}
-
 		w.extracting = true
 		w.doneChan = make(chan struct{})
 		w.mu.Unlock()
 
-		attemptErr := w.extractToTemp(ctx)
+		var err error
+		if sequential {
+			err = w.extractToTempSequential(ctx)
+		} else {
+			err = w.extractToTemp(ctx)
+		}
 
 		w.mu.Lock()
 		w.extracting = false
 		close(w.doneChan)
 		w.doneChan = nil
-		if attemptErr != nil {
-			w.mu.Unlock()
-			return 0, attemptErr
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			w.err = err
 		}
-	}
-
-	if w.err != nil {
 		w.mu.Unlock()
-		return 0, w.err
+		return err
 	}
+}
+
+func (v *ArchiveVFS) fallbackOpenMemberSequential(ctx context.Context, fsPath string, size int64, cause error) (vfs.ReadAtCloser, error, bool) {
+	fallback := &archiveReadWrapper{v: v, fsPath: fsPath, size: size}
+	if !fallback.canFallbackToSequential(cause) {
+		return nil, cause, false
+	}
+	if err := fallback.extractToTempSequential(ctx); err != nil {
+		return nil, errors.Join(cause, err), true
+	}
+	return fallback, nil, true
+}
+
+func (w *archiveReadWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	if err := w.materialize(ctx, false); err != nil {
+		return 0, err
+	}
+	w.mu.Lock()
 	tmp := w.tmpFile
 	w.mu.Unlock()
 
@@ -952,6 +1117,23 @@ func (w *archiveReadWrapper) Read(ctx context.Context, p []byte) (int, error) {
 		}
 		n, err = f.Read(p)
 		if n > 0 {
+			w.mu.Lock()
+			w.readPos += int64(n)
+			w.mu.Unlock()
+		}
+	}
+	if err != nil && w.canFallbackToSequential(err) {
+		if n > 0 {
+			w.mu.Lock()
+			w.readPos -= int64(n)
+			w.mu.Unlock()
+		}
+		if fallbackErr := w.materialize(ctx, true); fallbackErr == nil {
+			w.mu.Lock()
+			tmp := w.tmpFile
+			w.mu.Unlock()
+			return tmp.Read(p)
+		} else if n > 0 {
 			w.mu.Lock()
 			w.readPos += int64(n)
 			w.mu.Unlock()
@@ -1170,6 +1352,15 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 			}
 			if err != nil {
 				close(openDone)
+				if srcFile != nil {
+					_ = srcFile.Close() // The archive member was opened only for reading.
+					srcFile = nil
+				}
+				if fallback, fallbackErr, attempted := v.fallbackOpenMemberSequential(ctx, fsPath, 0, err); attempted && fallbackErr == nil {
+					return fallback, nil
+				} else if attempted {
+					err = fallbackErr
+				}
 				v.decrementActive()
 				if archive.IsPasswordError(err) {
 					if retryErr := v.openWithPassword(ctx, err); retryErr == nil {
@@ -1231,6 +1422,11 @@ func (v *ArchiveVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, e
 		if errExtract != nil {
 			_ = tmp.Close()        // The incomplete private materialization will be removed.
 			_ = os.Remove(tmpName) // Removing the unusable private materialization is best-effort cleanup.
+			if fallback, fallbackErr, attempted := v.fallbackOpenMemberSequential(ctx, fsPath, size, errExtract); attempted && fallbackErr == nil {
+				return fallback, nil
+			} else if attempted {
+				errExtract = fallbackErr
+			}
 			v.decrementActive()
 			if archive.IsPasswordError(errExtract) {
 				if retryErr := v.openWithPassword(ctx, errExtract); retryErr == nil {
