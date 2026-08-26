@@ -368,6 +368,8 @@ func TestCommandPaletteHotkeyPrecedesPluginsAndDoesNotStack(t *testing.T) {
 }
 
 func TestFastFindDoesNotVetoModifiedPrintablePaletteKey(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+
 	panel := &FileSystemPanel{fastFindMode: true}
 	frame := &PanelsFrame{showPanels: true, panels: [2]Panel{panel, nil}}
 	modified := &vtinput.InputEvent{
