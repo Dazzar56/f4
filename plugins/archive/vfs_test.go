@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"compress/gzip"
 	"context"
 	"io"
 	"io/fs"
@@ -788,6 +789,57 @@ func TestArchiveVFSCopyBulk_Tar(t *testing.T) {
 	data2, _ := io.ReadAll(ctxReader{r: f2, ctx: context.Background()})
 	if string(data2) != "content2" {
 		t.Errorf("expected content2, got %q", string(data2))
+	}
+}
+
+func TestArchiveVFSCopyBulk_CompressedTar(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tarPath := filepath.Join(tmpDir, "test.tar.gz")
+	f, err := os.Create(tarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "file.txt", Mode: 0644, Size: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("content")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	archiveVFS, err := NewArchiveVFS(vfs.NewOSVFS(tmpDir), "test.tar.gz")
+	if err != nil {
+		t.Fatalf("failed to create ArchiveVFS: %v", err)
+	}
+	t.Cleanup(func() { _ = archiveVFS.Close() })
+
+	dstDir := filepath.Join(tmpDir, "extracted")
+	dstVFS := vfs.NewOSVFS(dstDir)
+	if err := dstVFS.MkDir(context.Background(), dstDir); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := archiveVFS.CopyBulk(context.Background(), []string{"file.txt"}, dstVFS, dstDir, &dummyReporter{}); err != nil {
+		t.Fatalf("bulk copy from compressed tar failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dstDir, "file.txt"))
+	if err != nil {
+		t.Fatal("file.txt was not extracted:", err)
+	}
+	if string(data) != "content" {
+		t.Fatalf("extracted content = %q, want %q", data, "content")
 	}
 }
 

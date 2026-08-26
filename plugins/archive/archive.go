@@ -2,6 +2,7 @@ package archive
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -133,62 +134,7 @@ func actionExtractArchive(app vfs.App) {
 			defer vfs.GlobalArchiveLockManager.Unlock(srcPath)
 		}
 		reporter.UpdateTransfer("Extracting", "files...", -1, "", -1, "")
-
-		ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: false, SafeWrites: true})
-		if err != nil {
-			return err
-		}
-		defer func() {
-			_ = ex.Close() // Extraction is complete; the archive input is read-only.
-		}()
-
-		done := make(chan struct{})
-		defer close(done)
-		startTime := time.Now()
-
-		showProgress := func() {
-			bytes, entries := ex.Written()
-			elapsed := time.Since(startTime)
-			speed := float64(0)
-			if elapsed.Seconds() > 0 {
-				speed = float64(bytes) / elapsed.Seconds()
-			}
-			speedStr := formatSize(int64(speed)) + "/s"
-
-			elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
-
-			// Нам также нужно поправить и второе вхождение в actionAddArchive:
-			timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, "", speedStr)
-
-			totalText := fmt.Sprintf("Total: %s", formatSize(bytes))
-
-			currFile := fmt.Sprintf("%d files", entries)
-			if fp, ok := ex.(interface{ CurrentFile() string }); ok {
-				if name := fp.CurrentFile(); name != "" {
-					currFile = name
-				}
-			}
-
-			reporter.UpdateTransfer("Extracting", currFile, -1, totalText, -1, timeSpeedText)
-		}
-		showProgress()
-
-		go func() {
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-done:
-					return
-				case <-ticker.C:
-					showProgress()
-				}
-			}
-		}()
-
-		return ex.Extract(ctx)
+		return extractArchiveWithPasswordPrompt(ctx, srcPath, destDir, reporter)
 
 	}, func(err error) {
 		if err != nil && err != context.Canceled {
@@ -196,6 +142,87 @@ func actionExtractArchive(app vfs.App) {
 		}
 		app.RefreshAll()
 	})
+}
+
+func extractArchiveWithPasswordPrompt(ctx context.Context, srcPath, destDir string, reporter vfs.TaskReporter) error {
+	var password string
+	for {
+		err := extractArchiveOnce(ctx, srcPath, destDir, password, reporter)
+		if err == nil || !archive.IsPasswordError(err) {
+			return err
+		}
+
+		password, err = archivePasswordPrompt(ctx, filepath.Base(srcPath))
+		if err != nil {
+			return err
+		}
+		if password == "" {
+			return errors.New("archive password was not provided")
+		}
+	}
+}
+
+func extractArchiveOnce(ctx context.Context, srcPath, destDir, password string, reporter vfs.TaskReporter) error {
+	ex, err := archive.NewExtractor(srcPath, destDir, archive.Options{Xattrs: false, SafeWrites: true, Password: password})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = ex.Close() // Extraction is complete; the archive input is read-only.
+	}()
+
+	done := make(chan struct{})
+	tickerDone := make(chan struct{})
+	defer func() {
+		close(done)
+		<-tickerDone
+	}()
+	startTime := time.Now()
+
+	showProgress := func() {
+		bytes, entries := ex.Written()
+		elapsed := time.Since(startTime)
+		speed := float64(0)
+		if elapsed.Seconds() > 0 {
+			speed = float64(bytes) / elapsed.Seconds()
+		}
+		speedStr := formatSize(int64(speed)) + "/s"
+
+		elapsedStr := fmt.Sprintf("Time: %02d:%02d:%02d", int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60)
+
+		// Нам также нужно поправить и второе вхождение в actionAddArchive:
+		timeSpeedText := fmt.Sprintf("%-16s %-21s %15s", elapsedStr, "", speedStr)
+
+		totalText := fmt.Sprintf("Total: %s", formatSize(bytes))
+
+		currFile := fmt.Sprintf("%d files", entries)
+		if fp, ok := ex.(interface{ CurrentFile() string }); ok {
+			if name := fp.CurrentFile(); name != "" {
+				currFile = name
+			}
+		}
+
+		reporter.UpdateTransfer("Extracting", currFile, -1, totalText, -1, timeSpeedText)
+	}
+	showProgress()
+
+	go func() {
+		defer close(tickerDone)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			case <-ticker.C:
+				showProgress()
+			}
+		}
+	}()
+
+	return ex.Extract(ctx)
 }
 
 func actionAddArchive(app vfs.App) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	stdunicode "unicode"
 	"unicode/utf8"
 
 	"github.com/unxed/vtui"
@@ -140,9 +141,81 @@ func DetectEncoding(data []byte, autodetect bool, defaultCP int) int {
 		if utf8.Valid(data) {
 			return 65001
 		}
+		if cp, ok := detectLegacyCodepage(data); ok {
+			return cp
+		}
 		return defaultCP
 	}
 	return defaultCP
+}
+
+// detectLegacyCodepage distinguishes the system ANSI and OEM encodings when
+// the input is not UTF-8 and has no BOM. There is no marker in a single-byte
+// codepage stream, so this is deliberately conservative: choose a candidate
+// only when it produces substantially more ordinary text than the other one.
+// An uncertain result falls back to the user's configured default.
+func detectLegacyCodepage(data []byte) (int, bool) {
+	if len(data) < 8 {
+		return 0, false
+	}
+
+	ansi, ansiErr := DecodeBytes(data, 11111)
+	oem, oemErr := DecodeBytes(data, 22222)
+	if ansiErr != nil || oemErr != nil || string(ansi) == string(oem) {
+		return 0, false
+	}
+
+	ansiScore := legacyTextScore(ansi)
+	oemScore := legacyTextScore(oem)
+	if ansiScore == oemScore {
+		return 0, false
+	}
+	if ansiScore > oemScore {
+		if ansiScore-oemScore < 8 {
+			return 0, false
+		}
+		return 11111, true
+	}
+	if oemScore-ansiScore < 8 {
+		return 0, false
+	}
+	return 22222, true
+}
+
+func legacyTextScore(data []byte) int {
+	score := 0
+	for _, r := range string(data) {
+		switch {
+		case r == '\r' || r == '\n' || r == '\t':
+			score++
+		case stdunicode.IsLetter(r):
+			score += 4
+		case stdunicode.IsDigit(r):
+			score += 2
+		case stdunicode.IsSpace(r) || stdunicode.IsPunct(r):
+			score++
+		case stdunicode.IsControl(r):
+			score -= 8
+		case stdunicode.IsGraphic(r):
+			score++
+		default:
+			score -= 4
+		}
+
+		// Box-drawing characters, non-breaking spaces, and replacement
+		// characters are common signs that bytes were decoded with the
+		// wrong legacy codepage, even though they are technically graphic.
+		if (r >= 0x2500 && r <= 0x259F) || r == '\u00A0' || r == '\uFFFD' {
+			score -= 8
+		}
+		// CP437/CP850 decode several common ANSI punctuation and accented
+		// letters as Greek characters. They are valid Unicode letters, but
+		// are unlikely in ordinary text and are a useful wrong-codepage hint.
+		if stdunicode.In(r, stdunicode.Greek) {
+			score -= 8
+		}
+	}
+	return score
 }
 
 func GetCodepageDecoderEncoder(cp string) (*encoding.Decoder, *encoding.Encoder) {

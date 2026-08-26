@@ -377,6 +377,62 @@ func TestQuickView_CodepageAndHexToggle(t *testing.T) {
 	}
 }
 
+func TestQuickView_ShiftF7ContinuesSearchForward(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	q := &QuickViewPanel{
+		focused:          true,
+		wrap:             true,
+		cacheLines:       []string{"needle first", "needle current", "needle next"},
+		lastSearch:       "needle",
+		lastSearchSource: 1,
+	}
+	q.SetPosition(0, 0, 39, 19)
+
+	if !q.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode:  vtinput.VK_F7,
+		ControlKeyState: vtinput.ShiftPressed,
+	}) {
+		t.Fatal("Shift+F7 should continue an existing Quick View search")
+	}
+	if q.lastSearchSource != 2 {
+		t.Fatalf("Shift+F7 selected source line %d, want 2", q.lastSearchSource)
+	}
+}
+
+func TestQuickView_RestoresRememberedCodepage(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	root := t.TempDir()
+	path := filepath.Join(root, "remembered.txt")
+	v := vfs.NewOSVFS(root)
+	raw, err := vfs.EncodeBytes([]byte("Привет\n"), 866)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldState := GlobalFileState
+	GlobalFileState = &F4FileStateProvider{Limit: 10, Data: make(map[string]*FileState)}
+	t.Cleanup(func() { GlobalFileState = oldState })
+	GlobalFileState.SaveQuickViewCodepage(FileStateKey(v, path), 866)
+
+	q := &QuickViewPanel{
+		src:       &FileSystemPanel{vfs: v},
+		cachePath: path,
+		cacheKey:  makeQuickViewSelectionKey(v, path, vfs.VFSItem{Name: "remembered.txt", Size: int64(len(raw))}),
+	}
+	q.applyFilePreview(quickViewFileResult{raw: raw, codepage: 65001, lines: quickViewTextLines(raw)})
+
+	if q.cacheCodepage != 866 {
+		t.Fatalf("restored Quick View codepage = %d, want 866", q.cacheCodepage)
+	}
+	if got := strings.Join(q.cacheLines, "\n"); got != "Привет" {
+		t.Fatalf("restored Quick View text = %q, want %q", got, "Привет")
+	}
+}
+
 // TestQuickView_DirScan_PopulatesRecursive builds a small tree and
 // checks that the async scan settles on the right recursive counts.
 // The scan runs in a goroutine, so we wait on scanDoneCh with a

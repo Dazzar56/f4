@@ -196,7 +196,10 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
 	tv.KittyFlags = other.KittyFlags
 	tv.KittyFlagsStack = append([]int(nil), other.KittyFlagsStack...)
-	tv.pty = other.pty
+	// The PTY is an ownership handle, not terminal display state. A cloned
+	// PanelsFrame starts its own shell asynchronously; copying this field would
+	// briefly route input from the clone into the source workspace until that
+	// shell wins the race.
 	tv.images = append([]terminalImage(nil), other.images...)
 
 	vtui.DebugLog("TERM_VIEW: CloneStateFrom completed. Cleaning active row for new shell.")

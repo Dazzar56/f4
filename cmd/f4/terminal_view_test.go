@@ -946,6 +946,24 @@ func (m *mockPtyForTerminal) Wait() error                           { return nil
 func (m *mockPtyForTerminal) Run(name string, args ...string) error { return nil }
 func (m *mockPtyForTerminal) IsBusy() bool                          { return false }
 
+func TestTerminalView_CloneStateFromDoesNotSharePTY(t *testing.T) {
+	source := NewTerminalView(80, 24)
+	destination := NewTerminalView(80, 24)
+	sourcePTY := &mockPtyForTerminal{}
+	destinationPTY := &mockPtyForTerminal{}
+	source.pty = sourcePTY
+	destination.pty = destinationPTY
+
+	destination.CloneStateFrom(source)
+
+	if destination.pty != destinationPTY {
+		t.Fatal("cloning terminal display state replaced the destination PTY")
+	}
+	if destination.pty == source.pty {
+		t.Fatal("cloned terminal display state shares the source PTY")
+	}
+}
+
 func TestTerminalView_ProcessFar2lInteract_ColonFormat(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	pty := &mockPtyForTerminal{}
