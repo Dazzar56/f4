@@ -52,6 +52,9 @@ type TerminalView struct {
 	engine          *textlayout.WrapEngine
 	GridHistory     [][]vtui.CharInfo
 	GridHistoryWrap []bool
+
+	// reflow accumulates per-pass losses; see reflowStats.
+	reflow reflowStats
 	styles          []StyleChange
 	lastAttr        uint64
 
@@ -249,6 +252,15 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.SixelDisplayMode = false
 
 	// Создание сеток (Grid)
+	// The path taken when the re-wrap is off, or when only the height
+	// changed. It moves rows between the viewport and history by hand, which
+	// is a second place a row can go missing, so it reports the same way --
+	// otherwise ruling it out costs another field run.
+	defer func() {
+		vtui.DebugLog("REFLOW_RESIZE: no re-wrap; %dx%d -> %dx%d; history %d; rows with text %d",
+			tv.Width, tv.Height, w, h, len(tv.GridHistory), tv.rowsWithTextLocked())
+	}()
+
 	makeBuf := func() [][]vtui.CharInfo {
 		b := make([][]vtui.CharInfo, h)
 		for i := range b {
@@ -330,6 +342,16 @@ func (tv *TerminalView) pushRowToGridHistory(y int) {
 	tv.GridHistoryWrap = append(tv.GridHistoryWrap, tv.WrapFlags[y])
 
 	if len(tv.GridHistory) > maxGridHistoryRows {
+		// This row leaves the grid for good: extrudeGridHistoryRow writes it
+		// to the PieceTable, which the re-wrap cannot read back. A pass that
+		// produces more rows than it consumed -- narrowing does -- pays for
+		// the extra rows with the oldest ones, permanently.
+		tv.reflow.droppedPastCap++
+		if extrusionsLogged < 5 {
+			extrusionsLogged++
+			vtui.DebugLog("REFLOW_DROP: history is at the %d-row cap; extruding %q to the PieceTable",
+				maxGridHistoryRows, clipRowText(tv.GridHistory[0]))
+		}
 		tv.extrudeGridHistoryRow(0)
 		tv.GridHistory = tv.GridHistory[1:]
 		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
@@ -1327,6 +1349,26 @@ var terminalReflowEnabled = runtime.GOOS != "windows"
 // hard bound also makes a full-history reflow cheap enough for every resize.
 const maxGridHistoryRows = 2000
 
+// Reflow accounting. Every place a row can stop existing increments one of
+// these, and reflowLocked prints all of them together at the end of a pass.
+//
+// They exist because this bug was chased across four field runs by adding one
+// log line at a time, and each round trip answered one question and raised the
+// next. A row can vanish in five distinct places -- truncated while being
+// collected, trimmed while being measured, pushed out of the viewport, dropped
+// past the history cap, or extruded from the cap into the PieceTable, which the
+// grid cannot read back -- and no single number distinguishes them. Counting
+// all five at once means one log answers the whole question.
+type reflowStats struct {
+	viewportRowsIn  int // rows collected from the viewport
+	historyRowsIn   int // rows collected from GridHistory
+	viewportSkipped int // viewport rows below lastRow, not collected at all
+	cellsTrimmed    int // cells dropped by significantWidthLocked
+	rowsOut         int // rows produced by the re-wrap
+	pushedToHistory int // rows that did not fit the viewport
+	droppedPastCap  int // rows extruded past maxGridHistoryRows: unrecoverable
+}
+
 func (tv *TerminalView) Resize(w, h int) {
 	if tv.Width == w && tv.Height == h {
 		return
@@ -1523,6 +1565,32 @@ func significantWidthLocked(row []vtui.CharInfo, wrapped bool) int {
 // pair of coordinates. Recomputing (x, y) arithmetically is what makes a live
 // reflow desync from the shell; pinning the cursor to a position in the text
 // survives the relayout, and the shell redraws its prompt on SIGWINCH anyway.
+// clipRowText renders a row's text for a log line, short enough to read.
+func clipRowText(row []vtui.CharInfo) string {
+	var b []rune
+	for _, c := range row {
+		if c.Char != 0 {
+			b = append(b, rune(c.Char))
+		}
+		if len(b) >= 60 {
+			break
+		}
+	}
+	return strings.TrimRight(string(b), " ")
+}
+
+// significantTrim reports how many cells past the significant width still held
+// something other than a blank -- the cells a re-wrap throws away.
+func significantTrim(row []vtui.CharInfo, width int) int {
+	n := 0
+	for x := width; x < len(row); x++ {
+		if row[x].Char != ' ' && row[x].Char != 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // rowsWithTextLocked counts viewport rows carrying anything, so a log line can
 // say whether a widen actually filled the screen or left it blank.
 func (tv *TerminalView) rowsWithTextLocked() int {
@@ -1548,6 +1616,13 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 	if tv.CursorY > lastRow {
 		lastRow = tv.CursorY
 	}
+	// Rows below lastRow are not collected. If any of them held text this is
+	// a loss, and the count says so rather than leaving it to be inferred.
+	for y := lastRow + 1; y < tv.Height; y++ {
+		if tv.rowHasText(y) {
+			tv.reflow.viewportSkipped++
+		}
+	}
 
 	type sourceRow struct {
 		cells   []vtui.CharInfo
@@ -1572,6 +1647,8 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 		}
 		cells := make([]vtui.CharInfo, width)
 		copy(cells, tv.Lines[y][:width])
+		tv.reflow.cellsTrimmed += significantTrim(tv.Lines[y], width)
+		tv.reflow.viewportRowsIn++
 		rows = append(rows, sourceRow{cells: cells, wrapped: wrapped, cursorX: cursorX})
 	}
 
@@ -1587,6 +1664,8 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 		width := significantWidthLocked(row, wrapped)
 		cells := make([]vtui.CharInfo, width)
 		copy(cells, row[:width])
+		tv.reflow.cellsTrimmed += significantTrim(row, width)
+		tv.reflow.historyRowsIn++
 		rows = append([]sourceRow{{cells: cells, wrapped: wrapped, cursorX: -1}}, rows...)
 		tv.GridHistory = tv.GridHistory[:last]
 		tv.GridHistoryWrap = tv.GridHistoryWrap[:last]
@@ -1621,10 +1700,26 @@ func (tv *TerminalView) reflowLocked(w, h int) {
 	// fault -- whether unwrapLocked collected the history at all, and whether
 	// the re-wrap then put the rows on the screen or pushed them back out.
 	fromW, fromH, histBefore := tv.Width, tv.Height, len(tv.GridHistory)
+	tv.reflow = reflowStats{}
 	lines := tv.unwrapLocked(h)
+	cellsIn := 0
+	for _, line := range lines {
+		cellsIn += len(line.cells)
+	}
 	defer func() {
-		vtui.DebugLog("REFLOW_WRAP: %dx%d -> %dx%d; history %d -> %d; %d logical lines; viewport rows with text %d",
-			fromW, fromH, w, h, histBefore, len(tv.GridHistory), len(lines), tv.rowsWithTextLocked())
+		st := tv.reflow
+		vtui.DebugLog("REFLOW_WRAP: %dx%d -> %dx%d; history %d -> %d; in: viewport %d + history %d rows (%d cells, %d logical lines); out: %d rows, %d to history; lost: %d skipped rows, %d trimmed cells, %d past cap",
+			fromW, fromH, w, h, histBefore, len(tv.GridHistory),
+			st.viewportRowsIn, st.historyRowsIn, cellsIn, len(lines),
+			st.rowsOut, st.pushedToHistory,
+			st.viewportSkipped, st.cellsTrimmed, st.droppedPastCap)
+		if st.droppedPastCap > 0 {
+			vtui.DebugLog("REFLOW_WRAP: %d rows left GridHistory for the PieceTable in this pass and cannot be re-wrapped again (cap %d)",
+				st.droppedPastCap, maxGridHistoryRows)
+		}
+		if st.viewportSkipped > 0 {
+			vtui.DebugLog("REFLOW_WRAP: %d viewport rows with text were below lastRow and never collected", st.viewportSkipped)
+		}
 	}()
 
 	blank := vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
@@ -1668,7 +1763,9 @@ func (tv *TerminalView) reflowLocked(w, h int) {
 
 	// Rows that no longer fit are the oldest ones; they leave through the
 	// same door as any scrolled-off row.
+	tv.reflow.rowsOut = len(out)
 	if len(out) > h {
+		tv.reflow.pushedToHistory = len(out) - h
 		for _, row := range out[:len(out)-h] {
 			tv.pushRowLocked(row.cells, row.wrapped)
 		}
@@ -1742,6 +1839,12 @@ func (tv *TerminalView) reflowLocked(w, h int) {
 // pushRowLocked sends an already-built row to GridHistory, extruding the
 // oldest entry into the PieceTable when the buffer is full. It is
 // pushRowToGridHistory for rows that are not (or are no longer) in tv.Lines.
+// extrusionsLogged bounds the per-row extrusion log: a long run extrudes
+// thousands of rows and one line each would bury everything else. The count is
+// what matters, and reflowLocked and ScrollUp already report it; this only
+// names the first few so the shape of the content leaving is visible once.
+var extrusionsLogged int
+
 func (tv *TerminalView) pushRowLocked(cells []vtui.CharInfo, wrapped bool) {
 	lineCopy := make([]vtui.CharInfo, len(cells))
 	copy(lineCopy, cells)
