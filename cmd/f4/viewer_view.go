@@ -61,12 +61,17 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		detectLen = int(size)
 	}
 	header := make([]byte, detectLen)
-	if _, err := f.ReadAt(ctx, header, 0); err != nil && err != io.EOF {
+	n, err := f.ReadAt(ctx, header, 0)
+	if err != nil && err != io.EOF {
 		_ = f.Close()
 		return nil, fmt.Errorf("read file header: %w", err)
 	}
+	header = header[:n]
 
 	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
+	if remembered, ok := rememberedCodepage(v, path); ok {
+		cpID = remembered
+	}
 	binary := viewerHeaderLooksBinary(header, cpID)
 	if binary {
 		// Binary data has no text codepage to materialize. Keeping the remote
@@ -904,9 +909,11 @@ func (vv *ViewerView) ReloadWithAutoDetect() {
 		detectLen = int(size)
 	}
 	header := make([]byte, detectLen)
-	_, _ = f.ReadAt(context.Background(), header, 0)
+	n, _ := f.ReadAt(context.Background(), header, 0)
+	header = header[:n]
 
 	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
+	saveCodepageOverride(vv.vfs, vv.path, 0)
 	vv.ReloadWithCodepage(cpID)
 }
 
@@ -949,6 +956,7 @@ func (vv *ViewerView) showCodepageDialog() {
 					AppConfig.ViewerAutodetectCodePage = false
 					AppConfig.ViewerDefaultCodePage = cpID
 					SaveConfig()
+					saveCodepageOverride(vv.vfs, vv.path, cpID)
 					vv.ReloadWithCodepage(cpID)
 				}
 			}

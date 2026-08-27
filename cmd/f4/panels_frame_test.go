@@ -3818,6 +3818,13 @@ func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
 		fm.Pop()
 	})
 
+	t.Run("ViewerSettingsDialog", func(t *testing.T) {
+		actionViewerSettings(pf)
+		dlg := fm.GetTopFrame().(vtui.Container)
+		vtui.AssertLayout(t, dlg)
+		fm.Pop()
+	})
+
 	t.Run("AppearanceSettingsDialog", func(t *testing.T) {
 		actionAppearanceSettings(pf)
 		dlg := fm.GetTopFrame().(vtui.Container)

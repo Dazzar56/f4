@@ -4458,9 +4458,11 @@ func (ev *EditorView) ReloadWithAutoDetect() {
 		detectLen = int(size)
 	}
 	header := make([]byte, detectLen)
-	_, _ = ev.file.ReadAt(context.Background(), header, 0)
+	n, _ := ev.file.ReadAt(context.Background(), header, 0)
+	header = header[:n]
 
 	cpID := vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
+	saveCodepageOverride(ev.vfs, ev.filePath, 0)
 	ev.ReloadWithCodepage(cpID)
 }
 
@@ -4503,6 +4505,7 @@ func (ev *EditorView) showCodepageDialog() {
 					AppConfig.EditorAutodetectCodePage = false
 					AppConfig.EditorDefaultCodePage = cpID
 					SaveConfig()
+					saveCodepageOverride(ev.vfs, ev.filePath, cpID)
 					ev.ReloadWithCodepage(cpID)
 				}
 			}

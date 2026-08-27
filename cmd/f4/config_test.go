@@ -54,6 +54,10 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.ApplyCommandParallelism = 0
 	AppConfig.AutoSaveSettings = false
 	AppConfig.DisplayFullPathInTitle = true
+	AppConfig.EditorAutodetectCodePage = false
+	AppConfig.EditorDefaultCodePage = 1251
+	AppConfig.ViewerAutodetectCodePage = true
+	AppConfig.ViewerDefaultCodePage = 866
 
 	// 2. Save
 	SaveConfig()
@@ -81,6 +85,10 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.ApplyCommandParallelism = 1
 	AppConfig.AutoSaveSettings = true
 	AppConfig.DisplayFullPathInTitle = false
+	AppConfig.EditorAutodetectCodePage = true
+	AppConfig.EditorDefaultCodePage = 65001
+	AppConfig.ViewerAutodetectCodePage = false
+	AppConfig.ViewerDefaultCodePage = 65001
 
 	// 4. Load
 	LoadConfig()
@@ -157,6 +165,18 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.ApplyCommandParallelism != 0 {
 		t.Errorf("ApplyCommandParallelism = %d, want Unlimited (0)", AppConfig.ApplyCommandParallelism)
+	}
+	if AppConfig.EditorAutodetectCodePage {
+		t.Error("LoadConfig failed to restore disabled Editor autodetection")
+	}
+	if AppConfig.EditorDefaultCodePage != 1251 {
+		t.Errorf("EditorDefaultCodePage = %d, want 1251", AppConfig.EditorDefaultCodePage)
+	}
+	if !AppConfig.ViewerAutodetectCodePage {
+		t.Error("LoadConfig failed to restore enabled Viewer autodetection")
+	}
+	if AppConfig.ViewerDefaultCodePage != 866 {
+		t.Errorf("ViewerDefaultCodePage = %d, want 866", AppConfig.ViewerDefaultCodePage)
 	}
 }
 

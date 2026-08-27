@@ -22,6 +22,9 @@ type FileState struct {
 	ViewerOffset int64 `json:"vo"`
 	ViewerWrap   bool  `json:"vw"`
 	ViewerHex    bool  `json:"vh"`
+	// Codepage is an explicit per-file override shared by Editor and Viewer.
+	// Zero means that the view should use its configured auto-detection/default.
+	Codepage int `json:"cp,omitempty"`
 	// QuickViewCodepage is an explicit per-file override. Zero means that
 	// Quick View should use its configured auto-detection/default.
 	QuickViewCodepage int `json:"qcp,omitempty"`
@@ -175,6 +178,23 @@ func (fs *F4FileStateProvider) SaveQuickViewCodepage(path string, cp int) {
 func (fs *F4FileStateProvider) SaveQuickViewCodepageAsync(path string, cp int) {
 	fs.updateQuickViewCodepage(path, cp)
 	fs.saveAsync()
+}
+
+func (fs *F4FileStateProvider) SaveCodepage(path string, cp int) {
+	fs.updateCodepage(path, cp)
+	fs.save()
+}
+
+func (fs *F4FileStateProvider) SaveCodepageAsync(path string, cp int) {
+	fs.updateCodepage(path, cp)
+	fs.saveAsync()
+}
+
+func (fs *F4FileStateProvider) updateCodepage(path string, cp int) {
+	fs.mu.Lock()
+	state := fs.touch(path)
+	state.Codepage = cp
+	fs.mu.Unlock()
 }
 
 func (fs *F4FileStateProvider) updateQuickViewCodepage(path string, cp int) {

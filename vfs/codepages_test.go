@@ -94,6 +94,31 @@ func TestCodepages_DetectEncoding(t *testing.T) {
 	}
 }
 
+func TestCodepages_DetectEncoding_ExplicitLegacyCodepages(t *testing.T) {
+	// The host locale is intentionally irrelevant here. These are the
+	// encodings that used to be missed when Linux reported unrelated ANSI/OEM
+	// codepages (for example, C.UTF-8 -> Windows-1252/CP437).
+	for _, text := range []string{
+		"Привет, это достаточно длинный русский текст для определения кодировки.\n" +
+			"Вторая строка содержит числа 123 и знаки препинания.\n",
+		"Привет, это достаточно длинный русский текст для проверки кодировки.\n" +
+			"Вторая строка содержит числа 123 и знаки препинания.\n",
+	} {
+		for _, want := range []int{1251, 866, 20866} {
+			raw, err := EncodeBytes([]byte(text), want)
+			if err != nil {
+				t.Fatalf("encode codepage %d: %v", want, err)
+			}
+			if utf8.Valid(raw) {
+				t.Fatalf("codepage %d sample unexpectedly remained valid UTF-8", want)
+			}
+			if got := DetectEncoding(raw, true, 65001); got != want {
+				t.Errorf("DetectEncoding(%d) = %d for %q, want %d", want, got, text, want)
+			}
+		}
+	}
+}
+
 func TestCodepages_GetCodepageDecoderEncoder(t *testing.T) {
 	dec, enc := GetCodepageDecoderEncoder("65001")
 	if dec != nil || enc != nil {

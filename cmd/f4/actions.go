@@ -787,6 +787,9 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		header = header[:n]
 
 		cpID = vfs.DetectEncoding(header, AppConfig.EditorAutodetectCodePage, AppConfig.EditorDefaultCodePage)
+		if remembered, ok := rememberedCodepage(v, path); ok {
+			cpID = remembered
+		}
 
 		// Binary files open straight into hex; 65001 keeps them on the lazy
 		// chunked path instead of a full read, like the viewer.
@@ -1124,7 +1127,11 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 			return
 		}
 
-		viewer.Codepage = ev.Codepage
+		// NewViewerView normally follows the saved per-file override, but the
+		// editor can have a just-selected or conversion codepage that is not in
+		// file_states yet. Rebuild the viewer backend so the displayed bytes and
+		// the Codepage label cannot diverge.
+		viewer.ReloadWithCodepage(ev.Codepage)
 		viewer.HexMode = ev.HexMode
 		viewer.DecodeMode = ev.DecodeMode
 		viewer.DisasmMode = ev.DisasmMode
@@ -2318,7 +2325,7 @@ func actionCopyInPlace(pf *PanelsFrame) {
 func actionEditorSettings(pf *PanelsFrame) {
 	// Height sized so the 3×2 checkbox grid stacks tight (no blank
 	// rows between rows of the grid). See #298.
-	width, height := 78, 25
+	width, height := 78, 27
 	checkCaptions := []string{
 		Msg("EditorSettings.AutoIndent"),
 		Msg("EditorSettings.CursorBeyondEOL"),
@@ -2418,6 +2425,19 @@ func actionEditorSettings(pf *PanelsFrame) {
 	editTabSize.ClearSelection()
 	lblTabSize := vtui.NewLabel(0, 0, Msg("EditorSettings.TabSize"), editTabSize)
 
+	editorCodepageIDs, editorCodepageLabels := codepageSettingChoices()
+	comboEditorCodepage := vtui.NewComboBox(0, 0, 40, editorCodepageLabels)
+	comboEditorCodepage.DropdownOnly = true
+	editorCodepagePos := codepageChoiceIndex(editorCodepageIDs, AppConfig.EditorDefaultCodePage)
+	comboEditorCodepage.Menu.SetSelectPos(editorCodepagePos)
+	comboEditorCodepage.Edit.SetText(editorCodepageLabels[editorCodepagePos])
+	lblEditorCodepage := vtui.NewLabel(0, 0, Msg("EditorSettings.DefaultCodePage"), comboEditorCodepage)
+
+	chkEditorAutodetect := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutodetectCodePage"), false)
+	if AppConfig.EditorAutodetectCodePage {
+		chkEditorAutodetect.State = 1
+	}
+
 	chkAutoIndent := vtui.NewCheckbox(0, 0, Msg("EditorSettings.AutoIndent"), false)
 	if AppConfig.EditorAutoIndent {
 		chkAutoIndent.State = 1
@@ -2478,6 +2498,9 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(comboScheme)
 	dlg.AddItem(lblTabSize)
 	dlg.AddItem(editTabSize)
+	dlg.AddItem(chkEditorAutodetect)
+	dlg.AddItem(lblEditorCodepage)
+	dlg.AddItem(comboEditorCodepage)
 	dlg.AddItem(chkAutoIndent)
 	dlg.AddItem(chkCursorEOL)
 	dlg.AddItem(chkEditorConfig)
@@ -2514,6 +2537,11 @@ func actionEditorSettings(pf *PanelsFrame) {
 	rowTabSize.Add(lblTabSize, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowTabSize.Add(editTabSize, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(rowTabSize, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(chkEditorAutodetect, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	rowEditorCodepage := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowEditorCodepage.Add(lblEditorCodepage, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowEditorCodepage.Add(comboEditorCodepage, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowEditorCodepage, vtui.Margins{}, vtui.AlignFill)
 
 	if singleCheckColumn {
 		checkColumn := vtui.NewVBoxLayout(0, 0, width-4, checkRows)
@@ -2578,6 +2606,10 @@ func actionEditorSettings(pf *PanelsFrame) {
 		}
 		SetColorerScheme(AppConfig.EditorColorerScheme)
 		AppConfig.EditorExpandTabs = comboExpand.Menu.SelectPos
+		AppConfig.EditorAutodetectCodePage = chkEditorAutodetect.State == 1
+		if pos := comboEditorCodepage.Menu.SelectPos; pos >= 0 && pos < len(editorCodepageIDs) {
+			AppConfig.EditorDefaultCodePage = editorCodepageIDs[pos]
+		}
 		fmt.Sscanf(editTabSize.GetText(), "%d", &AppConfig.EditorTabSize)
 		if AppConfig.EditorTabSize <= 0 {
 			AppConfig.EditorTabSize = 8
