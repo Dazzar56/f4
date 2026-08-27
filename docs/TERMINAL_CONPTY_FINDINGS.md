@@ -383,3 +383,33 @@ faults in the runner rather than in f4:
 The lesson is worth more than the fix: a verdict that treats a conservative
 refusal as a failure will keep reporting a working mechanism as broken, and
 the log will look like evidence against the design.
+
+
+### 6.7. Field report: the scrollback still does not come back (open)
+
+Observed by the maintainer on 10.0.22000, in **both** classic conhost and
+Windows Terminal, with the oracle default in place:
+
+- rows that had scrolled off the screen are not restored on a widen, in either
+  host;
+- while the window is being dragged to a new size, something that looks like
+  the correct reflowed history **flashes** and is immediately replaced;
+- after shrinking a long way and expanding again, even the flash stops and the
+  freed area stays black.
+
+Not diagnosed, and deliberately not patched yet. What the shape of it suggests,
+as a starting hypothesis rather than a finding: the flash is ConPTY's own
+repaint landing (P7) and being overwritten by f4's next redraw, which composes
+the viewport from `GridHistory` — so the question is who wins at the seam, not
+whether the oracle stamped anything. The blackness after a large shrink is a
+separate symptom and points at rows being dropped rather than re-laid-out: a
+viewport refill that finds nothing to refill from (A6).
+
+**Next step, before any code changes.** One run with `F4_WIN_REFLOW=probe` and
+`--debug`, doing exactly this resize sequence, and then three questions of the
+log: whether `REFLOW_ORACLE:` stamped the rows that are failing to come back;
+whether f4's own repaint follows ConPTY's frame within the same resize, and in
+which order; and how many rows `GridHistory` holds before and after the large
+shrink. The answers decide which of the two symptoms is one bug and which is
+two. Do not change the matcher or the reflow path until that log exists — this
+is the mistake §6.5 already records once.
