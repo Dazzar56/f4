@@ -1523,6 +1523,18 @@ func significantWidthLocked(row []vtui.CharInfo, wrapped bool) int {
 // pair of coordinates. Recomputing (x, y) arithmetically is what makes a live
 // reflow desync from the shell; pinning the cursor to a position in the text
 // survives the relayout, and the shell redraws its prompt on SIGWINCH anyway.
+// rowsWithTextLocked counts viewport rows carrying anything, so a log line can
+// say whether a widen actually filled the screen or left it blank.
+func (tv *TerminalView) rowsWithTextLocked() int {
+	n := 0
+	for y := 0; y < tv.Height && y < len(tv.Lines); y++ {
+		if tv.rowHasText(y) {
+			n++
+		}
+	}
+	return n
+}
+
 func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 	// Rows of the viewport worth carrying: everything up to the last row with
 	// text, and never less than the cursor row.
@@ -1603,7 +1615,17 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 
 // reflowLocked re-wraps the primary screen to width w and height h.
 func (tv *TerminalView) reflowLocked(w, h int) {
+	// The one step with no log of its own, and the field runs kept arriving
+	// at it: the history is intact, the repaint no longer overwrites, and the
+	// rows still do not come back. These four numbers say which half is at
+	// fault -- whether unwrapLocked collected the history at all, and whether
+	// the re-wrap then put the rows on the screen or pushed them back out.
+	fromW, fromH, histBefore := tv.Width, tv.Height, len(tv.GridHistory)
 	lines := tv.unwrapLocked(h)
+	defer func() {
+		vtui.DebugLog("REFLOW_WRAP: %dx%d -> %dx%d; history %d -> %d; %d logical lines; viewport rows with text %d",
+			fromW, fromH, w, h, histBefore, len(tv.GridHistory), len(lines), tv.rowsWithTextLocked())
+	}()
 
 	blank := vtui.CharInfo{Char: ' ', Attributes: DefaultTermAttr}
 	padTo := func(row []vtui.CharInfo, n int) []vtui.CharInfo {
