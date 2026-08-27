@@ -272,7 +272,7 @@ path that can restore a title-based veto without enumerating a window.
 | 4 | Examine the screen at settle time, not a snapshot at the mark (§3.3) | shipped |
 | 5 | Self-erasing directory sync cleanup (section 3) | next |
 | 6 | Startup sync typed before the first prompt settles | with 5 |
-| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe complete on 19045 and 22000, including paired WT/conhost on 22000; 24H2/25H2 and in-f4 field validation remain |
+| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe complete on 19045 and 22000, including paired WT/conhost on 22000; 24H2/25H2 and in-f4 field validation remain. The in-tree `tools/conptyprobe` version 6 automates the host and f4-mode matrix for that run. |
 | 8 | OSC 0 title as the markless completion path for a batch that resets `PROMPT` | signal confirmed by the synchronized probe; implementation pending |
 
 Steps 2–4 have field evidence on 19045. The standalone Go probe has now also

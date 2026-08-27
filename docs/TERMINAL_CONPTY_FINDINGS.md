@@ -126,7 +126,7 @@ information.
 | 3 | Self-erasing directory sync cleanup | next — the sync is the remaining creep suspect |
 | 4 | Stop resizing ConPTY for the keybar (§2.2 option 2) | later, for flicker |
 | 5 | Windows reflow of the live grid | **dropped** — ConPTY does it; the flag is a no-op. The history's join information is recovered instead, behind `F4_WIN_REFLOW` (`TERMINAL_LEDGER.md` §3.3.1) |
-| 6 | Re-run the cursor-model probe on Windows 11 24H2/25H2 | pending; paired classic-conhost / WT runs on 22000 are complete, but only a newer ConPTY can reopen step 5 |
+| 6 | Re-run the cursor-model probe on Windows 11 24H2/25H2 | pending field run; paired classic-conhost / WT runs on 22000 are complete, but only a newer ConPTY can reopen step 5. The in-tree `tools/conptyprobe` now performs the forced-conhost, explicit-WT and default-terminal-handoff runs itself and needs no user-set variables. |
 
 
 ## 5. The second build: 10.0.22000.2538
