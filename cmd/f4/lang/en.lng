@@ -1178,7 +1178,7 @@ SQLite.SQLError=SQL error: %v
 SQLite.Rows=%d row(s)
 SQLite.StatementCompleted=Statement completed; %d row(s) affected
 
-Terminal.PTYAllocFailed=Could not start the local terminal on this system.
+Terminal.PTYAllocFailed=Could not start the local terminal: %v
 Terminal.NotAvailableInEnv=Terminal is not available in this environment.
 
 Bookmarks.Title= Bookmarks

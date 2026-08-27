@@ -51,9 +51,9 @@ func NewPTY() (*PTY, error) {
 	// f4 dies: the kernel sends no SIGHUP, the shell survives as an orphan
 	// holding its pts node, and enough restarts exhaust the pty limit until
 	// allocation fails.
-	masterFd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+	masterFd, err := openPTYMaster()
 	if err != nil {
-		return nil, ptyStep("open /dev/ptmx", err)
+		return nil, ptyStep("open PTY master", err)
 	}
 	// Put the master fd in non-blocking mode before wrapping it in
 	// os.NewFile; see pty_unix.go for why Close() cannot otherwise

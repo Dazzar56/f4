@@ -4,9 +4,28 @@ package main
 
 import (
 	"fmt"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
+
+// openPTYMaster uses FreeBSD's native posix_openpt(2) system call.  Opening
+// /dev/ptmx normally reaches the same kernel allocator, but the device node can
+// be hidden by a jail's devfs ruleset even though PTY allocation itself is
+// allowed.  SSH and tmux already have their PTYs by then; an f4 started inside
+// that session used to be the first program that visibly failed.
+func openPTYMaster() (int, error) {
+	fd, _, errno := syscall.Syscall(
+		syscall.SYS_POSIX_OPENPT,
+		uintptr(unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC),
+		0,
+		0,
+	)
+	if errno != 0 {
+		return -1, errno
+	}
+	return int(fd), nil
+}
 
 // ptySlaveName asks the master which pts it is paired with. FreeBSD numbers
 // its slaves and exposes them as /dev/pts/N, so the number is the whole

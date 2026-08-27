@@ -1,9 +1,18 @@
 package main
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestLocalPTYFailureMessageIncludesAllocationStep(t *testing.T) {
+	got := localPTYFailureMessage(errors.New("open PTY master: permission denied"))
+	if !strings.Contains(got, "open PTY master: permission denied") {
+		t.Fatalf("PTY failure message lost the actionable cause: %q", got)
+	}
+}
 
 // The local PTY is published by the goroutine initPTY starts, so every other
 // goroutine has to read the field under ptyMutex. Reading it directly is not

@@ -1167,7 +1167,7 @@ SQLite.SQLError=Ошибка SQL: %v
 SQLite.Rows=%d строк(и)
 SQLite.StatementCompleted=Запрос выполнен; затронуто строк: %d
 
-Terminal.PTYAllocFailed=Не удалось запустить локальный терминал в этой системе.
+Terminal.PTYAllocFailed=Не удалось запустить локальный терминал: %v
 Terminal.NotAvailableInEnv=Терминал недоступен в этом окружении.
 
 Bookmarks.Title= Закладки

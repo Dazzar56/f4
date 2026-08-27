@@ -9,6 +9,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func openPTYMaster() (int, error) {
+	return unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+}
+
 // ptySlaveName names the pts paired with a master opened on /dev/ptmx.
 //
 // This used to issue TIOCGPTN with a hardcoded 0x4004740f, copied from the

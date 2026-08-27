@@ -1086,7 +1086,7 @@ func (pf *PanelsFrame) initPTY() {
 			if err != nil {
 				vtui.DebugLog("PTY: Failed to allocate local PTY: %v", err)
 				logPTYDiagnostics()
-				pf.reportLocalPTYFailure()
+				pf.reportLocalPTYFailure(err)
 				return
 			}
 
@@ -1195,12 +1195,16 @@ func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
 // because none of them touch the PTY, so the only visible symptom was an
 // empty terminal and no error anywhere the person could see without
 // starting f4 with --debug.
-func (pf *PanelsFrame) reportLocalPTYFailure() {
+func localPTYFailureMessage(err error) string {
+	return fmt.Sprintf(Msg("Terminal.PTYAllocFailed"), err)
+}
+
+func (pf *PanelsFrame) reportLocalPTYFailure(err error) {
 	if vtui.FrameManager == nil || pf.shellMode == ShellModeSimpleInline || pf.shellMode == ShellModeSimpleCaptured {
 		return
 	}
 	vtui.FrameManager.PostTask(func() {
-		showToast(Msg("Terminal.PTYAllocFailed"), 5*time.Second)
+		showToast(localPTYFailureMessage(err), 8*time.Second)
 	})
 }
 
