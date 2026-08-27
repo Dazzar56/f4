@@ -291,3 +291,51 @@ written with confidence instead of regret.
 are outside this design: an upstream ConPTY that re-renders more than the
 viewport, or a row identity in the stream that ConPTY does not provide today.
 Not a fourth condition on an absorber.
+
+## 8. Roads not taken: the alternatives to §7, assessed
+
+Written in the last minutes of the session that closed §7, deliberately
+before any code, because §3 shows what happens when code comes first.
+
+**A. Bypass ConPTY for programs that do not need a console.** Rejected too
+fast the first time. `cmd`, `dir`, batch files and anything on the Win32
+console API need ConPTY. But WSL programs, PowerShell 7 with VT output, and
+the Go/Rust/Python utilities people actually run write bytes to stdout and
+have never heard of a Windows console. Started with **pipes** instead of a
+pseudoconsole, they hand f4 a plain VT stream, and f4 is their terminal the
+way xterm is `ls`'s: the wrap is f4's own, the history is f4's own, and
+there is no frame, no delta and no seam -- the whole of §7 does not apply.
+Two real problems, both tractable: without a console `isatty` is false, so
+colour and paging need `TERM`/`COLORTERM`/`FORCE_COLOR`, and WSL programs
+should be launched through `wsl.exe` where the Linux side gives them a real
+pty anyway; and the class of a program cannot be known in advance, only
+chosen by kind -- `wsl.exe`, PowerShell 7+, known VT tools by pipe; `cmd`,
+`.bat`, anything else by ConPTY. A shell that later spawns a VT program stays
+on ConPTY, and there reflow is what it is for everyone. **The most promising
+road, and cheap to try for `wsl.exe` alone.**
+
+**B. A console scraper of f4's own, instead of ConPTY.** What winpty was:
+read the buffer of a hidden console with `ReadConsoleOutput`, diff, render.
+It gives full control of synchronisation -- no deltas against a frame f4 did
+not show -- at the price of seeing only the buffer (no scrollback, but f4 is
+the scrollback), flattening the attributes of VT programs, missing alternate
+screen transitions, and polling. Real, and months of work, not a session.
+
+**C. A window of height zero: everything goes straight to history, render
+the last rows cut to the real width.** ConPTY cannot be that (minimum height
+one, and it repaints a buffer rather than emitting lines). But combined with
+B, or with ConPTY kept **very wide** (4000 columns, as the oracle did) and as
+tall as the window, every logical line arrives whole and ConPTY never wraps
+at all; f4 cuts to the window width itself, and the wrap question disappears
+because nobody but f4 ever answers it. Full-screen programs -- f4 inside f4,
+editors -- need a console of the real size, so they need detecting (the
+alternate screen, or the child's console mode) and a real-size console when
+they run. **Cheap to measure with one probe run before any code: does a
+4000-wide ConPTY of window height deliver lines whole and repaint sanely.**
+
+**D. Make the Terminal Log the answer.** It already holds logical lines, so
+reflow there is free, and it may be all users need from history under
+Windows. The honest minimum, and the fallback if A and C do not pay off.
+
+Order to try: C's probe run (one afternoon), then A for `wsl.exe` (the case
+where it is nearly free), then decide whether B is worth its months.
