@@ -36,3 +36,11 @@ func TestLineRowsHandlesRepaintCursorMoves(t *testing.T) {
 		t.Fatalf("repaint marker got %d rows", got)
 	}
 }
+
+func TestLineRowsIgnoresInteractiveCallEcho(t *testing.T) {
+	marker := "C_LINE_00_BEGINXXXX_END"
+	raw := []byte("D:\\probe>call \"C:\\Temp\\conptyc-1.bat\"\r\n" + marker + "\r\n")
+	if got := lineRows(raw, 80, marker); got != 1 {
+		t.Fatalf("batch output marker got %d rows with call echo", got)
+	}
+}

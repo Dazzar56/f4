@@ -7,11 +7,13 @@ This is the standalone measurement for alternative C in
 > question; let f4 cut the rows to the real terminal width.
 
 The probe creates its own hidden `cmd.exe` pseudoconsole. It prints two known
-ASCII lines, one longer than the detected terminal width and one almost 4000
-columns wide. It then changes only the ConPTY height four times and checks the
-raw VT stream with a small cursor model. It passes only when every marker is
-still present on exactly one virtual row after every repaint. It also prints a
-new marker after the resize sequence to prove that the session remains usable.
+ASCII lines from a temporary `@echo off` batch file, one longer than the
+detected terminal width and one almost 4000 columns wide. Using a batch file
+keeps the interactive command echo separate from the measured output. It then
+changes only the ConPTY height four times and checks the raw VT stream with a
+small cursor model. It passes only when every marker is still present on
+exactly one virtual row after every repaint. It also prints a new marker after
+the resize sequence to prove that the session remains usable.
 
 Nothing is written to the user's console buffer or profile. The probe owns and
 terminates its child `cmd.exe`.

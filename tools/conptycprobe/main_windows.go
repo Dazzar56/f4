@@ -236,6 +236,47 @@ func (p *ptySession) send(text string) error {
 
 func (p *ptySession) line(text string) error { return p.send(text + "\r") }
 
+func writeBatch(lines []lineCase, done string) (string, error) {
+	f, err := os.CreateTemp("", "conptyc-*.bat")
+	if err != nil {
+		return "", fmt.Errorf("create temporary batch: %w", err)
+	}
+	path := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("close temporary batch: %w", err)
+	}
+	var b strings.Builder
+	b.WriteString("@echo off\r\n")
+	for _, line := range lines {
+		b.WriteString("echo ")
+		b.WriteString(line.text)
+		b.WriteString("\r\n")
+	}
+	b.WriteString("echo ")
+	b.WriteString(done)
+	b.WriteString("\r\n")
+	if err := os.WriteFile(path, []byte(b.String()), 0600); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("write temporary batch: %w", err)
+	}
+	return path, nil
+}
+
+// runBatch avoids synchronizing on an interactive command's echo. The command
+// typed into ConPTY contains only the temporary path; the marker and the done
+// sentinel exist only inside the @echo off batch file.
+func (p *ptySession) runBatch(path, done string) ([]byte, error) {
+	if err := p.line("call \"" + path + "\""); err != nil {
+		return nil, err
+	}
+	data, err := p.readUntil(done, 10*time.Second)
+	if err == nil {
+		data = append(data, p.drain(350*time.Millisecond, 3*time.Second)...)
+	}
+	return data, err
+}
+
 func (p *ptySession) readUntil(needle string, timeout time.Duration) ([]byte, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
@@ -367,18 +408,6 @@ func main() {
 
 	startup := pty.drain(500*time.Millisecond, 5*time.Second)
 	logf("startup_bytes=%d raw=%s\n", len(startup), escapeBytes(startup, 4000))
-	if err := pty.line("echo C_READY"); err != nil {
-		logf("ERROR sending startup sentinel: %v\n", err)
-		_ = finishLog(*logPath, log.String())
-		os.Exit(1)
-	}
-	ready, err := pty.readUntil("C_READY", 10*time.Second)
-	logf("ready_bytes=%d raw=%s\n", len(ready), escapeBytes(ready, 4000))
-	if err != nil {
-		logf("ERROR: %v\n", err)
-		_ = finishLog(*logPath, log.String())
-		os.Exit(1)
-	}
 
 	if err := pty.line("cls"); err != nil {
 		logf("ERROR clearing the ConPTY screen: %v\n", err)
@@ -402,23 +431,26 @@ func main() {
 	allPassed := true
 
 	logf("lines=%d first_length=%d second_length=%d (wide width=%d)\n", len(lines), len(lines[0].text), len(lines[1].text), *wideWidth)
-	for _, c := range lines {
-		if err := pty.line("echo " + c.text); err != nil {
-			logf("ERROR sending %s: %v\n", c.name, err)
-			allPassed = false
-			continue
-		}
-		suffix := c.text[len(c.text)-len(c.name)-4:]
-		chunk, readErr := pty.readUntil(suffix, 10*time.Second)
-		obs, rows := checkLine(chunk, *wideWidth, c)
-		passed := readErr == nil && obs.whole && !obs.split && rows == 1
-		if !passed {
+	initialBatch, err := writeBatch(lines, "C_BATCH_DONE_00")
+	if err != nil {
+		logf("ERROR preparing initial batch: %v\n", err)
+		allPassed = false
+	} else {
+		defer os.Remove(initialBatch)
+		output, readErr := pty.runBatch(initialBatch, "C_BATCH_DONE_00")
+		if readErr != nil {
 			allPassed = false
 		}
-		logf("initial.%s bytes=%d read_error=%v whole=%v split=%v rows=%d pass=%v raw=%s\n",
-			c.name, len(chunk), readErr, obs.whole, obs.split, rows, passed, escapeBytes(chunk, 8000))
+		for _, c := range lines {
+			obs, rows := checkLine(output, *wideWidth, c)
+			passed := readErr == nil && obs.whole && !obs.split && rows == 1
+			if !passed {
+				allPassed = false
+			}
+			logf("initial.%s whole=%v split=%v rows=%d pass=%v\n", c.name, obs.whole, obs.split, rows, passed)
+		}
+		logf("initial.output bytes=%d read_error=%v raw=%s\n", len(output), readErr, escapeBytes(output, 16000))
 	}
-	_ = pty.drain(350*time.Millisecond, 3*time.Second)
 
 	resizeHeights := []int16{int16(*height - 1), int16(*height), int16(*height + 1), int16(*height)}
 	for i, h := range resizeHeights {
@@ -445,19 +477,20 @@ func main() {
 	}
 
 	post := markerLine(2, firstLength)
-	if err := pty.line("echo " + post.text); err != nil {
-		logf("post_resize.ERROR=%v\n", err)
+	postBatch, err := writeBatch([]lineCase{post}, "C_BATCH_DONE_01")
+	if err != nil {
+		logf("post_resize.ERROR preparing batch=%v\n", err)
 		allPassed = false
 	} else {
-		suffix := post.text[len(post.text)-len(post.name)-4:]
-		chunk, readErr := pty.readUntil(suffix, 10*time.Second)
-		obs, rows := checkLine(chunk, *wideWidth, post)
+		defer os.Remove(postBatch)
+		output, readErr := pty.runBatch(postBatch, "C_BATCH_DONE_01")
+		obs, rows := checkLine(output, *wideWidth, post)
 		passed := readErr == nil && obs.whole && !obs.split && rows == 1
 		if !passed {
 			allPassed = false
 		}
 		logf("post_resize.%s bytes=%d read_error=%v whole=%v split=%v rows=%d pass=%v raw=%s\n",
-			post.name, len(chunk), readErr, obs.whole, obs.split, rows, passed, escapeBytes(chunk, 8000))
+			post.name, len(output), readErr, obs.whole, obs.split, rows, passed, escapeBytes(output, 8000))
 	}
 
 	if allPassed {
