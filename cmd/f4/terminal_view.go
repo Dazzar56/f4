@@ -1373,6 +1373,15 @@ type reflowStats struct {
 	blanksTrimmed   int // blank cells cut from wrapped rows: A5 says these are content
 }
 
+// OnAltScreen reports whether the alternate screen is active, under the
+// view's mutex: the read loop asks, and the parser on the UI goroutine
+// writes it.
+func (tv *TerminalView) OnAltScreen() bool {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return tv.UseAltScreen
+}
+
 // Size reports the grid's size under the view's mutex. The read loop needs
 // it for log lines and must not hold the mutex across parsing, and Resize on
 // the UI goroutine writes the fields it reads: an unlocked read there is a

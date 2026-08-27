@@ -935,3 +935,45 @@ line is for.
 mocks in one run, the fix was written against the failing test, and the
 strongest version of the scenario was added before the field was asked to
 confirm anything.
+
+
+### 6.19. The shape rule needs a second half: only when a repaint is owed
+
+6.18 recognised a resize repaint by its shape -- hide, optional size report,
+then home. That is necessary and not sufficient, because a program that
+clears the screen and repaints from home looks identical, and one of those
+programs is **f4 running inside f4's own terminal**. Dropping its first frame
+after every resize is not acceptable, and "full-screen programs are not
+supported here" was wrong: they are.
+
+Two conditions, both cheap:
+
+- **ConPTY must owe a repaint.** One is owed per `ResizePseudoConsole` call
+  and paid by the next matching frame. This is not a time window -- a repaint
+  that trails its resize by a second still arrives owed, which is what 6.18
+  needed -- it is a count. A program repainting from home with nothing owed
+  lands on the display, as it must. The count is clamped at 4 so that a build
+  which ever answered a resize with silence could misread at most one later
+  frame, once.
+- **Never on the alternate screen.** A full-screen program takes it, f4 does
+  not re-wrap there at all, and ConPTY's repaint is the only thing keeping
+  that screen right. `TestNestedFullScreenProgramKeepsItsFrames` drives an
+  inner f4 through a resize; `TestClsStyleRepaintIsNotDroppedWithoutAResize`
+  covers the main-screen case.
+
+### 6.20. What an f4 log now says about the reflow by itself
+
+The probe answers what a *build* does; a user's `--debug` log has to answer
+what *their* session did, without anyone reading the byte stream. Three lines
+do that now, and they are budgeted -- a drag produces hundreds of events and
+a handful of lines:
+
+- `REFLOW: F4_WIN_REFLOW=... hint_wrap=... rewrap_on_resize=... absorb_repaint=... history_bound=...` at startup: the mode and every switch it set, including whether it came from the config or the environment.
+- `REFLOW_ABSORB: absorbed resize repaint #N (...); M resizes seen, K repaints still owed` for the first three of a burst and every fiftieth after: enough to see the mechanism working, never enough to bury the log.
+- `REFLOW_SUMMARY (why): mode=...; N child resizes, M repaints absorbed, K owed; P oracle passes; history R rows, C chars` on shutdown and every fiftieth child resize, so a log truncated mid-drag still carries one.
+
+Read together they answer the questions each field round trip cost: was the
+feature even on, did ConPTY get resized, were its repaints recognised, did
+the oracle ever run, and is the history still there. `REFLOW_WRAP`,
+`REFLOW_RESIZE`, `REFLOW_FRAME` and `REFLOW_SHOW` remain for the cases that
+need the detail, and still fire only when something is unusual (§6.17).

@@ -325,8 +325,10 @@ type PanelsFrame struct {
 	lastPtyPath string
 	// childPtyW/H is the size ConPTY was last told; see handleResize.
 	childPtyW, childPtyH int
-	lastPtyVFS           vfs.VFS
-	closed               bool
+	// childResizeCount paces the periodic REFLOW_SUMMARY line.
+	childResizeCount int
+	lastPtyVFS       vfs.VFS
+	closed           bool
 
 	shellMode         ShellMode
 	hostConsoleActive bool
@@ -1238,6 +1240,7 @@ func workspaceContainsPanelsFrame(screen *vtui.AppScreen, target *PanelsFrame) b
 }
 
 func (pf *PanelsFrame) Close() {
+	pf.reflowSessionSummary("session end")
 	if pf.terminalRedraw != nil {
 		pf.terminalRedraw.stop()
 	}
@@ -1366,6 +1369,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			childChanged := pf.childPtyW != w || pf.childPtyH != termH
 			if sizeChanged || childChanged {
 				pf.reflowOracle.absorbResizeRepaint()
+				if childChanged && pf.childResizeCount%50 == 49 {
+					pf.reflowSessionSummary("during a drag")
+				}
+				if childChanged {
+					pf.childResizeCount++
+				}
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
@@ -1425,6 +1434,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			childChanged := pf.childPtyW != w || pf.childPtyH != termH
 			if sizeChanged || childChanged {
 				pf.reflowOracle.absorbResizeRepaint()
+				if childChanged && pf.childResizeCount%50 == 49 {
+					pf.reflowSessionSummary("during a drag")
+				}
+				if childChanged {
+					pf.childResizeCount++
+				}
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
@@ -5308,6 +5323,32 @@ func isEnvironmentVariableChar(c byte) bool {
 // lands rows at the wrong width and blanks the rest, and looks exactly like
 // lost history. The XTWINOPS report (ledger P14) is the only thing that says
 // which size a frame belongs to, and until now nothing read it.
+// reflowSessionSummary is what a bug report needs from an f4 log without
+// anyone reading the stream: how the mode was configured, how much ConPTY
+// was resized, how many repaints were recognised and dropped, and whether
+// any reached the display. Written on shutdown, and after a burst of resizes
+// so a log truncated at the wrong moment still has one.
+func (pf *PanelsFrame) reflowSessionSummary(why string) {
+	o := pf.reflowOracle
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	resizes, absorbed, owed, passes := o.resizesSeen, o.absorbedFrames, o.pendingRepaints, o.passesRun
+	mode := o.mode
+	o.mu.Unlock()
+	tv := pf.termView
+	histRows, chars := 0, 0
+	if tv != nil {
+		tv.mu.Lock()
+		histRows = len(tv.GridHistory)
+		chars = tv.historyCellsLocked() + tv.viewportCellsLocked()
+		tv.mu.Unlock()
+	}
+	vtui.DebugLog("REFLOW_SUMMARY (%s): mode=%s; %d child resizes, %d repaints absorbed, %d owed; %d oracle passes; history %d rows, %d chars",
+		why, mode, resizes, absorbed, owed, passes, histRows, chars)
+}
+
 func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 	i := bytes.Index(data, []byte("\x1b[8;"))
 	if i < 0 {

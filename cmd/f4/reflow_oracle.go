@@ -146,7 +146,11 @@ type reflowOracle struct {
 	absorbing      *AnsiParser
 	absorbedFrames int
 	resizesSeen    int
-	lastByte       time.Time
+	// passesRun counts oracle passes started, for the session summary.
+	passesRun int
+	// pendingRepaints is how many resize repaints ConPTY still owes us.
+	pendingRepaints int
+	lastByte        time.Time
 }
 
 func newReflowOracle(pf *PanelsFrame, mode winReflowMode) *reflowOracle {
@@ -185,6 +189,7 @@ func (o *reflowOracle) maybeRun(pty PtyBackend, cols, rows int) {
 		return
 	}
 	o.running = true
+	o.passesRun++
 	o.mu.Unlock()
 	go o.run(pty, cols, rows)
 }
@@ -490,8 +495,33 @@ func (o *reflowOracle) absorbResizeRepaint() {
 	}
 	o.mu.Lock()
 	o.resizesSeen++
+	// One repaint is now owed. ConPTY sends exactly one per
+	// ResizePseudoConsole call, and this is called only when that call is
+	// actually made, so the count is what says a home-repaint is ConPTY
+	// answering f4 rather than a program redrawing its own screen. It is not
+	// a time window: a repaint that trails its resize by a second still
+	// arrives owed. The clamp bounds the damage if a build ever sends no
+	// repaint for a resize -- at worst one later frame is misread, once.
+	if o.pendingRepaints < maxPendingRepaints {
+		o.pendingRepaints++
+	}
 	o.mu.Unlock()
 }
+
+// reportAbsorbLocked writes one line per absorbed repaint, and only for the
+// first few of a burst plus a running total after that. A drag absorbs
+// hundreds; a log that carries every one buries the lines that matter, and
+// the reader of these logs is usually a model with a budget.
+func (o *reflowOracle) reportAbsorbLocked(n int, whole bool) {
+	if o.absorbedFrames <= 3 || o.absorbedFrames%50 == 0 {
+		oracleReport("absorbed resize repaint #%d (%d bytes, whole=%v); %d resizes seen, %d repaints still owed",
+			o.absorbedFrames, n, whole, o.resizesSeen, o.pendingRepaints)
+	}
+}
+
+// maxPendingRepaints bounds the owed-repaint count; a drag can outrun the
+// stream briefly, but nothing legitimate owes more than a few.
+const maxPendingRepaints = 4
 
 // frameOpen and frameClose bracket every ConPTY write batch (P7); sizeReport
 // is what only a resize repaint carries (P14).
@@ -565,9 +595,19 @@ func (o *reflowOracle) route(data []byte) *AnsiParser {
 		}
 		return p
 	}
-	if o.mode != winReflowOracle || !isResizeRepaint(data) {
+	if o.mode != winReflowOracle || o.pendingRepaints == 0 || !isResizeRepaint(data) {
 		return nil
 	}
+	// Never on the alternate screen. A full-screen program -- including f4
+	// itself running inside f4's terminal -- switches to it and repaints
+	// from home exactly like a resize repaint. There f4 does not re-wrap at
+	// all, so ConPTY's repaint is the only thing keeping the screen right
+	// and must land. Without this check a nested f4 would lose its first
+	// frame after every resize.
+	if tv := o.pf.termView; tv == nil || tv.OnAltScreen() {
+		return nil
+	}
+	o.pendingRepaints--
 	// The frame is dropped, so nothing needs to be laid out and the
 	// scratch view can be any size: reading the display's size here raced
 	// with Resize writing it (the display's mutex is not held on this path,
@@ -579,10 +619,12 @@ func (o *reflowOracle) route(data []byte) *AnsiParser {
 		// on the read loop: data is the loop's reusable buffer, and handing
 		// it to another goroutine raced with the next Read overwriting it.
 		o.absorbedFrames++
+		o.reportAbsorbLocked(len(data), true)
 		p.Process(data)
 		scratch.Close()
 		return discardParser
 	}
+	o.reportAbsorbLocked(len(data), false)
 	o.absorbing = p
 	return p
 }

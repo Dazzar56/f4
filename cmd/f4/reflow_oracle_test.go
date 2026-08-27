@@ -844,6 +844,7 @@ func TestAbsorbTakesEveryFrameWithASizeReport(t *testing.T) {
 	o := newReflowOracle(pf, winReflowOracle)
 	frame := []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h")
 	for i := 0; i < 3; i++ {
+		o.absorbResizeRepaint() // ConPTY owes one repaint per resize
 		sink := o.route(frame)
 		if sink == nil {
 			t.Fatalf("frame %d with a size report must be absorbed", i)
@@ -856,6 +857,7 @@ func TestAbsorbTakesEveryFrameWithASizeReport(t *testing.T) {
 		t.Fatalf("a frame reached the display: %q", got)
 	}
 	// A stale one -- declaring a size the view no longer has -- too.
+	o.absorbResizeRepaint()
 	if o.route([]byte("\x1b[?25l\x1b[8;20;60t\x1b[H\x1b[K\x1b[?25h")) == nil {
 		t.Fatal("a stale resize repaint must be absorbed as well")
 	}
@@ -888,6 +890,7 @@ func TestAbsorbNeedsTheReportRightAfterTheCursorHide(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
 	if o.route([]byte("\x1b[?25l\x1b[5;1Hsee \x1b[8;3;4t later\x1b[?25h")) != nil {
 		t.Fatal("a size report not directly after the cursor hide is not a frame")
 	}
@@ -898,6 +901,7 @@ func TestAbsorbFollowsASplitFrameToItsClose(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
 	if o.route([]byte("\x1b[?25l\x1b[8;24;80t\x1b[Hfirst half")) == nil {
 		t.Fatal("the opening chunk must be taken")
 	}
@@ -916,6 +920,7 @@ func TestAbsorbNeverStealsFromAPass(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
 	pass := NewAnsiParser(NewTerminalView(80, 24), nil)
 	o.mu.Lock()
 	o.running, o.sink = true, pass

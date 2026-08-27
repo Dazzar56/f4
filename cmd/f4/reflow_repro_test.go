@@ -201,3 +201,61 @@ func TestLateResizeRepaintIsStillAbsorbed(t *testing.T) {
 		})
 	}
 }
+
+// A full-screen program repaints from home exactly like a resize repaint.
+// f4 running inside f4's own terminal is the case that must work: it switches
+// to the alternate screen, where f4 does not re-wrap at all, so ConPTY's
+// repaint is the only thing keeping that screen right.
+func TestNestedFullScreenProgramKeepsItsFrames(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 80, 20)
+	h.pty.prompt("C:\\>f4")
+	h.settle(20 * time.Millisecond)
+
+	// The inner program takes the alternate screen and draws.
+	h.pty.out <- []byte("\x1b[?1049h")
+	h.settle(30 * time.Millisecond)
+	h.pf.ResizeConsole(76, 20) // a resize while it is up
+	h.settle(30 * time.Millisecond)
+
+	frame := "\x1b[?25l\x1b[H\x1b[7m nested f4 panel \x1b[0m\x1b[K\r\ninner content row\x1b[K\x1b[?25h"
+	h.pty.out <- []byte(frame)
+	h.settle(150 * time.Millisecond)
+
+	var joined string
+	h.pf.termView.mu.Lock()
+	rows := h.pf.termView.Lines
+	if h.pf.termView.UseAltScreen {
+		rows = h.pf.termView.AltLines
+	}
+	for y := 0; y < h.pf.termView.Height && y < len(rows); y++ {
+		joined += reflowRowText(rows[y])
+	}
+	h.pf.termView.mu.Unlock()
+	if !strings.Contains(joined, "nested f4 panel") || !strings.Contains(joined, "inner content row") {
+		t.Fatalf("a nested full-screen program lost its frame: %q", joined)
+	}
+	h.pty.out <- []byte("\x1b[?1049l")
+	h.settle(30 * time.Millisecond)
+}
+
+// A program that clears the screen and repaints from home on the *main*
+// screen (cls, a pager) looks like a resize repaint too. It is only dropped
+// when ConPTY actually owes f4 a repaint, so an unprompted one lands.
+func TestClsStyleRepaintIsNotDroppedWithoutAResize(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 80, 20)
+	h.pty.prompt("C:\\>cls")
+	h.settle(30 * time.Millisecond)
+
+	h.pty.out <- []byte("\x1b[?25l\x1b[H\x1b[2Jfresh screen after cls\x1b[K\x1b[?25h")
+	h.settle(150 * time.Millisecond)
+
+	var joined string
+	h.pf.termView.mu.Lock()
+	for y := 0; y < h.pf.termView.Height; y++ {
+		joined += reflowRowText(h.pf.termView.Lines[y])
+	}
+	h.pf.termView.mu.Unlock()
+	if !strings.Contains(joined, "fresh screen after cls") {
+		t.Fatalf("a repaint nobody asked for was dropped: %q", joined)
+	}
+}
