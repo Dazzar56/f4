@@ -259,3 +259,124 @@ func TestClsStyleRepaintIsNotDroppedWithoutAResize(t *testing.T) {
 		t.Fatalf("a repaint nobody asked for was dropped: %q", joined)
 	}
 }
+
+// ConPTY does not promise one frame per read. A single read can carry the
+// tail of one thing and the head of the next, and the absorber must take the
+// repaint and nothing around it. Each of these lost output in review before
+// any field run could.
+func TestAbsorbTakesOnlyTheRepaintOutOfACoalescedRead(t *testing.T) {
+	repaint := "\x1b[?25l\x1b[8;24;80t\x1b[Hrepaint row\x1b[K\x1b[?25h"
+	cases := map[string]string{
+		"output after the frame":  repaint + "\x1b[?25l\x1b[5;1HFile_after.dll\x1b[K\x1b[?25h",
+		"output before the frame": "\x1b[?25l\x1b[5;1HFile_before.dll\x1b[K\x1b[?25h" + repaint,
+		"output on both sides":    "\x1b[?25l\x1b[5;1HFile_before.dll\x1b[K\x1b[?25h" + repaint + "\x1b[?25l\x1b[6;1HFile_after.dll\x1b[K\x1b[?25h",
+	}
+	for name, chunk := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newReflowHarness(t, winReflowOracle, 80, 24)
+			h.pty.prompt("C:\\>dir")
+			h.settle(20 * time.Millisecond)
+			h.pf.reflowOracle.absorbResizeRepaint() // one repaint owed
+			h.pty.out <- []byte(chunk)
+			h.settle(150 * time.Millisecond)
+			joined := strings.Join(h.logicalLines(), "\n")
+			for _, want := range []string{"File_before.dll", "File_after.dll"} {
+				if strings.Contains(chunk, want) && !strings.Contains(joined, want) {
+					t.Fatalf("%s: output around the repaint was eaten: %q missing", name, want)
+				}
+			}
+			if strings.Contains(joined, "repaint row") {
+				t.Fatalf("%s: the repaint itself reached the display", name)
+			}
+		})
+	}
+}
+
+// A repaint whose close never arrives must not hold the stream forever.
+// Nothing in ConPTY's measured behaviour omits the close, which is exactly
+// why this is guarded: the cost of being wrong is every byte after it.
+func TestAbsorbGivesUpOnAnUnclosedFrame(t *testing.T) {
+	old := maxAbsorbBytes
+	maxAbsorbBytes = 64 << 10 // the guard, not a megabyte of test traffic
+	t.Cleanup(func() { maxAbsorbBytes = old })
+	h := newReflowHarness(t, winReflowOracle, 80, 24)
+	h.pty.prompt("C:\\>dir")
+	h.settle(20 * time.Millisecond)
+	h.pf.reflowOracle.absorbResizeRepaint()
+	h.pty.out <- []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrepaint that never closes\x1b[K")
+	h.settle(30 * time.Millisecond)
+	// Past the give-up guard (maxAbsorbBytes), with no close in sight.
+	junk := strings.Repeat("x", 4096)
+	for sent := 0; sent <= maxAbsorbBytes; sent += len(junk) {
+		h.pty.out <- []byte(junk)
+		h.settle(2 * time.Millisecond)
+	}
+	h.settle(150 * time.Millisecond)
+	h.pty.out <- []byte("\x1b[?25l\x1b[3;1HFile_survivor.dll\x1b[K\x1b[?25h")
+	h.settle(200 * time.Millisecond)
+	if !strings.Contains(strings.Join(h.logicalLines(), "\n"), "File_survivor.dll") {
+		t.Fatal("an unclosed frame swallowed the stream for good")
+	}
+}
+
+// A burst of resizes answered late by a slow ConPTY: every repaint is still
+// owed and still dropped, however many. A low clamp on the owed count brought
+// bug 1 back under exactly this load.
+func TestBurstOfLateRepaintsIsFullyAbsorbed(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 100, 25)
+	h.pty.setFrameDelay(150 * time.Millisecond)
+	var lines []string
+	for i := 0; i < 150; i++ {
+		lines = append(lines, fmt.Sprintf("line %03d %s", i, strings.Repeat("x", 80)))
+	}
+	h.pty.print(lines...)
+	h.settle(100 * time.Millisecond)
+	before := h.visibleText()
+	for w := 99; w >= 85; w-- { // fifteen resizes before the first repaint lands
+		h.pf.ResizeConsole(w, 25)
+	}
+	h.settle(600 * time.Millisecond)
+	if after := h.visibleText(); after < before {
+		t.Fatalf("late repaints landed: %d -> %d characters", before, after)
+	}
+}
+
+// Output split mid-line across reads, which is how the photo's damage looked
+// (a filename without its size column): no chunk boundary may cost a byte.
+func TestResizeDuringMidLineSplitOutput(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 80, 20)
+	h.pty.prompt("C:\\>dir")
+	h.settle(20 * time.Millisecond)
+	for i := 0; i < 30; i++ {
+		// Each line is two reads: the date column, then a resize on one of
+		// them, then the size and the name. The row advances like a real
+		// listing does -- appended under the last, scrolling when full --
+		// rather than overwriting earlier rows, which an earlier version
+		// of this test did and blamed on the code.
+		h.pty.mu.Lock()
+		row := h.pty.viewRowsLocked() + 1
+		if row > 20 {
+			row = 20
+		}
+		h.pty.lines = append(h.pty.lines, fmt.Sprintf("04.04.2024  16:15      %8d  File_%03d_ZZ.dll", i*1000, i))
+		h.pty.trimToHeightLocked()
+		h.pty.mu.Unlock()
+		if row == 20 {
+			h.pty.out <- []byte("\x1b[20;1H\r\n") // scroll one row, as ConPTY would
+		}
+		h.pty.out <- []byte(fmt.Sprintf("\x1b[?25l\x1b[%d;1H04.04.2024  16:15      ", row))
+		if i == 12 {
+			h.pf.ResizeConsole(74, 20)
+		}
+		h.pty.out <- []byte(fmt.Sprintf("%8d  File_%03d_ZZ.dll\x1b[K\x1b[?25h", i*1000, i))
+		h.settle(4 * time.Millisecond)
+	}
+	h.settle(200 * time.Millisecond)
+	joined := strings.Join(h.logicalLines(), "\n")
+	for i := 0; i < 30; i++ {
+		name := fmt.Sprintf("File_%03d_ZZ.dll", i)
+		if !strings.Contains(joined, name) || !strings.Contains(joined, "16:15") {
+			t.Fatalf("mid-line split output lost around a resize: %q", name)
+		}
+	}
+}

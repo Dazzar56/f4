@@ -1164,15 +1164,26 @@ func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
 	pf.ptyMutex.Unlock()
 
 	pf.noteConptyFrame(data)
-	if sink := pf.reflowOracle.route(data); sink != nil {
-		// Either an oracle pass owns the stream, or this chunk is the
-		// repaint ConPTY sent for a resize f4 has already laid out itself.
-		// Neither is for the display.
-		if sink != discardParser {
-			sink.Process(data)
+	// A read is not a message: route classifies the front of it and is
+	// asked again about the rest, so a repaint coalesced with output on
+	// either side costs the display none of the output.
+	for len(data) > 0 {
+		step := pf.reflowOracle.route(data)
+		if step.n <= 0 || step.n > len(data) {
+			step.n = len(data)
 		}
-		return
+		if step.sink == nil {
+			pf.displayLocalOutput(shouldProcess, data[:step.n])
+		} else if step.sink != discardParser {
+			step.sink.Process(data[:step.n])
+		}
+		data = data[step.n:]
 	}
+}
+
+// displayLocalOutput is what consumeLocalOutput does with bytes meant for
+// the display; split out so route can hand them over a piece at a time.
+func (pf *PanelsFrame) displayLocalOutput(shouldProcess bool, data []byte) {
 	if !shouldProcess {
 		return
 	}
@@ -1353,7 +1364,6 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// (docs/TERMINAL_CONPTY_FINDINGS.md 6.15). The height-only path
 			// refills from GridHistory itself, so f4's viewport is
 			// authoritative there too.
-			sizeChanged := pf.termView.Width != w || pf.termView.Height != termH
 			pf.termView.Resize(w, termH)
 			// The size ConPTY was last told is tracked separately from the
 			// view's, because the two diverge at the moment that matters: a
@@ -1367,14 +1377,15 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// nothing changed removes the frame at its source; absorbing on
 			// every call that does reach ConPTY covers the rest.
 			childChanged := pf.childPtyW != w || pf.childPtyH != termH
-			if sizeChanged || childChanged {
+			// One repaint is owed per call that actually reaches ConPTY.
+			// Arming on a view-only change left a debt nothing would pay,
+			// and the next home-repaint -- a cls -- would have paid it.
+			if childChanged {
 				pf.reflowOracle.absorbResizeRepaint()
-				if childChanged && pf.childResizeCount%50 == 49 {
+				if pf.childResizeCount%50 == 49 {
 					pf.reflowSessionSummary("during a drag")
 				}
-				if childChanged {
-					pf.childResizeCount++
-				}
+				pf.childResizeCount++
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
@@ -1397,7 +1408,7 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		}
 	} else {
 		// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
-		if pf.showKeyBar && !pf.termView.UseAltScreen && !pf.isPtyBusy() {
+		if pf.showKeyBar && !pf.termView.OnAltScreen() && !pf.isPtyBusy() {
 			termY2 = h - 2
 		}
 		termH := termY2 - contentY1 + 1
@@ -1418,7 +1429,6 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// (docs/TERMINAL_CONPTY_FINDINGS.md 6.15). The height-only path
 			// refills from GridHistory itself, so f4's viewport is
 			// authoritative there too.
-			sizeChanged := pf.termView.Width != w || pf.termView.Height != termH
 			pf.termView.Resize(w, termH)
 			// The size ConPTY was last told is tracked separately from the
 			// view's, because the two diverge at the moment that matters: a
@@ -1432,14 +1442,15 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// nothing changed removes the frame at its source; absorbing on
 			// every call that does reach ConPTY covers the rest.
 			childChanged := pf.childPtyW != w || pf.childPtyH != termH
-			if sizeChanged || childChanged {
+			// One repaint is owed per call that actually reaches ConPTY.
+			// Arming on a view-only change left a debt nothing would pay,
+			// and the next home-repaint -- a cls -- would have paid it.
+			if childChanged {
 				pf.reflowOracle.absorbResizeRepaint()
-				if childChanged && pf.childResizeCount%50 == 49 {
+				if pf.childResizeCount%50 == 49 {
 					pf.reflowSessionSummary("during a drag")
 				}
-				if childChanged {
-					pf.childResizeCount++
-				}
+				pf.childResizeCount++
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
@@ -1661,8 +1672,8 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	isBusy := pf.isPtyBusy()
 
 	// 1. Dynamic Layout Adjustment
-	if pf.termView.UseAltScreen != pf.lastAlt || isBusy != pf.lastBusy || pf.showPanels != pf.lastShowPanels {
-		pf.lastAlt = pf.termView.UseAltScreen
+	if pf.termView.OnAltScreen() != pf.lastAlt || isBusy != pf.lastBusy || pf.showPanels != pf.lastShowPanels {
+		pf.lastAlt = pf.termView.OnAltScreen()
 		pf.lastBusy = isBusy
 		pf.lastShowPanels = pf.showPanels
 		pf.ResizeConsole(pf.lastW, pf.lastH)
@@ -1779,7 +1790,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		isFastFind = true
 	}
 
-	if (!pf.showPanels && (pf.termView.UseAltScreen || isBusy)) || topType == vtui.TypeUser+2 {
+	if (!pf.showPanels && (pf.termView.OnAltScreen() || isBusy)) || topType == vtui.TypeUser+2 {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		isChatFocused := false
@@ -1801,7 +1812,7 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	// in the terminal is running or using the alternate screen buffer.
 	isTop := vtui.FrameManager.GetTopFrameType() == vtui.TypeUser+1
 	if isTop { // Only the top-most user frame controls the keybar
-		if pf.showKeyBar && !pf.termView.UseAltScreen && (pf.showPanels || !isBusy) {
+		if pf.showKeyBar && !pf.termView.OnAltScreen() && (pf.showPanels || !isBusy) {
 			vtui.FrameManager.KeyBar = pf.keyBar
 		} else {
 			vtui.FrameManager.KeyBar = nil
@@ -1994,7 +2005,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Raw input mode check at the very top. If an interactive AltScreen app is active (e.g. mc, htop),
 	// we forward all non-global keys to PTY.
-	if !pf.showPanels && pf.termView.UseAltScreen {
+	if !pf.showPanels && pf.termView.OnAltScreen() {
 		if e.KeyDown || pf.termView.Win32InputMode || pf.termView.KittyFlags != 0 {
 			active := pf.getActivePTY()
 			if active != nil {
@@ -2834,7 +2845,7 @@ func (pf *PanelsFrame) hiddenConsoleCommandLineOwnsInput() bool {
 	case ShellModeSimpleInline:
 		return pf.consoleStyle() == ConsoleViewFar && pf.consoleViewActive()
 	default:
-		return pf.termView != nil && !pf.termView.UseAltScreen && !pf.isPtyBusy()
+		return pf.termView != nil && !pf.termView.OnAltScreen() && !pf.isPtyBusy()
 	}
 }
 

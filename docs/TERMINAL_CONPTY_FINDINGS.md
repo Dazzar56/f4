@@ -904,9 +904,11 @@ after a resize the absorber took real output -- bug 2. And a repaint under
 load trails its resize by more than any fixed window, so it arrived unarmed
 and landed on the display, leaving the few rows ConPTY still held -- bug 1.
 
-**What a resize repaint has that output does not**, measured on both builds
-(`TestShowShapes` in the session; the probe now records it as
-`repaint.*.starts_at_home`): after the hide, and after the size report where
+**What a resize repaint has that output does not.** Measured on 22000 from
+the field logs (every one of 130 frames opens `ESC[?25l ESC[8;..t ESC[H`);
+on 19045 it is **inferred from the probe's P7 frames and modelled in the
+fake, not confirmed against a live 19045** -- the probe now records it as
+`repaint.*.starts_at_home` so the next 19045 run settles it: after the hide, and after the size report where
 the build sends one (P14), it positions at **home** -- it is redrawing the
 screen from the top. A command batch positions at the row it is about to
 write, below home, because it appends under what is already there.
@@ -977,3 +979,35 @@ feature even on, did ConPTY get resized, were its repaints recognised, did
 the oracle ever run, and is the history still there. `REFLOW_WRAP`,
 `REFLOW_RESIZE`, `REFLOW_FRAME` and `REFLOW_SHOW` remain for the cases that
 need the detail, and still fire only when something is unusual (§6.17).
+
+
+### 6.21. Review before the field: four ways the absorber could still lose bytes
+
+A fresh reading of `route` before handing the 6.19 build to the field found
+four faults, none of which the existing tests could see because the fake
+delivered every repaint as its own read. Each got a failing test first.
+
+1. **A read is not a message.** One read can carry a repaint with output on
+   either side -- `...?25h ?25l [5;1H next line...` -- and `route` took the
+   whole chunk. Output after the close was dropped; output before the open
+   was dropped with it. `route` now classifies only the front of a chunk and
+   is asked again about the rest, so it takes exactly the frame and hands
+   everything around it on (`TestAbsorbTakesOnlyTheRepaintOutOfACoalescedRead`).
+2. **No give-up on an unclosed frame.** If `?25h` never came, `absorbing`
+   stayed set and every later byte went to the scratch view. No measured
+   build omits the close, which is exactly why it is guarded now: past
+   `maxAbsorbBytes` (1 MiB, far beyond any screen) the absorber abandons the
+   frame and the stream returns to the display
+   (`TestAbsorbGivesUpOnAnUnclosedFrame`).
+3. **A debt nothing would pay.** The owed count was raised on a view-only
+   size change too, when ConPTY had not been called; the next unprompted
+   home-repaint -- a `cls` -- would have been taken for it. Raised only on a
+   real `ResizePseudoConsole` call now.
+4. **The clamp brought bug 1 back under load.** At 4, a burst of ten resizes
+   answered late by a slow ConPTY left six repaints unowed, and they landed.
+   The clamp is 64 (`TestBurstOfLateRepaintsIsFullyAbsorbed`).
+
+Two of the new tests were wrong before the code was: one overwrote its own
+earlier rows and one did not exceed the guard it was testing. Both blamed
+the code, briefly. Recorded because that is the failure mode of writing the
+test after deciding what the answer is.

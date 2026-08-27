@@ -844,10 +844,11 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 }
 
 func (tv *TerminalView) SetAltScreen(enable bool) {
-	vtui.DebugLog("TERM: SetAltScreen %v", enable)
-	vtui.DebugLog("TERM_VIEW: Switching screen buffer. AltScreen enabled: %v (Current Cursor: %d,%d)", enable, tv.CursorX, tv.CursorY)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
+	// Logged under the lock: this runs on the read loop while Resize on the
+	// UI goroutine moves the cursor, and the race detector said so.
+	vtui.DebugLog("TERM_VIEW: Switching screen buffer. AltScreen enabled: %v (Current Cursor: %d,%d)", enable, tv.CursorX, tv.CursorY)
 	if tv.UseAltScreen == enable {
 		return
 	}

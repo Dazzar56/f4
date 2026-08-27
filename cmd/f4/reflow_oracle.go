@@ -130,6 +130,31 @@ var oracleQuietBefore = 100 * time.Millisecond
 // oracleReport receives every log line of a pass; tests capture it.
 var oracleReport = func(format string, a ...any) { vtui.DebugLog("REFLOW_ORACLE: "+format, a...) }
 
+// oracleReportMu guards oracleReport. In production it is never reassigned;
+// the tests swap it to capture lines, and the absorber now reports from the
+// read loop, so the swap and the call must not race.
+var oracleReportMu sync.RWMutex
+
+func report(format string, a ...any) {
+	oracleReportMu.RLock()
+	f := oracleReport
+	oracleReportMu.RUnlock()
+	f(format, a...)
+}
+
+// setOracleReport swaps the reporter for a test and returns the restore.
+func setOracleReport(f func(string, ...any)) func() {
+	oracleReportMu.Lock()
+	old := oracleReport
+	oracleReport = f
+	oracleReportMu.Unlock()
+	return func() {
+		oracleReportMu.Lock()
+		oracleReport = old
+		oracleReportMu.Unlock()
+	}
+}
+
 // reflowOracle runs the resize oracle for one PanelsFrame.
 type reflowOracle struct {
 	pf   *PanelsFrame
@@ -150,7 +175,9 @@ type reflowOracle struct {
 	passesRun int
 	// pendingRepaints is how many resize repaints ConPTY still owes us.
 	pendingRepaints int
-	lastByte        time.Time
+	// absorbedBytes counts the open repaint's size, for the give-up guard.
+	absorbedBytes int
+	lastByte      time.Time
 }
 
 func newReflowOracle(pf *PanelsFrame, mode winReflowMode) *reflowOracle {
@@ -223,7 +250,7 @@ func (o *reflowOracle) run(pty PtyBackend, cols, rows int) {
 
 	after := display.PromptSnapshot()
 	if after != before {
-		oracleReport("display changed during the pass (%+v -> %+v); nothing stamped", before, after)
+		report("display changed during the pass (%+v -> %+v); nothing stamped", before, after)
 		return
 	}
 
@@ -231,15 +258,15 @@ func (o *reflowOracle) run(pty PtyBackend, cols, rows int) {
 	narrowRows := narrow.view.RowTexts()
 	journal := display.reflowJournalSnapshot()
 
-	oracleReport("wide frame: %d content rows, delimited=%v; narrow frame: delimited=%v; viewport %dx%d",
+	report("wide frame: %d content rows, delimited=%v; narrow frame: delimited=%v; viewport %dx%d",
 		len(wideRows), wide.delimited, narrow.delimited, cols, rows)
 	if len(wideRows) > rows {
-		oracleReport("wide frame holds more rows than the viewport: conhost keeps scrollback under ConPTY")
+		report("wide frame holds more rows than the viewport: conhost keeps scrollback under ConPTY")
 	}
 
 	flags, ok := matchWrappedRows(wideRows, narrowRows)
 	if !ok {
-		oracleReport("mismatch: the wide and narrow frames do not describe the same text; nothing stamped")
+		report("mismatch: the wide and narrow frames do not describe the same text; nothing stamped")
 		return
 	}
 
@@ -275,7 +302,7 @@ func (o *reflowOracle) run(pty PtyBackend, cols, rows int) {
 		}
 	}
 	if len(stamps) == 0 {
-		oracleReport("mismatch: no consecutive repaint rows occur in the local history+viewport journal; nothing stamped")
+		report("mismatch: no consecutive repaint rows occur in the local history+viewport journal; nothing stamped")
 		return
 	}
 
@@ -287,16 +314,16 @@ func (o *reflowOracle) run(pty PtyBackend, cols, rows int) {
 			if journal[pos].inHistory {
 				where = "history"
 			}
-			oracleReport("%s row %d: hint said wrapped=%v, oracle says %v: %q",
+			report("%s row %d: hint said wrapped=%v, oracle says %v: %q",
 				where, journal[pos].index, journal[pos].wrapped, wrapped, journal[pos].text)
 		}
 	}
-	oracleReport("%d/%d repaint rows aligned with history+viewport; %d safe boundaries, %d where hint and oracle disagree",
+	report("%d/%d repaint rows aligned with history+viewport; %d safe boundaries, %d where hint and oracle disagree",
 		len(alignment), len(narrowRows), len(stamps), disagree)
 
 	if o.mode == winReflowOracle {
 		applied, stale := display.applyReflowJournalFlags(journal, stamps)
-		oracleReport("%d history+viewport boundaries stamped, %d became stale", applied, stale)
+		report("%d history+viewport boundaries stamped, %d became stale", applied, stale)
 	}
 }
 
@@ -514,14 +541,14 @@ func (o *reflowOracle) absorbResizeRepaint() {
 // the reader of these logs is usually a model with a budget.
 func (o *reflowOracle) reportAbsorbLocked(n int, whole bool) {
 	if o.absorbedFrames <= 3 || o.absorbedFrames%50 == 0 {
-		oracleReport("absorbed resize repaint #%d (%d bytes, whole=%v); %d resizes seen, %d repaints still owed",
+		report("absorbed resize repaint #%d (%d bytes, whole=%v); %d resizes seen, %d repaints still owed",
 			o.absorbedFrames, n, whole, o.resizesSeen, o.pendingRepaints)
 	}
 }
 
 // maxPendingRepaints bounds the owed-repaint count; a drag can outrun the
 // stream briefly, but nothing legitimate owes more than a few.
-const maxPendingRepaints = 4
+const maxPendingRepaints = 64
 
 // frameOpen and frameClose bracket every ConPTY write batch (P7); sizeReport
 // is what only a resize repaint carries (P14).
@@ -531,81 +558,76 @@ var (
 	sizeReport = []byte("\x1b[8;")
 )
 
-// isResizeRepaint reports whether a chunk opens a ConPTY resize repaint.
+// routeStep is one decision about the front of a chunk: send the first n
+// bytes to sink (nil sink means the display), then ask again about the rest.
 //
-// A repaint of the whole viewport and a batch of command output both open
-// with the cursor hide (ESC[?25l), so the hide alone is not it -- taking a
-// chunk on the hide is what ate the Terminal Log on the photo (6.18). Two
-// things a resize repaint has that a command batch does not, measured on both
-// builds:
-//
-//   - It positions the cursor at **home** (ESC[H, or ESC[1;1H) right after the
-//     hide, because it is redrawing the screen from the top. A command batch
-//     positions at the row it is about to write (ESC[<n>;1H with n > 1), since
-//     it is appending under what is already there.
-//   - On 22000 the size report (ESC[8;rows;cols t) sits between the hide and
-//     the home (P14). 19045 sends no report, so home is the only signal there.
-//
-// So: the hide, then optionally the size report, then home. This does misread
-// one thing -- a program that clears the screen and repaints from home (a
-// full-screen TUI, `cls`) opens the same way. That costs a dropped frame,
-// visible and recovered on the next repaint, never lost output, and a
-// full-screen program inside f4's command panel is not a case f4 supports
-// anyway. Losing the middle of a `dir` is the failure that matters; this
-// cannot do that, because `dir` never repaints from home.
-func isResizeRepaint(data []byte) bool {
-	i := bytes.Index(data, frameOpen)
-	if i < 0 {
-		return false
-	}
-	rest := data[i+len(frameOpen):]
-	if bytes.HasPrefix(rest, sizeReport) {
-		// ESC[8;...t then the home move.
-		if j := bytes.IndexByte(rest, 't'); j >= 0 {
-			rest = rest[j+1:]
-		}
-	}
-	return bytes.HasPrefix(rest, []byte("\x1b[H")) ||
-		bytes.HasPrefix(rest, []byte("\x1b[1;1H"))
+// A read from ConPTY is not a message. One read can carry the tail of a
+// command batch, a whole resize repaint and the head of the next batch, so
+// the absorber must take exactly the repaint and hand everything around it
+// on. Taking a chunk whole ate the output on either side of a coalesced
+// frame in review (docs/TERMINAL_CONPTY_FINDINGS.md 6.21).
+type routeStep struct {
+	sink *AnsiParser
+	n    int
 }
 
-// route decides where one chunk from the PTY goes: the scratch parser of a
-// running oracle pass, the absorber if the chunk opens (or continues) a
-// resize repaint, or nil for the display.
-//
-// A chunk is taken whole or not at all. ConPTY writes a repaint as its own
-// batch; the field logs show every one of 130 frames beginning a read.
-func (o *reflowOracle) route(data []byte) *AnsiParser {
-	if o == nil {
-		return nil
+// route decides where the front of one chunk from the PTY goes: the scratch
+// parser of a running oracle pass, the absorber for a resize repaint that
+// ConPTY owes, or the display. It never decides about more than the bytes
+// it can classify, so consumeLocalOutput calls it in a loop.
+func (o *reflowOracle) route(data []byte) routeStep {
+	if o == nil || len(data) == 0 {
+		return routeStep{nil, len(data)}
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.lastByte = time.Now()
 	if o.sink != nil {
-		// An oracle pass owns the stream.
-		return o.sink
+		// An oracle pass owns the stream, all of it.
+		return routeStep{o.sink, len(data)}
 	}
 	if o.absorbing != nil {
-		// Inside a repaint being absorbed: take it through to the close.
+		// Inside a repaint being absorbed: take it through to the close and
+		// not one byte further. And not forever: no measured build omits
+		// the close, which is exactly why this is guarded -- the cost of
+		// being wrong would be every byte after it.
 		p := o.absorbing
-		if bytes.Contains(data, frameClose) {
+		if i := bytes.Index(data, frameClose); i >= 0 {
+			n := i + len(frameClose)
 			o.absorbing = nil
 			o.absorbedFrames++
+			o.absorbedBytes = 0
+			o.reportAbsorbLocked(n, false)
+			return routeStep{p, n}
 		}
-		return p
+		o.absorbedBytes += len(data)
+		if o.absorbedBytes > maxAbsorbBytes {
+			o.absorbing = nil
+			o.absorbedBytes = 0
+			report("gave up on a resize repaint with no close after %d bytes; the stream goes to the display", maxAbsorbBytes)
+			return routeStep{nil, len(data)}
+		}
+		return routeStep{p, len(data)}
 	}
-	if o.mode != winReflowOracle || o.pendingRepaints == 0 || !isResizeRepaint(data) {
-		return nil
+	if o.mode != winReflowOracle || o.pendingRepaints == 0 {
+		return routeStep{nil, len(data)}
+	}
+	start := resizeRepaintStart(data)
+	if start < 0 {
+		return routeStep{nil, len(data)}
+	}
+	if start > 0 {
+		// Output before the frame belongs to the display; decide about the
+		// frame on the next call.
+		return routeStep{nil, start}
 	}
 	// Never on the alternate screen. A full-screen program -- including f4
 	// itself running inside f4's terminal -- switches to it and repaints
 	// from home exactly like a resize repaint. There f4 does not re-wrap at
 	// all, so ConPTY's repaint is the only thing keeping the screen right
-	// and must land. Without this check a nested f4 would lose its first
-	// frame after every resize.
+	// and must land.
 	if tv := o.pf.termView; tv == nil || tv.OnAltScreen() {
-		return nil
+		return routeStep{nil, len(data)}
 	}
 	o.pendingRepaints--
 	// The frame is dropped, so nothing needs to be laid out and the
@@ -614,20 +636,62 @@ func (o *reflowOracle) route(data []byte) *AnsiParser {
 	// and must not be -- it is the read loop).
 	scratch := NewTerminalView(absorbScratchCols, absorbScratchRows)
 	p := NewAnsiParser(scratch, nil)
-	if bytes.Contains(data, frameClose) {
-		// Whole frame in one chunk, the common case. Parsed here and now,
-		// on the read loop: data is the loop's reusable buffer, and handing
-		// it to another goroutine raced with the next Read overwriting it.
+	if i := bytes.Index(data, frameClose); i >= 0 {
+		// Whole frame in this chunk, the common case: parsed here and now
+		// on the read loop (data is the loop's reusable buffer, and handing
+		// it to another goroutine raced with the next Read), and only up to
+		// the close. Whatever follows is the next batch.
+		n := i + len(frameClose)
 		o.absorbedFrames++
-		o.reportAbsorbLocked(len(data), true)
-		p.Process(data)
+		o.reportAbsorbLocked(n, true)
+		p.Process(data[:n])
 		scratch.Close()
-		return discardParser
+		return routeStep{discardParser, n}
 	}
-	o.reportAbsorbLocked(len(data), false)
 	o.absorbing = p
-	return p
+	o.absorbedBytes = len(data)
+	return routeStep{p, len(data)}
 }
+
+// maxAbsorbBytes bounds one absorbed repaint. A full screen at the largest
+// plausible size is a few hundred kilobytes of cells and escapes; nothing
+// legitimate is larger, and past it the only safe reading is "this was not a
+// frame after all".
+var maxAbsorbBytes = 1 << 20
+
+// resizeRepaintStart returns where a resize repaint begins in data, or -1.
+//
+// A repaint of the whole viewport and a batch of command output both open
+// with the cursor hide (ESC[?25l), so the hide alone is not it -- taking a
+// chunk on the hide is what ate the Terminal Log on the photo (6.18). What
+// a resize repaint has that a command batch does not: it positions the
+// cursor at **home** right after the hide (and after the size report on
+// builds that send one, P14), because it is redrawing the screen from the
+// top. A command batch positions at the row it is about to write, below
+// home, since it is appending under what is already there.
+func resizeRepaintStart(data []byte) int {
+	from := 0
+	for {
+		i := bytes.Index(data[from:], frameOpen)
+		if i < 0 {
+			return -1
+		}
+		i += from
+		rest := data[i+len(frameOpen):]
+		if bytes.HasPrefix(rest, sizeReport) {
+			if j := bytes.IndexByte(rest, 't'); j >= 0 {
+				rest = rest[j+1:]
+			}
+		}
+		if bytes.HasPrefix(rest, []byte("\x1b[H")) || bytes.HasPrefix(rest, []byte("\x1b[1;1H")) {
+			return i
+		}
+		from = i + len(frameOpen)
+	}
+}
+
+// isResizeRepaint is resizeRepaintStart for the tests that ask yes or no.
+func isResizeRepaint(data []byte) bool { return resizeRepaintStart(data) == 0 }
 
 // absorbScratchCols/Rows size the throwaway view an absorbed frame is parsed
 // into. Wide enough that no ordinary frame wraps in it -- a wrapped scratch

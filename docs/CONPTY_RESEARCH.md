@@ -141,6 +141,11 @@ person to chase something similar should not repeat it.
    only when ConPTY owes one, and never on the alternate screen (6.19).
    Written after a reviewer pushed back on the claim that full-screen
    programs were out of scope. They are not, and the claim was wrong.
+11. A review before the next field run, reading the code rather than the
+   notes about it, found four ways the absorber could still lose bytes --
+   a repaint coalesced with output in one read, a frame with no close, a
+   debt raised without a call, a clamp too low for a slow ConPTY. All four
+   got a failing test first, then a fix (6.21). None had reached the field.
 
 Two things would have shortened this to one run: asking how the symptom was
 reproduced (a corner drag interleaves width, height and same-size steps, so

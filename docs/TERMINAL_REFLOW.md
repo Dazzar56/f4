@@ -291,8 +291,11 @@ A chunk is that repaint when **all three** hold:
    resize. On the alternate screen f4 does not re-wrap at all, so ConPTY's
    repaint is the only thing keeping that screen right and must land.
 
-The frame is taken whole or not at all, and held across reads until its
-`ESC[?25h`, so a split delivery is absorbed to the end and no further.
+The frame is taken exactly: a read is classified from the front and the
+rest is asked about again, so output coalesced before or after a repaint in
+the same read reaches the display. A frame split across reads is held to its
+`ESC[?25h` and no further; one with no close is abandoned past 1 MiB and the
+stream returns to the display (findings 6.21).
 
 ## What the log says
 

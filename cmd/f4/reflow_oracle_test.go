@@ -359,13 +359,11 @@ func newReflowHarness(t *testing.T, mode winReflowMode, cols, rows int) *reflowH
 	pf.setWinReflowMode(mode)
 
 	h := &reflowHarness{t: t, pf: pf, pty: pty}
-	oldReport := oracleReport
-	oracleReport = func(format string, a ...any) {
+	t.Cleanup(setOracleReport(func(format string, a ...any) {
 		h.repMu.Lock()
 		h.report = append(h.report, fmt.Sprintf(format, a...))
 		h.repMu.Unlock()
-	}
-	t.Cleanup(func() { oracleReport = oldReport })
+	}))
 
 	go func() {
 		buf := make([]byte, 65536)
@@ -823,13 +821,19 @@ func TestWinReflowLogLinesNameTheSwitchesNotJustTheMode(t *testing.T) {
 	}
 }
 
+// sinkOf is route for tests that ask about a whole chunk: the parser the
+// chunk's front goes to, nil for the display.
+func sinkOf(o *reflowOracle, data []byte) *AnsiParser {
+	return o.route(data).sink
+}
+
 func TestAbsorbResizeRepaintOnlyInOracleMode(t *testing.T) {
 	frame := []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h")
 	for _, mode := range []winReflowMode{winReflowOff, winReflowHint, winReflowProbe} {
 		pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 		o := newReflowOracle(pf, mode)
 		o.absorbResizeRepaint()
-		if o.route(frame) != nil {
+		if sinkOf(o, frame) != nil {
 			t.Errorf("%v: the repaint must reach the display in this mode", mode)
 		}
 		pf.termView.Close()
@@ -845,7 +849,7 @@ func TestAbsorbTakesEveryFrameWithASizeReport(t *testing.T) {
 	frame := []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h")
 	for i := 0; i < 3; i++ {
 		o.absorbResizeRepaint() // ConPTY owes one repaint per resize
-		sink := o.route(frame)
+		sink := sinkOf(o, frame)
 		if sink == nil {
 			t.Fatalf("frame %d with a size report must be absorbed", i)
 		}
@@ -858,7 +862,7 @@ func TestAbsorbTakesEveryFrameWithASizeReport(t *testing.T) {
 	}
 	// A stale one -- declaring a size the view no longer has -- too.
 	o.absorbResizeRepaint()
-	if o.route([]byte("\x1b[?25l\x1b[8;20;60t\x1b[H\x1b[K\x1b[?25h")) == nil {
+	if sinkOf(o, []byte("\x1b[?25l\x1b[8;20;60t\x1b[H\x1b[K\x1b[?25h")) == nil {
 		t.Fatal("a stale resize repaint must be absorbed as well")
 	}
 }
@@ -878,7 +882,7 @@ func TestAbsorbNeverTakesCommandOutput(t *testing.T) {
 		"C:\\>", "\x1b]133;A\x1b\\prompt\x1b]133;B\x1b\\", "\x1b[2Jcleared",
 	}
 	for _, b := range batches {
-		if o.route([]byte(b)) != nil {
+		if sinkOf(o, []byte(b)) != nil {
 			t.Fatalf("command output was taken by the absorber: %q", b)
 		}
 	}
@@ -891,7 +895,7 @@ func TestAbsorbNeedsTheReportRightAfterTheCursorHide(t *testing.T) {
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
 	o.absorbResizeRepaint()
-	if o.route([]byte("\x1b[?25l\x1b[5;1Hsee \x1b[8;3;4t later\x1b[?25h")) != nil {
+	if sinkOf(o, []byte("\x1b[?25l\x1b[5;1Hsee \x1b[8;3;4t later\x1b[?25h")) != nil {
 		t.Fatal("a size report not directly after the cursor hide is not a frame")
 	}
 }
@@ -902,16 +906,16 @@ func TestAbsorbFollowsASplitFrameToItsClose(t *testing.T) {
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
 	o.absorbResizeRepaint()
-	if o.route([]byte("\x1b[?25l\x1b[8;24;80t\x1b[Hfirst half")) == nil {
+	if sinkOf(o, []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hfirst half")) == nil {
 		t.Fatal("the opening chunk must be taken")
 	}
 	if !o.absorbArmed() {
 		t.Fatal("a frame is open")
 	}
-	if o.route([]byte("second half\x1b[K\x1b[?25h")) == nil {
+	if sinkOf(o, []byte("second half\x1b[K\x1b[?25h")) == nil {
 		t.Fatal("the closing chunk must be taken")
 	}
-	if o.route([]byte("\x1b[?25lafter the frame\x1b[?25h")) != nil {
+	if sinkOf(o, []byte("\x1b[?25lafter the frame\x1b[?25h")) != nil {
 		t.Fatal("output after the close must reach the display")
 	}
 }
@@ -925,7 +929,7 @@ func TestAbsorbNeverStealsFromAPass(t *testing.T) {
 	o.mu.Lock()
 	o.running, o.sink = true, pass
 	o.mu.Unlock()
-	if got := o.route([]byte("\x1b[?25l\x1b[8;24;80t\x1b[H\x1b[?25h")); got != pass {
+	if got := sinkOf(o, []byte("\x1b[?25l\x1b[8;24;80t\x1b[H\x1b[?25h")); got != pass {
 		t.Fatal("a running oracle pass must keep the stream")
 	}
 }
