@@ -5240,7 +5240,6 @@ func isEnvironmentVariableChar(c byte) bool {
 	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
-
 // noteConptyFrame logs, for every chunk that opens a ConPTY repaint frame,
 // the size the frame declares against the size the display view has right
 // now. This is the class of bug none of the pass summaries can see: a frame
