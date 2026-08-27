@@ -4281,6 +4281,20 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		if err != nil {
 			vtui.ShowMessageOn(dlg, " Error ", fmt.Sprintf("Failed to export colors:\n%v", err), []string{"&Ok"})
 		} else {
+			customIdx := -1
+			for i, item := range comboStyle.Menu.Items {
+				if strings.EqualFold(item.Text, customColorStyleName) {
+					customIdx = i
+					break
+				}
+			}
+			if customIdx < 0 {
+				names = append(names, customColorStyleName)
+				comboStyle.Menu.AddItem(vtui.MenuItem{Text: customColorStyleName})
+				customIdx = len(names) - 1
+			}
+			comboStyle.Menu.SetSelectPos(customIdx)
+			comboStyle.Menu.OnAction(customIdx)
 			vtui.ShowMessageOn(dlg, " Info ", "Current colors successfully exported to:\n"+colorsPath+"\n\nYou can edit this file to customize your palette.", []string{"&Ok"})
 		}
 	}

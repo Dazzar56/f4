@@ -21,7 +21,7 @@ import (
 func TestBuiltInThemesCoverPanelGroup(t *testing.T) {
 	styles := AvailableColorStyles()
 	for _, style := range styles {
-		if strings.EqualFold(style.Name, "Classic") {
+		if style.custom || strings.EqualFold(style.Name, "Classic") {
 			continue
 		}
 		var missing []string
@@ -49,7 +49,7 @@ func TestBuiltInThemesCoverPanelGroup(t *testing.T) {
 // Classic deliberately remains a sparse inheritance style.
 func TestBuiltInThemesCoverAllColorSlots(t *testing.T) {
 	for _, style := range AvailableColorStyles() {
-		if strings.EqualFold(style.Name, "Classic") {
+		if style.custom || strings.EqualFold(style.Name, "Classic") {
 			continue
 		}
 		for _, slot := range ColorSlots {

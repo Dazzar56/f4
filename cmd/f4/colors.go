@@ -347,7 +347,11 @@ func FormatFarColor(attr uint64) string {
 // ExportColors writes the current palette to a farcolors.ini file.
 func ExportColors(path string) error {
 	var sb strings.Builder
-	sb.WriteString("[farcolors]\n")
+	sb.WriteString("[style]\nName = Custom\n")
+	if base := strings.TrimSpace(AppConfig.ColorStyle); base != "" && !strings.EqualFold(base, customColorStyleName) {
+		fmt.Fprintf(&sb, "Base = %s\n", base)
+	}
+	sb.WriteString("\n[farcolors]\n")
 
 	for _, group := range ColorGroups {
 		fmt.Fprintf(&sb, "\n# %s\n", group)
