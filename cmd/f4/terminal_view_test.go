@@ -240,6 +240,16 @@ func TestTerminalView_ProcessFar2lInteract_LocalAuth(t *testing.T) {
 }
 
 func TestTerminalView_ProcessFar2lInteract_Notification(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	previousToastOverride := toastDurationOverride
+	toastDurationOverride = func(duration time.Duration) time.Duration {
+		const minimumObservableToastDuration = 100 * time.Millisecond
+		if duration < minimumObservableToastDuration {
+			return minimumObservableToastDuration
+		}
+		return duration
+	}
+	t.Cleanup(func() { toastDurationOverride = previousToastOverride })
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tv := NewTerminalView(80, 24)
 	defer tv.Close()
@@ -252,26 +262,7 @@ func TestTerminalView_ProcessFar2lInteract_Notification(t *testing.T) {
 
 	tv.ProcessFar2lInteract(stk)
 
-	// Pump task queue
-	foundToast := false
-	timeout := time.After(500 * time.Millisecond)
-Loop:
-	for {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-			if vtui.FrameManager.GetActiveToast() != "" {
-				foundToast = true
-				break Loop
-			}
-		case <-timeout:
-			break Loop
-		}
-	}
-
-	if !foundToast {
-		t.Error("Notification APC did not result in a Toast")
-	}
+	pumpUntilToastActive(t)
 	waitForToastExpiry(t, 4*time.Second)
 }
 
