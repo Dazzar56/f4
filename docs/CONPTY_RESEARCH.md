@@ -333,9 +333,27 @@ alternate screen, or the child's console mode) and a real-size console when
 they run. **Cheap to measure with one probe run before any code: does a
 4000-wide ConPTY of window height deliver lines whole and repaint sanely.**
 
+**C, measured (2026-08-28).** `tools/conptycprobe` ran on Windows
+10.0.22000.2538 with an outer terminal of 120x30 and a 4000x30 ConPTY. It
+emitted two ASCII lines of 184 and 3968 characters from an `@echo off` batch,
+then resized only the height through 4000x29, 4000x30, 4000x31, and 4000x30.
+Every initial and repaint check reported `whole=true`, `split=false`,
+`rows=1`; a post-resize line did too, and the probe returned `PASS`.
+
+This confirms the premise of C on this build: a very wide ConPTY can carry
+these lines without answering the horizontal-wrap question, and its
+height-only repaint remains coherent. It does not yet test f4's wide-console
+integration, rendering/cutting to the real width, scrollback ownership,
+alternate-screen or full-screen programs, width changes, or another Windows
+build. The first run was a false negative caused by interactive command echo;
+the probe was corrected to run the payload from an `@echo off` temporary batch
+before this PASS.
+
 **D. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under
 Windows. The honest minimum, and the fallback if A and C do not pay off.
 
-Order to try: C's probe run (one afternoon), then A for `wsl.exe` (the case
-where it is nearly free), then decide whether B is worth its months.
+Order to try: C's probe is now a PASS on 10.0.22000.2538; its integration and
+portability still need a prototype and newer-build measurements. Then try A
+for `wsl.exe` (the case where it is nearly free), and decide whether B is
+worth its months.
