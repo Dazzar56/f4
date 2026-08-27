@@ -680,3 +680,59 @@ func TestWinReflowLogLinesNameTheSwitchesNotJustTheMode(t *testing.T) {
 		t.Fatal("tools/conptyprobe matches on this prefix")
 	}
 }
+
+func TestAbsorbResizeRepaintOnlyInOracleMode(t *testing.T) {
+	for _, mode := range []winReflowMode{winReflowOff, winReflowHint, winReflowProbe} {
+		pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+		o := newReflowOracle(pf, mode)
+		o.absorbResizeRepaint()
+		if o.divert() != nil {
+			t.Errorf("%v: the repaint must reach the display in this mode", mode)
+		}
+		pf.termView.Close()
+	}
+}
+
+func TestAbsorbResizeRepaintKeepsTheFrameOffTheDisplay(t *testing.T) {
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+
+	o.absorbResizeRepaint()
+	sink := o.divert()
+	if sink == nil {
+		t.Fatal("a width change in oracle mode must divert the repaint")
+	}
+
+	// Feed a frame shaped like the field logs: XTWINOPS, home, a row, and the
+	// cursor-visible terminator that ends it.
+	sink.Process([]byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h"))
+	if got := pf.termView.RowTexts()[0]; strings.Contains(got, "ConPTY") {
+		t.Fatalf("the frame reached the display: %q", got)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for o.divert() != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the diversion never closed; ordinary output would be swallowed")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestAbsorbResizeRepaintNeverStealsFromAPass(t *testing.T) {
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+	o.mu.Lock()
+	o.running = true // a pass is in flight
+	o.mu.Unlock()
+
+	o.absorbResizeRepaint()
+	o.mu.Lock()
+	sink := o.sink
+	o.mu.Unlock()
+	if sink != nil {
+		t.Fatal("absorb replaced the sink of a running oracle pass")
+	}
+}

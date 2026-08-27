@@ -1326,7 +1326,11 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// frame. A fast ConPTY can otherwise deliver new-width absolute
 			// coordinates while TerminalView still has the old width.
 			pf.termView.SetPosition(0, 0, w-1, termH-1)
+			widthChanged := pf.termView.Width != w
 			pf.termView.Resize(w, termH)
+			if widthChanged {
+				pf.reflowOracle.absorbResizeRepaint()
+			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
 			setPtySize(pty, w, termH, cw, ch)
@@ -1351,7 +1355,11 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 		if pty := pf.localPTY(); pty != nil {
 			pf.termView.SetPosition(0, contentY1, w-1, termY2)
+			widthChanged := pf.termView.Width != w
 			pf.termView.Resize(w, termH)
+			if widthChanged {
+				pf.reflowOracle.absorbResizeRepaint()
+			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
 			setPtySize(pty, w, termH, cw, ch)

@@ -490,3 +490,28 @@ size the frame describes, and nothing in f4 reads it yet (O9). Reading it is
 the prerequisite, not a nicety: without it there is no way to tell a resize
 repaint from ordinary output, and no way to know which resize a late frame
 belongs to.
+
+
+### 6.9. The first half of the fix: stop letting the repaint land
+
+Implemented: on a **width** change in `oracle` mode, ConPTY's repaint is parsed
+into a scratch view and dropped instead of being applied to the display
+(`reflowOracle.absorbResizeRepaint`, called from `PanelsFrame.handleResize`
+after `TerminalView.Resize` has re-wrapped the grid).
+
+Why dropping is safe rather than lossy: every row that frame carries already
+reached f4 once as ordinary output, before it scrolled, and is in
+`GridHistory`. The frame adds nothing and subtracts the history above it. Only
+`oracle` mode does this, because only there does `ReflowOnResize` give f4's own
+re-wrap ownership of the viewport; in every other mode the repaint is the one
+thing keeping the screen correct and must land. It also never takes the stream
+from an oracle pass, and it closes on `ESC[?25h` or after 250 ms, so ordinary
+output is never swallowed.
+
+What this does not do yet, and should not be mistaken for: it does not *read*
+the frame. The stitching described in §3.3 -- match the repaint against
+`GridHistory + viewport` and use it as structure at the seam -- still wants
+O9, the XTWINOPS size report, so a frame can be tied to the resize that caused
+it and told apart from ordinary output. Dropping is the conservative first
+half; the field run says whether the seam is now right or merely no longer
+overwritten.

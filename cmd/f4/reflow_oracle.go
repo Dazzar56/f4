@@ -430,3 +430,73 @@ func winReflowLogLines(mode winReflowMode) []string {
 	}
 	return lines
 }
+
+// absorbWindow bounds how long a resize repaint may be kept off the display.
+// A drag delivers a frame every few milliseconds, so this only has to cover
+// one frame; anything still arriving after it is ordinary output and must be
+// shown.
+var absorbWindow = 250 * time.Millisecond
+
+// absorbResizeRepaint keeps ConPTY's own repaint away from the display for one
+// frame after f4 has re-wrapped its grid on a width change.
+//
+// The two of them disagree about what the viewport should contain, and f4 is
+// the one with the evidence. ConPTY keeps no scrollback (P16): its buffer is
+// the viewport and nothing else, so its repaint carries only the rows that fit
+// the *new* size and blank space for the rest. f4 has the whole session in
+// GridHistory and has just re-wrapped it to the new width. Letting the repaint
+// land afterwards replaces recovered rows with ConPTY's shorter view -- which
+// is what the field logs show: 197 repaints across 444 resize events, a
+// correct history flashing and being overwritten, and, after a shrink and
+// re-expand, blank rows painted over history that is still intact
+// (docs/TERMINAL_CONPTY_FINDINGS.md 6.8).
+//
+// So on a width change the frame is parsed into a scratch view and dropped.
+// Nothing is lost by dropping it: every row it carries already reached f4 once,
+// as ordinary output, before it scrolled. This is the "accept the repaint,
+// do not fight it" rule of 3.3 in its first and smallest form -- the display
+// simply stops being the place it is accepted into.
+//
+// Only in oracle mode, where ReflowOnResize gives f4's own re-wrap ownership of
+// the viewport. In every other mode ConPTY's repaint is the only thing keeping
+// the screen right, and it must land.
+func (o *reflowOracle) absorbResizeRepaint() {
+	if o == nil || o.mode != winReflowOracle {
+		return
+	}
+	tv := o.pf.termView
+	if tv == nil || tv.UseAltScreen {
+		return
+	}
+	o.mu.Lock()
+	if o.running || o.sink != nil {
+		// A pass owns the stream already, or an earlier absorb is still
+		// open; either way the frame is not going to the display.
+		o.mu.Unlock()
+		return
+	}
+	scratch := NewTerminalView(tv.Width, tv.Height)
+	done := make(chan struct{}, 1)
+	scratch.OnCursorShown = func() {
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+	}
+	o.running = true
+	o.sink = NewAnsiParser(scratch, nil)
+	o.mu.Unlock()
+
+	go func() {
+		select {
+		case <-done: // ESC[?25h: the frame ended
+		case <-time.After(absorbWindow):
+		}
+		o.mu.Lock()
+		o.sink = nil
+		o.running = false
+		o.mu.Unlock()
+		scratch.Close()
+		oracleReport("absorbed one resize repaint; the display keeps f4's re-wrapped history")
+	}()
+}
