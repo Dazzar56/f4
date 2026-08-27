@@ -116,6 +116,12 @@ func (f *fakeConPTY) SetSize(cols, rows int) {
 	f.out <- []byte(frame)
 }
 
+func (f *fakeConPTY) snapshotResizes() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int(nil), f.resizes...)
+}
+
 func (f *fakeConPTY) repaintLocked() string {
 	var rows []string
 	for _, line := range f.lines {
@@ -243,6 +249,31 @@ func (h *reflowHarness) settle(d time.Duration) {
 	}
 }
 
+func (h *reflowHarness) waitForOracle(timeout time.Duration) {
+	h.t.Helper()
+	// Waiting for the worker's lifecycle makes the assertions independent of
+	// how long the race detector or a loaded runner takes to schedule it.
+	deadline := time.Now().Add(timeout)
+	started := false
+	for time.Now().Before(deadline) {
+		drainUITasks()
+		h.pf.reflowOracle.mu.Lock()
+		running := h.pf.reflowOracle.running
+		h.pf.reflowOracle.mu.Unlock()
+		resizes := h.pty.snapshotResizes()
+		if running {
+			started = true
+		} else if len(resizes) > 0 {
+			started = true
+		}
+		if started && !running {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	h.t.Fatalf("reflow oracle did not finish: resizes=%v", h.pty.snapshotResizes())
+}
+
 func (h *reflowHarness) reported(substr string) bool {
 	h.repMu.Lock()
 	defer h.repMu.Unlock()
@@ -284,8 +315,8 @@ func TestWinReflowOffKeepsHardBreaks(t *testing.T) {
 			t.Errorf("row %d marked wrapped with the mode off", y)
 		}
 	}
-	if len(h.pty.resizes) != 0 {
-		t.Errorf("mode off resized the pseudoconsole: %v", h.pty.resizes)
+	if got := h.pty.snapshotResizes(); len(got) != 0 {
+		t.Errorf("mode off resized the pseudoconsole: %v", got)
 	}
 }
 
@@ -300,8 +331,8 @@ func TestWinReflowHintMarksFullRowsWithoutErase(t *testing.T) {
 			t.Errorf("hint: row %d wrapped=%v, want %v", y, flags[y], w)
 		}
 	}
-	if len(h.pty.resizes) != 0 {
-		t.Errorf("hint resized the pseudoconsole: %v", h.pty.resizes)
+	if got := h.pty.snapshotResizes(); len(got) != 0 {
+		t.Errorf("hint resized the pseudoconsole: %v", got)
 	}
 }
 
@@ -318,9 +349,9 @@ func TestWinReflowOracleStampsFromConPTYsOwnReflow(t *testing.T) {
 	// The session's settled prompt is what triggers a pass; drive it as the
 	// session would.
 	h.pf.runReflowOracle()
-	h.settle(600 * time.Millisecond)
+	h.waitForOracle(2 * time.Second)
 
-	if got := h.pty.resizes; len(got) != 2 || got[0] != oracleWideColumns || got[1] != 40 {
+	if got := h.pty.snapshotResizes(); len(got) != 2 || got[0] != oracleWideColumns || got[1] != 40 {
 		t.Fatalf("oracle resizes = %v, want [%d 40]", got, oracleWideColumns)
 	}
 	if rows := h.pf.termView.RowTexts(); strings.Join(rows, "\n") != strings.Join(rowsBefore, "\n") {
@@ -347,7 +378,7 @@ func TestWinReflowProbeLogsButDoesNotStamp(t *testing.T) {
 	h.playScenario()
 	before := h.flags()
 	h.pf.runReflowOracle()
-	h.settle(600 * time.Millisecond)
+	h.waitForOracle(2 * time.Second)
 
 	if after := h.flags(); strings.Join(boolsToStrings(after), "") != strings.Join(boolsToStrings(before), "") {
 		t.Errorf("probe changed the flags: %v -> %v", before, after)
@@ -355,8 +386,8 @@ func TestWinReflowProbeLogsButDoesNotStamp(t *testing.T) {
 	if !h.reported("rows examined") {
 		t.Errorf("probe produced no comparison report: %v", h.report)
 	}
-	if len(h.pty.resizes) != 2 {
-		t.Errorf("probe resizes = %v, want two", h.pty.resizes)
+	if got := h.pty.snapshotResizes(); len(got) != 2 {
+		t.Errorf("probe resizes = %v, want two", got)
 	}
 }
 
@@ -371,7 +402,7 @@ func TestWinReflowOracleAbortsOnMismatch(t *testing.T) {
 	h.pf.termView.mu.Unlock()
 	before := h.flags()
 	h.pf.runReflowOracle()
-	h.settle(600 * time.Millisecond)
+	h.waitForOracle(2 * time.Second)
 	if !h.reported("mismatch") {
 		t.Fatalf("expected a mismatch report, got %v", h.report)
 	}
@@ -447,10 +478,10 @@ func TestWinReflowOracleFiresFromSettledPrompt(t *testing.T) {
 	h.pf.termView.OnShellMark = func(mark string, snap promptSnapshot) { h.pf.cmdSession.handleMark(mark, snap) }
 
 	h.playScenario() // ends with a prompt whose B mark the session sees
-	h.settle(700 * time.Millisecond)
+	h.waitForOracle(2 * time.Second)
 
-	if len(h.pty.resizes) != 2 {
-		t.Fatalf("a settled prompt did not trigger an oracle pass; resizes=%v report=%v", h.pty.resizes, h.report)
+	if got := h.pty.snapshotResizes(); len(got) != 2 {
+		t.Fatalf("a settled prompt did not trigger an oracle pass; resizes=%v report=%v", got, h.report)
 	}
 	flags := h.flags()
 	for y, w := range scenarioWrapped {
