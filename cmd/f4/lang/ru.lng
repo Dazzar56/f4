@@ -746,6 +746,7 @@ AppearanceSettings.UseSystemMonospace=Использовать системны�
 AppearanceSettings.Font=Шрифт &GUI (Путь/Имя):
 AppearanceSettings.FontSize=Размер шрифта &GUI:
 AppearanceSettings.TitleTemplate=Шаблон &заголовка окна:
+AppearanceSettings.DisplayFullPathInTitle=Показывать полный путь в заголовке редактора и вьювера
 AppearanceSettings.WorkspaceTabs=&Вкладки пространств:
 AppearanceSettings.WorkspaceTabsAlways=Всегда резервировать верхнюю строку
 AppearanceSettings.WorkspaceTabsMultiple=Показывать, если больше одного

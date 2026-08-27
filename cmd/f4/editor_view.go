@@ -494,10 +494,8 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 			base := ""
 			if ev.DisplayTitle != "" {
 				base = ev.DisplayTitle
-			} else if ev.vfs != nil {
-				base = ev.vfs.Base(ev.filePath)
 			} else {
-				base = filepath.Base(ev.filePath)
+				base = displayFileTitle(ev.vfs, ev.filePath)
 			}
 			return " " + base
 		},
