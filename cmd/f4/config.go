@@ -159,14 +159,11 @@ func ParsePanelScrollbarMode(value string) PanelScrollbarMode {
 }
 
 type F4Config struct {
-	ColorStyle        string
-	Language          string
-	FallbackLanguage  string
-	HelpLanguage      string
-	AlwaysShowMenuBar bool
-	// WindowsReflow is [Terminal] WindowsReflow: "auto" (the oracle),
-	// "off", "hint" or "oracle". F4_WIN_REFLOW in the environment wins.
-	WindowsReflow            string
+	ColorStyle               string
+	Language                 string
+	FallbackLanguage         string
+	HelpLanguage             string
+	AlwaysShowMenuBar        bool
 	WorkspaceTabMode         int
 	WorkspaceTabsOverlay     bool
 	CtrlTabShowsMenu         bool
@@ -485,7 +482,6 @@ func LoadConfig() {
 	AppConfig.HelpLanguage = ini.GetString("Interface", "HelpLanguage", "en")
 	AppConfig.ConsoleTitleTemplate = ini.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
 	AppConfig.AlwaysShowMenuBar = ini.GetString("Interface", "AlwaysShowMenuBar", "0") == "1"
-	AppConfig.WindowsReflow = ini.GetString("Terminal", "WindowsReflow", "auto")
 	switch strings.ToLower(ini.GetString("Interface", "WorkspaceTabMode", "always")) {
 	case "always":
 		AppConfig.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)

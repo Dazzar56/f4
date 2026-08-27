@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/unxed/f4/vfs"
@@ -258,7 +257,6 @@ type PanelsFrame struct {
 	ignoreNextPrompt      bool
 	returnToPanels        bool
 	cmdSession            *cmdShellSession // local cmd.exe completion tracking (Windows)
-	reflowOracle          *reflowOracle    // Windows reflow mode and the resize oracle (F4_WIN_REFLOW)
 	workspaceCommandTitle string
 
 	menuBar *vtui.MenuBar
@@ -323,12 +321,8 @@ type PanelsFrame struct {
 	commandLineFocused bool
 
 	lastPtyPath string
-	// childPtyW/H is the size ConPTY was last told; see handleResize.
-	childPtyW, childPtyH int
-	// childResizeCount paces the periodic REFLOW_SUMMARY line.
-	childResizeCount int
-	lastPtyVFS       vfs.VFS
-	closed           bool
+	lastPtyVFS  vfs.VFS
+	closed      bool
 
 	shellMode         ShellMode
 	hostConsoleActive bool
@@ -463,7 +457,7 @@ func NewPanelsFrame() *PanelsFrame {
 				pf.cmdSession.handleMark(mark, snap)
 			}
 		}
-		pf.setWinReflowMode(winReflowModeFromEnv())
+		logWindowsReflowRemoved()
 	}
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
@@ -1058,9 +1052,6 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 }
 
 func (pf *PanelsFrame) initPTY() {
-	// A new child knows nothing about sizes; the next handleResize must
-	// tell it, whatever the previous child had been told.
-	pf.childPtyW, pf.childPtyH = 0, 0
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
 	pf.parser.replyTo = pf.activeReplyPTY
@@ -1157,28 +1148,12 @@ func (pf *PanelsFrame) initPTY() {
 // loop does with the bytes.
 func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
 	pf.processEnvironmentShellOutput(data)
-	pf.reflowOracle.noteOutput()
 
 	pf.ptyMutex.Lock()
 	shouldProcess := (pf.getActivePTYUnsafe() == p)
 	pf.ptyMutex.Unlock()
 
-	pf.noteConptyFrame(data)
-	// A read is not a message: route classifies the front of it and is
-	// asked again about the rest, so a repaint coalesced with output on
-	// either side costs the display none of the output.
-	for len(data) > 0 {
-		step := pf.reflowOracle.route(data)
-		if step.n <= 0 || step.n > len(data) {
-			step.n = len(data)
-		}
-		if step.sink == nil {
-			pf.displayLocalOutput(shouldProcess, data[:step.n])
-		} else if step.sink != discardParser {
-			step.sink.Process(data[:step.n])
-		}
-		data = data[step.n:]
-	}
+	pf.displayLocalOutput(shouldProcess, data)
 }
 
 // displayLocalOutput is what consumeLocalOutput does with bytes meant for
@@ -1251,7 +1226,6 @@ func workspaceContainsPanelsFrame(screen *vtui.AppScreen, target *PanelsFrame) b
 }
 
 func (pf *PanelsFrame) Close() {
-	pf.reflowSessionSummary("session end")
 	if pf.terminalRedraw != nil {
 		pf.terminalRedraw.stop()
 	}
@@ -1353,44 +1327,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// frame. A fast ConPTY can otherwise deliver new-width absolute
 			// coordinates while TerminalView still has the old width.
 			pf.termView.SetPosition(0, 0, w-1, termH-1)
-			// Absorb ConPTY's repaint on *any* size change, not only width.
-			// A mouse drag on a corner arrives as a mix of width, height and
-			// combined steps; on the height-only steps the frame used to
-			// land on the display, and ConPTY remembers only its viewport,
-			// so each such frame rewrote rows f4 had just pulled back from
-			// history and erased the rest with ESC[K. The field log shows it
-			// exactly: characters preserved within every re-wrap pass and
-			// lost only between them, 130 frames landing, none diverted
-			// (docs/TERMINAL_CONPTY_FINDINGS.md 6.15). The height-only path
-			// refills from GridHistory itself, so f4's viewport is
-			// authoritative there too.
 			pf.termView.Resize(w, termH)
-			// The size ConPTY was last told is tracked separately from the
-			// view's, because the two diverge at the moment that matters: a
-			// resize event whose size the view already has still used to
-			// reach ResizePseudoConsole below, and ConPTY repaints on every
-			// call -- even for an identical size, and then without the
-			// XTWINOPS report, so the frame was neither absorbed (the gate
-			// saw no change) nor recognised. The field log shows three such
-			// same-size events in 10ms followed by a frame that wiped a full
-			// screen down to three rows (6.16). Telling ConPTY nothing when
-			// nothing changed removes the frame at its source; absorbing on
-			// every call that does reach ConPTY covers the rest.
-			childChanged := pf.childPtyW != w || pf.childPtyH != termH
-			// One repaint is owed per call that actually reaches ConPTY.
-			// Arming on a view-only change left a debt nothing would pay,
-			// and the next home-repaint -- a cls -- would have paid it.
-			if childChanged {
-				pf.reflowOracle.absorbResizeRepaint()
-				if pf.childResizeCount%50 == 49 {
-					pf.reflowSessionSummary("during a drag")
-				}
-				pf.childResizeCount++
-			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
-			if childChanged {
-				pf.childPtyW, pf.childPtyH = w, termH
+			{
 				// The other half of every resize: what ConPTY was told. A frame
 				// that later declares a different size (REFLOW_FRAME STALE) is
 				// only explicable next to this line.
@@ -1418,44 +1358,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 		if pty := pf.localPTY(); pty != nil {
 			pf.termView.SetPosition(0, contentY1, w-1, termY2)
-			// Absorb ConPTY's repaint on *any* size change, not only width.
-			// A mouse drag on a corner arrives as a mix of width, height and
-			// combined steps; on the height-only steps the frame used to
-			// land on the display, and ConPTY remembers only its viewport,
-			// so each such frame rewrote rows f4 had just pulled back from
-			// history and erased the rest with ESC[K. The field log shows it
-			// exactly: characters preserved within every re-wrap pass and
-			// lost only between them, 130 frames landing, none diverted
-			// (docs/TERMINAL_CONPTY_FINDINGS.md 6.15). The height-only path
-			// refills from GridHistory itself, so f4's viewport is
-			// authoritative there too.
 			pf.termView.Resize(w, termH)
-			// The size ConPTY was last told is tracked separately from the
-			// view's, because the two diverge at the moment that matters: a
-			// resize event whose size the view already has still used to
-			// reach ResizePseudoConsole below, and ConPTY repaints on every
-			// call -- even for an identical size, and then without the
-			// XTWINOPS report, so the frame was neither absorbed (the gate
-			// saw no change) nor recognised. The field log shows three such
-			// same-size events in 10ms followed by a frame that wiped a full
-			// screen down to three rows (6.16). Telling ConPTY nothing when
-			// nothing changed removes the frame at its source; absorbing on
-			// every call that does reach ConPTY covers the rest.
-			childChanged := pf.childPtyW != w || pf.childPtyH != termH
-			// One repaint is owed per call that actually reaches ConPTY.
-			// Arming on a view-only change left a debt nothing would pay,
-			// and the next home-repaint -- a cls -- would have paid it.
-			if childChanged {
-				pf.reflowOracle.absorbResizeRepaint()
-				if pf.childResizeCount%50 == 49 {
-					pf.reflowSessionSummary("during a drag")
-				}
-				pf.childResizeCount++
-			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
-			if childChanged {
-				pf.childPtyW, pf.childPtyH = w, termH
+			{
 				vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, rows %d..%d)", w, h, w, termH, cw, ch, contentY1, termY2)
 				setPtySize(pty, w, termH, cw, ch)
 				for _, remotePty := range pf.remotePtys {
@@ -1632,29 +1538,11 @@ func (pf *PanelsFrame) endExecution() {
 	}
 }
 
-// setWinReflowMode installs the Windows reflow mode: the ESC[K wrap hint on
-// the terminal view for every mode but off, and the resize oracle for the
-// modes that ask ConPTY. See reflow_oracle.go.
-func (pf *PanelsFrame) setWinReflowMode(mode winReflowMode) {
-	pf.reflowOracle = newReflowOracle(pf, mode)
-	hint := mode != winReflowOff
-	rewrap := mode == winReflowOracle
-	if pf.termView != nil {
-		pf.termView.HintWrap = hint
-		pf.termView.ReflowOnResize = rewrap
-	}
-	for _, line := range winReflowLogLines(mode) {
-		vtui.DebugLog("%s", line)
-	}
-}
-
-// runReflowOracle asks the oracle for a pass at the current geometry. Called
-// by the cmd session once a prompt has settled with no console child.
-func (pf *PanelsFrame) runReflowOracle() {
-	if pf.reflowOracle == nil || pf.termView == nil {
-		return
-	}
-	pf.reflowOracle.maybeRun(pf.localPTY(), pf.termView.Width, pf.termView.Height)
+// logWindowsReflowRemoved says once per session that the Windows reflow
+// modes are gone, and why, so a field log and the probe's mode check both
+// read something truthful instead of nothing.
+func logWindowsReflowRemoved() {
+	vtui.DebugLog("REFLOW: F4_WIN_REFLOW=off (the Windows reflow modes were removed; ConPTY owns the viewport and the history is kept as written -- docs/CONPTY_RESEARCH.md section 7)")
 }
 
 // noteLocalShellLineSent tells the cmd session that a line was typed into
@@ -5325,88 +5213,4 @@ func expandEnvironmentVariables(s string) string {
 
 func isEnvironmentVariableChar(c byte) bool {
 	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
-}
-
-// noteConptyFrame logs, for every chunk that opens a ConPTY repaint frame,
-// the size the frame declares against the size the display view has right
-// now. This is the class of bug none of the pass summaries can see: a frame
-// laid out for one size parsed into a view that is already another size
-// lands rows at the wrong width and blanks the rest, and looks exactly like
-// lost history. The XTWINOPS report (ledger P14) is the only thing that says
-// which size a frame belongs to, and until now nothing read it.
-// ptyBusyForReflow is the child-process side of "is the shell busy", safe
-// from the read loop: the PTY guards it with its own mutex and caches the
-// answer for a second.
-func (pf *PanelsFrame) ptyBusyForReflow() bool {
-	pty := pf.localPTY()
-	return pty != nil && pty.IsBusy()
-}
-
-// reflowSessionSummary is what a bug report needs from an f4 log without
-// anyone reading the stream: how the mode was configured, how much ConPTY
-// was resized, how many repaints were recognised and dropped, and whether
-// any reached the display. Written on shutdown, and after a burst of resizes
-// so a log truncated at the wrong moment still has one.
-func (pf *PanelsFrame) reflowSessionSummary(why string) {
-	o := pf.reflowOracle
-	if o == nil {
-		return
-	}
-	o.mu.Lock()
-	resizes, absorbed, owed, passes, busy := o.resizesSeen, o.absorbedFrames, o.pendingRepaints, o.passesRun, o.absorbSkippedBusy
-	mode := o.mode
-	o.mu.Unlock()
-	tv := pf.termView
-	histRows, chars := 0, 0
-	if tv != nil {
-		tv.mu.Lock()
-		histRows = len(tv.GridHistory)
-		chars = tv.historyCellsLocked() + tv.viewportCellsLocked()
-		tv.mu.Unlock()
-	}
-	vtui.DebugLog("REFLOW_SUMMARY (%s): mode=%s; %d child resizes, %d repaints absorbed, %d applied (shell busy), %d owed; %d oracle passes; history %d rows, %d chars",
-		why, mode, resizes, absorbed, busy, owed, passes, histRows, chars)
-}
-
-func (pf *PanelsFrame) noteConptyFrame(data []byte) {
-	i := bytes.Index(data, []byte("\x1b[8;"))
-	if i < 0 {
-		// A repaint for an unchanged size carries no XTWINOPS report at
-		// all: it opens with ESC[?25l ESC[H and rewrites every row. It is a
-		// frame nonetheless, and the one that wiped the screen in 6.16.
-		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil {
-			// A repaint with no size report: the 6.16 shape.
-			vw, vh := pf.termView.Size()
-			vtui.DebugLog("REFLOW_FRAME: size-less repaint, view %dx%d bytes=%d erases=%d",
-				vw, vh, len(data), bytes.Count(data, []byte("\x1b[K")))
-		}
-		return
-	}
-	end := bytes.IndexByte(data[i:], 't')
-	if end < 0 || end > 16 {
-		return
-	}
-	var rows, cols int
-	if _, err := fmt.Sscanf(string(data[i+4:i+end]), "%d;%d", &rows, &cols); err != nil {
-		return
-	}
-	tv := pf.termView
-	if tv == nil {
-		return
-	}
-	// Under the view's mutex: Resize on the UI goroutine writes these
-	// while this read loop reads them.
-	vw, vh := tv.Size()
-	match := "ok"
-	if cols != vw || rows != vh {
-		match = "STALE"
-	}
-	if match == "ok" {
-		// The normal case. Whether it was absorbed or applied is the
-		// absorber's own count, logged there; this line only names the
-		// frames that declare a size the view no longer has.
-		return
-	}
-	vtui.DebugLog("REFLOW_FRAME: declares %dx%d, view is %dx%d (%s) bytes=%d erases=%d",
-		cols, rows, vw, vh, match, len(data), bytes.Count(data, []byte("\x1b[K")))
 }

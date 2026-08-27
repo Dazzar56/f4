@@ -65,7 +65,10 @@ func probeF4Matrix(w *writer) {
 		mode, verdict string
 	}
 	var results []modeResult
-	for _, mode := range []string{"off", "hint", "oracle", "probe"} {
+	// The Windows reflow modes were removed (docs/CONPTY_RESEARCH.md section
+	// 7); f4 logs "F4_WIN_REFLOW=off" whatever the variable says. One run is
+	// what is left to verify: that f4 starts, resizes and exits under ConPTY.
+	for _, mode := range []string{"off"} {
 		w.sub("f4 mode " + mode)
 		modeDir := filepath.Join(isolation, mode)
 		workDir := filepath.Join(modeDir, "work")

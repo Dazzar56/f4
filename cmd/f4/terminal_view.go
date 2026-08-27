@@ -85,19 +85,7 @@ type TerminalView struct {
 	Muted         bool
 	lastCharWasCR bool
 
-	// HintWrap turns on the ESC[K wrap guess for streams that carry no
-	// soft-wrap signal (ConPTY, docs/TERMINAL_LEDGER.md P6): a row that fills
-	// the width and ends in CRLF with no erase-to-end-of-line before it is
-	// taken as a wrapped row. winpty and WezTerm guess the same way.
-	HintWrap bool
-	// ReflowOnResize lets one TerminalView own the reflow even on Windows.
-	// ConPTY still repaints its viewport afterwards, but the local pass is what
-	// reflows GridHistory, including rows ConPTY has already forgotten.
-	ReflowOnResize bool
-	// elBeforeBreak is set by an erase-to-end-of-line and cleared by printed
-	// text, so that a line feed can tell whether ESC[K came just before it.
-	elBeforeBreak bool
-	authCache     map[string]int
+	authCache map[string]int
 
 	OnTitleChange func(string)
 	OnBusyChange  func(bool)
@@ -209,8 +197,6 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 		tv.authCache[k] = v
 	}
 	tv.lastAttr = other.lastAttr
-	tv.HintWrap = other.HintWrap
-	tv.ReflowOnResize = other.ReflowOnResize
 	tv.Palette = other.Palette
 	tv.CursorX, tv.CursorY = other.CursorX, other.CursorY
 	tv.UseAltScreen = other.UseAltScreen
@@ -447,15 +433,11 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	if r == '\n' {
 		// vtui.DebugLog("TERM_VIEW: LF (CursorY: %d -> %d)", tv.CursorY, tv.CursorY+1)
 		if !tv.UseAltScreen && tv.CursorY >= 0 && tv.CursorY < tv.Height {
-			// A line feed is a hard break -- unless the stream cannot say
-			// (HintWrap) and the row it ends is full to the last column with
-			// no ESC[K before the break, which is how a wrapped row looks
-			// from ConPTY. A row that ends short of the width is always a
-			// real break: ConPTY erases the rest of it first.
-			tv.WrapFlags[tv.CursorY] = tv.HintWrap && !tv.elBeforeBreak &&
-				significantWidthLocked(tv.Lines[tv.CursorY], false) >= tv.Width
+			// A line feed is a hard break. Only the terminal's own autowrap
+			// marks a row as wrapped; nothing is guessed from the shape of
+			// the stream (docs/CONPTY_RESEARCH.md section 7).
+			tv.WrapFlags[tv.CursorY] = false
 		}
-		tv.elBeforeBreak = false
 		tv.newline()
 		return
 	}
@@ -493,7 +475,6 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	}
 
 	buf := tv.getBuffer()
-	tv.elBeforeBreak = false
 	if tv.CursorY >= 0 && tv.CursorY < tv.Height && tv.CursorX >= 0 && tv.CursorX+w <= tv.Width {
 		buf[tv.CursorY][tv.CursorX] = vtui.CharInfo{Char: uint64(r), Attributes: attr}
 		for i := 1; i < w; i++ {
@@ -820,7 +801,6 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	if tv.Muted {
 		return
 	}
-	tv.elBeforeBreak = true
 	buf := tv.getBuffer()
 	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
 		return
@@ -1407,7 +1387,7 @@ func (tv *TerminalView) Resize(w, h int) {
 	// not: the rows keep their contents, and the existing path below moves
 	// them between the viewport and GridHistory, which is what keeps the
 	// terminal's vertical "accordion" behaviour lossless.
-	if (terminalReflowEnabled || tv.ReflowOnResize) && !tv.UseAltScreen && w != tv.Width && w > 0 && h > 0 {
+	if terminalReflowEnabled && !tv.UseAltScreen && w != tv.Width && w > 0 && h > 0 {
 		tv.reflowLocked(w, h)
 		return
 	}

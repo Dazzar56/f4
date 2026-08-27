@@ -336,5 +336,4 @@ func (s *cmdShellSession) release() {
 	pf.catchUpProcessEnvironment(true)
 	// The shell is idle at a prompt with no console child: the one moment
 	// a resize reaches nothing that would react to it.
-	pf.runReflowOracle()
 }

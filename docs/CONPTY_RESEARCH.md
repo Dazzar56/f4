@@ -240,3 +240,54 @@ reading the window class and DA1). `WINCON.md` has the full account.
 - Whether a build exists whose resize repaint does not start at home. The
   probe now records `repaint.*.starts_at_home` precisely so this can be
   answered without another round trip.
+
+
+## 7. Verdict: abandoned. Do not come back to this.
+
+After eleven field runs the Windows reflow -- the `ESC[K` hint, the
+wide-resize oracle, and the repaint absorber in all three of its forms -- is
+removed from the codebase. This section is written so that nobody, including
+the author of the next clever idea, rebuilds it.
+
+**What the last two runs showed.** With every fix of §3 applied, a resize
+during a `dir` still corrupted the Terminal Log: duplicated rows, tails of
+lines placed at the column where ConPTY's buffer had them, blank stretches.
+The stream explained it (6.22): ConPTY's output after a repaint is a delta
+against that repaint. Gating the absorber on "idle" moved the failure rather
+than removing it, and the run after that (duplicated rows, corrupted data)
+was the proof. Every fix in this file made the symptom rarer; none made it
+impossible, because none could.
+
+**Why it cannot work.** The design put two owners on the same rows. ConPTY
+owns its viewport and re-renders it, from a buffer that holds nothing above
+the screen (P16), sending only deltas against the last frame it believes the
+terminal displayed (6.22). f4 owned a re-wrapped history and a viewport
+composed from it. Where the two met -- the seam -- there is no identity for a
+row: nothing in the stream says "this row is that row", so every join was a
+guess (the hint, the oracle's alignment, the absorber's shape rule), and each
+guess was right until the next resize arrived while something was in flight.
+A mechanism that is correct only when nothing is happening is not a
+mechanism.
+
+**What every other terminal on Windows does.** WezTerm, Alacritty and Windows
+Terminal stand *outside* ConPTY: they are the terminal, ConPTY is the
+renderer, and they display the frame it sends. The viewport reflows because
+ConPTY reflows it. Their scrollback is kept as written, and the duplicated
+rows after a resize that this project fought are a known, accepted ConPTY
+limitation there too. f4 was the only program trying to be an application
+inside ConPTY *and* a terminal with its own re-wrapped history at once.
+Nobody else is in that position because it is not a position.
+
+**What remains, deliberately.** ConPTY owns the viewport; on a resize its
+repaint is applied as sent (Horizontal Preservation, the behaviour before
+this work). A wrap flag is set only by the terminal's own autowrap, never
+guessed from the stream. The history is bounded in logical lines rather than
+rows (6.12) -- that was a real bug, independent of all this, and stays fixed.
+The probes, the fake ConPTY and the ten measured findings of §1 stay as
+documentation of what ConPTY does; they are the reason this section can be
+written with confidence instead of regret.
+
+**If the scrollback under Windows must ever re-wrap**, the only honest routes
+are outside this design: an upstream ConPTY that re-renders more than the
+viewport, or a row identity in the stream that ConPTY does not provide today.
+Not a fourth condition on an absorber.

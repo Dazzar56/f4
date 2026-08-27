@@ -1,5 +1,10 @@
 # Terminal ledger: what is known, what is open, what to do next
 
+**The Windows reflow (hint, oracle, absorber) was removed after the field
+runs of `CONPTY_RESEARCH.md` §7. The findings below stand as measurements of
+ConPTY; the implementation entries (W-series, O9-O15) describe an approach
+that is closed, not paused.**
+
 The one-document summary of the ConPTY research, the algorithm it justifies and its failure modes is `CONPTY_RESEARCH.md`; this file is the numbered evidence behind it.
 
 This is the index. It exists because the knowledge below was earned across
