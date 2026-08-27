@@ -341,21 +341,7 @@ func (tv *TerminalView) pushRowToGridHistory(y int) {
 	tv.GridHistory = append(tv.GridHistory, lineCopy)
 	tv.GridHistoryWrap = append(tv.GridHistoryWrap, tv.WrapFlags[y])
 
-	if len(tv.GridHistory) > maxGridHistoryRows {
-		// This row leaves the grid for good: extrudeGridHistoryRow writes it
-		// to the PieceTable, which the re-wrap cannot read back. A pass that
-		// produces more rows than it consumed -- narrowing does -- pays for
-		// the extra rows with the oldest ones, permanently.
-		tv.reflow.droppedPastCap++
-		if extrusionsLogged < 5 {
-			extrusionsLogged++
-			vtui.DebugLog("REFLOW_DROP: history is at the %d-row cap; extruding %q to the PieceTable",
-				maxGridHistoryRows, clipRowText(tv.GridHistory[0]))
-		}
-		tv.extrudeGridHistoryRow(0)
-		tv.GridHistory = tv.GridHistory[1:]
-		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
-	}
+	tv.trimGridHistoryLocked()
 }
 
 func (tv *TerminalView) extrudeGridHistoryRow(idx int) {
@@ -1349,6 +1335,27 @@ var terminalReflowEnabled = runtime.GOOS != "windows"
 // hard bound also makes a full-history reflow cheap enough for every resize.
 const maxGridHistoryRows = 2000
 
+// maxGridHistoryLines bounds the history in *logical* lines, and
+// maxGridHistoryRowsHard bounds the physical rows only to keep memory finite.
+//
+// A row cap is the wrong bound for a buffer whose row count depends on the
+// current width, and that is the whole of issue #425's scrollback loss. The
+// same text occupies 2029 rows at 120 columns and 2068 at 37; each narrowing
+// pass therefore produced more rows than it consumed, evicted the oldest to
+// stay under a row cap, and the re-wrap -- which reads only GridHistory --
+// could never get them back. A resize drag is hundreds of passes, so the
+// history ground itself away: measured at 107973 cells falling to 54757, and
+// eventually to nothing (docs/TERMINAL_CONPTY_FINDINGS.md 6.11).
+//
+// Counted in logical lines, the same text is the same size at every width, so
+// dragging a window edge evicts nothing at all. The hard row ceiling is
+// deliberately far above any width's expansion of maxGridHistoryLines: it is
+// there for a pathological width, not as a working limit.
+const (
+	maxGridHistoryLines    = 2000
+	maxGridHistoryRowsHard = 20000
+)
+
 // Reflow accounting. Every place a row can stop existing increments one of
 // these, and reflowLocked prints all of them together at the end of a pass.
 //
@@ -1565,6 +1572,58 @@ func significantWidthLocked(row []vtui.CharInfo, wrapped bool) int {
 // pair of coordinates. Recomputing (x, y) arithmetically is what makes a live
 // reflow desync from the shell; pinning the cursor to a position in the text
 // survives the relayout, and the shell redraws its prompt on SIGWINCH anyway.
+// trimGridHistoryLocked enforces the history bound, evicting whole logical
+// lines rather than rows.
+//
+// Evicting a single row would strand the rest of its wrapped line, which is
+// worse than dropping the line: the re-wrap would join the fragment to
+// whatever now precedes it. So each eviction removes a complete logical line,
+// leading rows first, and stops as soon as the bound is met.
+func (tv *TerminalView) trimGridHistoryLocked() {
+	for tv.historyLogicalLinesLocked() > maxGridHistoryLines ||
+		len(tv.GridHistory) > maxGridHistoryRowsHard {
+		evicted := 0
+		for len(tv.GridHistory) > 0 {
+			wrapped := tv.GridHistoryWrap[0]
+			if extrusionsLogged < 5 {
+				extrusionsLogged++
+				vtui.DebugLog("REFLOW_DROP: history is over its %d-line bound; extruding %q to the PieceTable",
+					maxGridHistoryLines, clipRowText(tv.GridHistory[0]))
+			}
+			tv.reflow.droppedPastCap++
+			tv.extrudeGridHistoryRow(0)
+			tv.GridHistory = tv.GridHistory[1:]
+			tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
+			evicted++
+			if !wrapped {
+				// That row ended a logical line: one whole line is gone.
+				break
+			}
+		}
+		if evicted == 0 {
+			return
+		}
+	}
+}
+
+// historyLogicalLinesLocked counts the logical lines in GridHistory: a row
+// whose wrap flag is false ends one. A trailing run of wrapped rows is a line
+// still being written, and counts as one.
+func (tv *TerminalView) historyLogicalLinesLocked() int {
+	n := 0
+	for _, wrapped := range tv.GridHistoryWrap {
+		if !wrapped {
+			n++
+		}
+	}
+	// A trailing run of wrapped rows is a line still being written; it has no
+	// terminating row yet, so count it once.
+	if len(tv.GridHistoryWrap) > 0 && tv.GridHistoryWrap[len(tv.GridHistoryWrap)-1] {
+		n++
+	}
+	return n
+}
+
 // clipRowText renders a row's text for a log line, short enough to read.
 func clipRowText(row []vtui.CharInfo) string {
 	var b []rune
@@ -1850,11 +1909,7 @@ func (tv *TerminalView) pushRowLocked(cells []vtui.CharInfo, wrapped bool) {
 	copy(lineCopy, cells)
 	tv.GridHistory = append(tv.GridHistory, lineCopy)
 	tv.GridHistoryWrap = append(tv.GridHistoryWrap, wrapped)
-	if len(tv.GridHistory) > maxGridHistoryRows {
-		tv.extrudeGridHistoryRow(0)
-		tv.GridHistory = tv.GridHistory[1:]
-		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
-	}
+	tv.trimGridHistoryLocked()
 }
 
 // ResetKeyboardProtocols turns off the keyboard encodings a shell may have

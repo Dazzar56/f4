@@ -625,3 +625,23 @@ narrowing cannot evict; raise the cap enough that a drag cannot exhaust it and
 accept the memory; or let the re-wrap read back from the PieceTable, which is
 the only option that also fixes rows already extruded. The first is the smallest
 and matches what the counter shows.
+
+
+### 6.12. Fix: bound the history in logical lines, evict whole lines
+
+`maxGridHistoryRows` is replaced by `maxGridHistoryLines` (2000 logical lines)
+plus a far higher hard row ceiling that exists only so memory stays finite at a
+pathological width. `trimGridHistoryLocked` is now the single eviction point for
+both call sites, and it removes a **complete logical line** at a time: evicting
+one row of a wrapped line would strand the remainder, which the re-wrap would
+then join to whatever preceded it.
+
+Why this is the fix and not a mitigation: the same text is the same number of
+logical lines at every width, so a resize drag evicts nothing at all, and the
+compounding loss of 6.11 cannot occur however long the drag is. A regression
+test writes 300 wrapped lines and drags the width down to 37 and back, asserting
+the logical-line count never falls.
+
+What it does not do: rows already extruded to the PieceTable before this change
+are still unreachable by the re-wrap. That remains the third option in 6.11 and
+is not needed for the reported symptom.

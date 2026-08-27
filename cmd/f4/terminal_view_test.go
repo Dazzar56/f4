@@ -1537,3 +1537,24 @@ func TestTerminalView_Reflow_RefillsViewportFromHistory(t *testing.T) {
 		t.Errorf("only %d of %d rows were filled after widening; the rest stayed in history", filled, tv.Height)
 	}
 }
+
+func TestGridHistoryBoundIsWidthIndependent(t *testing.T) {
+	// The scrollback loss of #425: the same text must survive a resize drag,
+	// because its size in logical lines does not change with the width.
+	tv := NewTerminalView(120, 10)
+	defer tv.Close()
+	p := NewAnsiParser(tv, nil)
+	for i := 0; i < 300; i++ {
+		p.Process([]byte(fmt.Sprintf("line %03d %s\r\n", i, strings.Repeat("x", 100))))
+	}
+	before := tv.historyLogicalLinesLocked()
+	if before == 0 {
+		t.Fatal("nothing reached the history")
+	}
+	for _, w := range []int{119, 97, 61, 41, 37, 61, 97, 120} {
+		tv.Resize(w, 10)
+	}
+	if after := tv.historyLogicalLinesLocked(); after < before {
+		t.Fatalf("a resize drag destroyed history: %d logical lines -> %d", before, after)
+	}
+}
