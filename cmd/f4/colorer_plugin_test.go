@@ -283,6 +283,12 @@ func TestColorer_DownloadColorerSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Preserve an initialized config cache when this test temporarily swaps
+	// the directory below. Otherwise cleanup can restore an empty cache while
+	// configDirOnce remains consumed, making later shuffled tests resolve
+	// relative paths.
+	_ = GetF4ConfigDir()
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
 		if _, err := w.Write(buf.Bytes()); err != nil {
