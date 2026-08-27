@@ -3,12 +3,28 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 )
+
+// waitForLogContains blocks until the file at path contains marker, or until
+// timeout. Used so the f4 matrix waits for a durable startup signal (the
+// "F4 STARTUP" line f4 writes itself) instead of racing the first PTY flush,
+// which on a slow machine can arrive after a fixed drain's quiet window.
+func waitForLogContains(path, marker string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(path); err == nil && strings.Contains(string(b), marker) {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
 
 // probeF4Matrix runs the real bundled f4 four times under a hidden ConPTY.
 // The probe owns the environment, input and resizes. This is the part that an
@@ -85,6 +101,12 @@ func probeF4Matrix(w *writer) {
 		w.summary("f4."+mode+".launched", "yes")
 
 		var screen []byte
+		// f4's first flush can land after the drain's quiet window elapses on
+		// a slow machine, which used to report startup=0 and fail an
+		// otherwise healthy run. Wait for a durable startup signal -- the
+		// "F4 STARTUP" line f4 writes to its own debug log -- before draining,
+		// so the drain sees the banner rather than racing it.
+		waitForLogContains(logPath, "F4 STARTUP", 12*time.Second)
 		startup := p.drain(1200*time.Millisecond, 12*time.Second)
 		screen = append(screen, startup...)
 
@@ -140,25 +162,33 @@ func probeF4Matrix(w *writer) {
 			w.printf("debug log missing: %v\n", readErr)
 		}
 		d := string(debug)
-		modeConfirmed := strings.Contains(d, "REFLOW: F4_WIN_REFLOW="+mode)
-		oracleSeen := strings.Contains(d, "REFLOW_ORACLE:")
-		oracleCompleted := strings.Contains(d, "safe boundaries") &&
-			!strings.Contains(d, "nothing stamped")
-		syncSeen := strings.Contains(d, "ANSI_PARSER: Excising background Windows CD sync")
-		nestedSeen := strings.Contains(string(nestedOut), "F4PROBE_NESTED_ENTER_OK") ||
-			strings.Contains(d, "F4PROBE_NESTED_ENTER_OK")
-		verdict := "complete"
-		if len(startup) == 0 || readErr != nil || !modeConfirmed || !resizeOK ||
-			((mode == "oracle" || mode == "probe") && !oracleCompleted) {
-			verdict = "incomplete"
+		obs := f4MatrixObservations{
+			mode:       mode,
+			startupLen: len(startup),
+			screenLen:  len(screen),
+			nestedOut:  string(nestedOut),
+			debugLog:   d,
+			logReadErr: readErr != nil,
+			resizeOK:   resizeOK,
 		}
+		verdict, oraclePasses, oracleStamped, oracleRejected := f4MatrixVerdict(obs)
+		modeConfirmed := f4MatrixModeConfirmed(mode, d)
+		oracleSeen := f4MatrixOracleSeen(d)
+		oracleCompleted := oracleStamped > 0
+		syncSeen := f4MatrixSyncSeen(d)
+		nestedSeen := f4MatrixNestedSeen(string(nestedOut), d)
+
 		w.printf("startup=%d command=%d total-screen=%d duration=%v exited=%v code=%#x\n",
 			len(startup), len(commandOut), len(screen), time.Since(started).Round(time.Millisecond), !alive, code)
-		w.printf("mode-confirmed=%v oracle-log=%v oracle-completed=%v sync-excision=%v nested-enter=%v resize-ok=%v\n",
-			modeConfirmed, oracleSeen, oracleCompleted, syncSeen, nestedSeen, resizeOK)
+		w.printf("mode-confirmed=%v oracle-log=%v oracle-passes=%d stamped=%d rejected=%d oracle-completed=%v sync-excision=%v nested-enter=%v resize-ok=%v\n",
+			modeConfirmed, oracleSeen, oraclePasses, oracleStamped, oracleRejected, oracleCompleted, syncSeen, nestedSeen, resizeOK)
 		w.printf("debug excerpt:\n%s\n", Clip(Escape(debug), 14000))
 		w.summary("f4."+mode+".mode_confirmed", yesno(modeConfirmed))
 		w.summary("f4."+mode+".oracle_observed", yesno(oracleSeen))
+		if mode == "oracle" || mode == "probe" {
+			w.summary("f4."+mode+".oracle_passes",
+				fmt.Sprintf("%d (stamped %d, safely rejected %d)", oraclePasses, oracleStamped, oracleRejected))
+		}
 		w.summary("f4."+mode+".oracle_completed", yesno(oracleCompleted))
 		w.summary("f4."+mode+".sync_excision_observed", yesno(syncSeen))
 		w.summary("f4."+mode+".nested_enter_observed", yesno(nestedSeen))

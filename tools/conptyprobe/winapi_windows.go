@@ -38,6 +38,7 @@ var (
 	procQueryFullProcessImageNameW = kernel32.NewProc("QueryFullProcessImageNameW")
 	procGetExitCodeProcess         = kernel32.NewProc("GetExitCodeProcess")
 	procGetConsoleProcessList      = kernel32.NewProc("GetConsoleProcessList")
+	procGetModuleHandleW           = kernel32.NewProc("GetModuleHandleW")
 
 	procGetClassNameW           = user32.NewProc("GetClassNameW")
 	procGetWindowLongPtrW       = user32.NewProc("GetWindowLongPtrW")
@@ -78,13 +79,14 @@ const (
 	gwOwner    = 4
 	gwHwndPrev = 3
 
-	wsClipChildren = 0x02000000
-	wsVisible      = 0x10000000
-	wsPopup        = 0x80000000
-	wsExLayered    = 0x00080000
-	wsExToolWindow = 0x00000080
-	wsExTopmost    = 0x00000008
-	wsExNoActivate = 0x08000000
+	wsClipChildren  = 0x02000000
+	wsVisible       = 0x10000000
+	wsPopup         = 0x80000000
+	wsExLayered     = 0x00080000
+	wsExToolWindow  = 0x00000080
+	wsExTopmost     = 0x00000008
+	wsExNoActivate  = 0x08000000
+	wsExTransparent = 0x00000020
 
 	extendedStartupInfoPresent = 0x00080000
 	createUnicodeEnvironment   = 0x00000400
@@ -284,12 +286,24 @@ func fileVersion(path string) string {
 	if ok == 0 || ptr == 0 || n < uint32(unsafe.Sizeof(vsFixedFileInfo{})) {
 		return "unknown"
 	}
-	v := (*vsFixedFileInfo)(unsafe.Pointer(ptr))
-	if v.Signature != 0xfeef04bd {
+	// VerQueryValue hands back a pointer *into* buf. Read the fixed info
+	// through the slice at that offset rather than through the raw address:
+	// converting a uintptr back into a pointer is the one unsafe.Pointer
+	// pattern the garbage collector is allowed to break, and go vet says so.
+	off := int(ptr - uintptr(unsafe.Pointer(&buf[0])))
+	if off < 0 || off+int(unsafe.Sizeof(vsFixedFileInfo{})) > len(buf) {
 		return "unknown"
 	}
-	return itoa(int(v.FileVersionMS>>16)) + "." + itoa(int(v.FileVersionMS&0xffff)) + "." +
-		itoa(int(v.FileVersionLS>>16)) + "." + itoa(int(v.FileVersionLS&0xffff))
+	le := func(at int) uint32 {
+		return uint32(buf[off+at]) | uint32(buf[off+at+1])<<8 |
+			uint32(buf[off+at+2])<<16 | uint32(buf[off+at+3])<<24
+	}
+	if le(0) != 0xfeef04bd { // VS_FFI_SIGNATURE
+		return "unknown"
+	}
+	ms, ls := le(8), le(12) // FileVersionMS, FileVersionLS
+	return itoa(int(ms>>16)) + "." + itoa(int(ms&0xffff)) + "." +
+		itoa(int(ls>>16)) + "." + itoa(int(ls&0xffff))
 }
 
 func itoa(v int) string {

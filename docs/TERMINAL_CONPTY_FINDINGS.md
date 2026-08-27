@@ -350,3 +350,36 @@ boundary is confirmed, the flag follows that row through local scrollback and
 into the permanent log even after ConPTY has discarded it. Repeated or
 isolated rows are not anchors; the conservative hint remains for boundaries
 which no oracle frame ever overlaps.
+
+### 6.6. The corrected version-6 run: the oracle works, the runner did not
+
+A second `f4probe 6` run on the same 10.0.22000.2538, with the journal matcher
+of §6.5 in place, shows the oracle doing what §5.3 predicted. Across the two
+modes that run it, ten passes captured delimited wide and narrow frames, and
+the ones that aligned stamped real boundaries: in `oracle` mode five passes
+stamped 2, 2, 4, 4 and 1 boundaries and reported `0 became stale`, with `0
+where hint and oracle disagree` every time. So on this build the `ESC[K` guess
+of §5.2 was never wrong where the oracle could check it. That is a measurement
+of the guess, not a licence to trust it: the disagreement count is only
+meaningful over the rows an oracle frame actually overlapped.
+
+Two of the four modes were nonetheless reported `incomplete`, and both were
+faults in the runner rather than in f4:
+
+- `off` was failed for `startup=0`. The runner drained the pseudoconsole with
+  a fixed quiet window and f4's first flush arrived after it, on a machine
+  where plugin loading takes longer than the window. The same run recorded
+  114 KB of screen output afterwards, so the launch plainly succeeded. The
+  runner now waits for f4's own `F4 STARTUP` line in the debug log before
+  draining, and the verdict accepts the union of independent startup signals.
+- `probe` was failed because one pass logged `nothing stamped`. That pass had
+  aborted on `display changed during the pass`, which is the safety rule of
+  §3.3.1 working: an oracle pass that cannot prove the frames describe the
+  same text must stamp nothing. The verdict required *zero* rejected passes,
+  which asks the safety rule never to fire. It now requires at least one pass
+  that stamped, and reports stamped and safely-rejected passes as separate
+  numbers.
+
+The lesson is worth more than the fix: a verdict that treats a conservative
+refusal as a failure will keep reporting a working mechanism as broken, and
+the log will look like evidence against the design.

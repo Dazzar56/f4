@@ -55,6 +55,11 @@ func runProbe(opts probeOptions) {
 	}
 
 	run("host", describeHost)
+	// The image-overlay and terminal-graphics questions (issue #805, and the
+	// sixel capability report for Windows Terminal) belong in every launch
+	// context, so this runs in the host-only WT and default-handoff scopes
+	// too, not just the full forced-conhost matrix.
+	run("graphics", probeConsoleGraphics)
 	if opts.scope == "full" {
 		run("flags", probeFlags)
 		run("reflow", probeReflow)
