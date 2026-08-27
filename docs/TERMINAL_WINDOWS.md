@@ -77,13 +77,20 @@ Fix: `cmd_session.go`. `PROMPT` now marks the prompt start (`133;A`) and end
 finished only when a prompt end mark has arrived *after* the line was typed,
 the cursor has rested right after that prompt's text for
 `cmdPromptSettleDelay` (150 ms — an echoed batch line is followed by the
-command text and a line break within a frame, a real prompt by nothing), the
-shell has no child process (a nested `cmd`/`python` prints the same prompt),
-and the console title is not in cmd's "<title> - <command>" running form,
-which ConPTY forwards. A vetoed prompt is re-examined every
+command text and a line break within a frame, a real prompt by nothing), and
+the shell has no console child process that still owns the terminal. A vetoed
+prompt is re-examined every
 `cmdPromptRecheckDelay`, so a nested shell that exits later still hands the
 panels back. The directory sync goes through the same accounting: `Show()`
 does not type a second sync while the previous line has no settled prompt.
+
+The current code does **not** use the console title. The old conclusion that
+the title was unavailable came from trying to enumerate windows behind the
+pseudoconsole. The synchronized `f4probe 4` run on 22000 confirms the distinct
+fact that cmd forwards the title in the VT stream as OSC 0: busy form while an
+external command or batch runs, bare form on completion, including a batch
+that has reset `PROMPT` and one paused with no child. That is now the measured
+markless path, but it still has to be wired into `cmdShellSession`.
 
 ### 3.1. Field results, 2026-08-26 (commit 49d388b)
 
@@ -121,10 +128,11 @@ so it emits our marks too.
 Two candidate signals were considered; a process probe run by a tester
 (`f4-probe.ps1`, Windows 11 26200) decided between them:
 
-* **Console title** — dead. cmd's "<title> - <command>" form is not readable
-  from outside: the conhost behind a pseudoconsole has no window, so the
-  title column came back empty for every process, running or not. The title
-  veto in `cmdShellSession.titleSaysRunning` can never fire and should go.
+* **Console title through window/process enumeration** — dead. The conhost
+  behind a pseudoconsole has no useful window, so the title column came back
+  empty for every process, running or not. A later probe corrected the broader
+  inference: the same title does reach f4 in the VT stream as OSC 0
+  (`TERMINAL_CONPTY_FINDINGS.md` §5.7 and §6.1).
 * **Image name of the child** — works. While the nested shell sat at its
   prompt, the child of f4's cmd was `cmd.exe`; while real commands ran it was
   `PING.EXE` and `timeout.exe`. So: keep the child veto, but do not apply it
@@ -144,10 +152,13 @@ Implemented in `cmd_session.go`: `childHoldsTerminal` ignores children in
 stay a raw-mode child like ssh or python) and ignores GUI children, whose
 subsystem is read from the PE header of the image (`pe_subsystem.go`,
 `PTY.ChildProcesses`). cmd does not wait for a GUI program, so `notepad` typed
-at the prompt leaves cmd idle; the second field report confirmed that it was
-only the five-second fallback (§3.3) that had been returning the panels in
-that case. A console child that is not a shell holds the terminal for as long
-as it runs — that wait is deliberately unbounded, `ping -t` is forever.
+at the prompt leaves cmd idle. It is not safe to require Notepad to appear in
+that child list: on 22000 `f4probe` opened a visible Notepad but saw no direct
+child or descendant, and therefore failed to close it. That does not hurt the
+session rule — an absent child cannot veto the prompt, while an enumerated GUI
+child is ignored. A console child that is not a shell holds the terminal for
+as long as it runs — that wait is deliberately unbounded, `ping -t` is
+forever.
 
 Open: with the panels hidden and a nested `cmd` at its prompt, Enter typed in
 raw mode reportedly did nothing while `dir` typed after `Ctrl+O` (through f4's
@@ -246,9 +257,10 @@ which an echoed batch line, a `set /p` prompt and program output that ends in
 late-text build that costs one extra re-look, about 400 ms in total instead of
 five seconds.
 
-The title veto was removed in the same change: §3.1 showed the title is
-unreadable behind a pseudoconsole, and `cmdShellSession.titleSaysRunning` could
-never have fired.
+The title veto was removed in the same change because enumeration could not
+read the title. That removal was correct for that implementation, but its
+premise was too broad: §3.1 above now records the independently measured OSC 0
+path that can restore a title-based veto without enumerating a window.
 
 ## 5. Plan, in order
 
@@ -256,18 +268,18 @@ never have fired.
 | --- | --- | --- |
 | 1 | Settled-prompt completion (#409) | shipped, field-tested |
 | 2 | Nested shell: skip the child veto for `cmd.exe`; remove the dead title veto | shipped |
-| 3 | GUI children (`notepad`) do not count as busy | shipped (PE subsystem) |
+| 3 | GUI children do not count as busy; brokered/reused Notepad may not be a child at all | shipped (PE subsystem plus the natural no-child case) |
 | 4 | Examine the screen at settle time, not a snapshot at the mark (§3.3) | shipped |
 | 5 | Self-erasing directory sync cleanup (section 3) | next |
 | 6 | Startup sync typed before the first prompt settles | with 5 |
-| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | Go probe built, results pending |
+| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe complete on 19045 and 22000; `f4probe 5` is ready for paired WT/conhost 24H2/25H2 runs; implementation is behind `F4_WIN_REFLOW` and still needs in-f4 field validation |
+| 8 | OSC 0 title as the markless completion path for a batch that resets `PROMPT` | signal confirmed by the synchronized probe; implementation pending |
 
-Steps 2–4 need a field run: expected is `dir` ending well under a second on
-19045, `notepad` and nested `cmd` returning the panels at once, and `ping -t`
-holding them until Ctrl+C. The PowerShell probe for step 7 failed twice on
-P/Invoke details (`err=87` for both flags, i.e. before the flag mattered);
-`tools/conptyprobe` is the same experiment written with the calls f4 itself
-uses, cross-compiled here.
+Steps 2–4 have field evidence on 19045. The standalone Go probe has now also
+replaced the failed PowerShell experiment for step 7 and produced complete
+results on 19045 and 22000. It does not exercise f4's scratch-frame routing,
+so `F4_WIN_REFLOW=oracle` still needs a real in-f4 run checking for flicker,
+cursor jumps and matcher failures. Step 8 is measured but not implemented.
 
 ## 4. Issue #362 — Ctrl+C does not interrupt in f4-gui
 

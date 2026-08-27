@@ -125,7 +125,7 @@ information.
 | 3 | Self-erasing directory sync cleanup | next — the sync is the remaining creep suspect |
 | 4 | Stop resizing ConPTY for the keybar (§2.2 option 2) | later, for flicker |
 | 5 | Windows reflow of the live grid | **dropped** — ConPTY does it; the flag is a no-op. The history's join information is recovered instead, behind `F4_WIN_REFLOW` (`TERMINAL_LEDGER.md` §3.3.1) |
-| 6 | Re-run `tools/conptyprobe` on a Windows 11 build | when a tester has one; only a newer build can reopen step 5 |
+| 6 | Re-run the cursor-model probe on Windows 11 24H2/25H2 | pending; 22000 is measured, but only a newer ConPTY can reopen step 5 |
 
 
 ## 5. The second build: 10.0.22000.2538
@@ -158,17 +158,22 @@ was written from a hand-read of one chunk in which cmd happened to move with an
 absolute CUP instead, and it was wrong. Both shapes occur; only a cursor model
 tells them apart, which is why the probe now carries one.
 
-### 5.2. `ESC[K` is exact here, not a guess
+### 5.2. `ESC[K` helps, but its exact-width ambiguity is real here
 
-Measured over the whole run: `ESC[K` appeared on rows that ended with a break
-and on **no** row that ended by wrapping. The winpty guess -- a full row with no
-`ESC[K` is a continuation -- was right every time here, and its one-in-W failure
-case (a hard-broken line exactly the width of the console) did not occur even
-though the probe deliberately printed one.
+`ESC[K` appeared after every **short** row that ended with a break and after no
+row that ended by wrapping. But the synchronized run's raw 100 -> 40 repaint
+also contains the deliberate control case: forty `A` characters, then CRLF,
+with no `ESC[K`. That is a hard-broken line exactly as wide as the console,
+and the winpty guess -- "a full row with no `ESC[K` is a continuation" --
+would join it incorrectly.
 
-That is enough to stamp `ExplicitLineBreak` from the repaint with no oracle at
-all. It is not enough to assume the same on another build; the code must read
-what the stream is doing rather than branch on a build number, ledger item O8.
+The earlier statement that this failure case did not occur came from the
+probe's `wrap.el_on_broken_row` summary. That verdict examined the marked long
+`B` line only; it did not include the exact-width `A` control even though the
+raw grid report did. The cursor model can distinguish `wrap` from `lf` in this
+22000 repaint, but the `ESC[K` hint alone is still a guess. The oracle can
+correct viewport rows; rows already outside ConPTY's viewport retain the
+one-in-width ambiguity.
 
 ### 5.3. The oracle is feasible, and very cheap
 
@@ -213,7 +218,7 @@ at all -- which is exactly what a batch running `prompt $P$G` takes away from
 us today.
 
 
-## 6. What this run did *not* establish
+## 6. What the first cursor-model run did *not* establish
 
 The probe typed the OSC 133 `PROMPT` after `timeout /t 3 /nobreak` and waited
 for the stream to go quiet rather than for the process to exit. `timeout`
@@ -226,3 +231,58 @@ agreed with them.
 
 Recorded here because a log full of `= 0` reads like a finding, and this one is
 not one. The probe should wait on the child, not on silence.
+
+### 6.1. The synchronized follow-up closes that hole
+
+`f4probe 4` was run again on the same 10.0.22000.2538 machine. This version
+waited for the process rather than the stream: it saw the direct
+`timeout.exe` child 32 ms after sending the line, saw that exact PID disappear
+3.067 s after the line was sent, and only then changed `PROMPT`. The dependent
+measurements are therefore valid in this run:
+
+- OSC 133 marks pass through ConPTY, and 22000 delivered the prompt-end mark
+  before the prompt text (`mark_before_prompt_text`), agreeing with 19045;
+- the ECHO-on batch produced four prompt-end marks, including the marks forged
+  by its echoed lines;
+- the ECHO-off batch produced one final prompt-end mark;
+- the batch that executed `prompt $P$G` produced one mark before that command
+  took effect and no marks for its later lines or final prompt.
+
+The title measurements were also repeated after the synchronization fix. OSC
+0 carried the busy form while `timeout.exe` ran and the bare title after its
+confirmed exit. A batch carried the busy form for its whole lifetime,
+including while its in-process `pause` had no child process at all. This closes
+the measurement gap above; it does not by itself implement the title-based
+completion path in f4.
+
+### 6.2. The summary missed the exact-width control
+
+The follow-up also exposed the reporting error behind the old §5.2 claim. In
+the raw 40-column repaint the exact-width output is shown as a full row ending
+in `lf` with `ESC[K=false`. The summary still says
+`wrap.el_on_broken_row=yes` because that key is computed from the long-line
+verdict only. `f4probe 5` reports the exact-width line's end, hard-CRLF state,
+`ELOnBreak` and whether the hint would join it as separate summary keys. This
+log is already sufficient to correct the finding; the new keys prevent the
+same reading error on 24H2/25H2.
+
+### 6.3. The Notepad cleanup result is not a process-topology finding
+
+The same run opened a visible Notepad, but the probe found neither a direct
+child of cmd nor a descendant within three generations, and consequently
+reported `notepad processes closed by the probe: 0`. The tester closed the
+window manually after the probe had finished. The launch may have been
+brokered or may have reused an application process; this run did not determine
+which.
+
+That does not affect any ConPTY, repaint, prompt, batch or title result:
+Notepad was the last scenario. It does mean that `notepad` cannot be used as a
+portable assertion about parent/child topology, and that a future probe must
+identify only newly created Notepad processes outside the shell tree if it
+wants to clean them up safely.
+
+`f4probe 5` does that conservatively: it skips the scenario if any Notepad
+process already exists, otherwise compares the global `notepad.exe` PID set
+before and after launch, records the actual parent chain and windows, and
+terminates only newly observed PIDs. A missing new PID is logged and left
+untouched rather than risking another application instance.

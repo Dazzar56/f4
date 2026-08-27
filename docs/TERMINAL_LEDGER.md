@@ -26,38 +26,38 @@ build named is the same on both.
 
 | # | Finding | Source | Status |
 | --- | --- | --- | --- |
-| C1 | With ECHO on, cmd prints `PROMPT` in front of every batch line, so any completion mark placed in `PROMPT` is forged by the first line of a batch (#409). | C, F | handled: settled-prompt rule |
+| C1 | With ECHO on, cmd prints `PROMPT` in front of every batch line, so any completion mark placed in `PROMPT` is forged by the first line of a batch (#409). The synchronized 22000 probe counted four prompt-end marks for a three-line ECHO-on batch, versus one final mark with ECHO off. | C, F, P | handled: settled-prompt rule |
 | C2 | cmd interprets batch files in-process: no child appears for the batch itself, only for programs it runs. | C, P | handled |
 | C3 | cmd prints CRLF then the prompt after a command; nothing before the prompt after `cls`. | C | noted (sync cleanup design) |
 | C4 | cmd's console title takes the form `<title> - <command>` while running something. | C, P | **reopened** (O10). P3 says the title cannot be read by enumerating windows; P18 says it arrives in the VT stream anyway. The veto was dropped on the strength of the wrong one of those two. |
-| C5 | cmd does not wait for a GUI program: `notepad` at the prompt leaves cmd idle with notepad as its child. `start notepad` detaches and is not a child. | C, F | handled: PE subsystem check |
+| C5 | cmd does not wait for a GUI program. Its process topology is not stable enough to say that `notepad` is always cmd's child: on 22000 the probe opened a visible Notepad but found no direct child or descendant, so its cleanup missed the process. | C, F, P | handled for session completion: an absent child cannot hold the terminal, and an enumerated GUI child is ignored; do not use Notepad parentage as a probe invariant |
 | C6 | `%VAR%` with ESC in it expands inside a typed line (`$E` in PROMPT works; env-manager's `type` of a file holding `ESC]133;E` works). Basis for any self-erasing cleanup line. | C | design only |
 | C7 | A nested `cmd` prints the same prompt and accepts the same typed lines; PowerShell rejects `cd /d`. Hence only `cmd.exe` is exempt from the child veto. | C, F | handled |
-| C8 | A batch that runs `prompt $P$G` strips the marks from every later prompt. No handling; the wait then never ends by mark. | C | **open** (O4) |
+| C8 | A batch that runs `prompt $P$G` strips the marks from every later prompt. The synchronized 22000 run saw one mark before the reset took effect and none for either later line or the final prompt. | C, P | **open** (O4): needs the title path measured in P18/P19 |
 
 ### 1.2. ConPTY
 
 | # | Finding | Source | Status |
 | --- | --- | --- | --- |
-| P1 | OSC 133 marks with any parameters pass through ConPTY verbatim. | C, F | relied on |
-| P2 | On 10.0.19045 the mark is delivered **before** the prompt text that precedes it in cmd's output; on 10.0.26200 the text comes first. 10.0.22000 agrees with 19045. | F, M, P | handled: screen examined at settle time, both orders in the test model |
+| P1 | OSC 133 marks with any parameters pass through ConPTY verbatim. The result was repeated on 22000 only after `timeout.exe` had been observed and its exit confirmed, so it is no longer downstream of a silence race. | C, F, P | relied on |
+| P2 | On 10.0.19045 the mark is delivered **before** the prompt text that precedes it in cmd's output; on 10.0.26200 the text comes first. A child-synchronized 10.0.22000 run agrees with 19045. | F, M, P | handled: screen examined at settle time, both orders in the test model |
 | P3 | The console title is **not** readable from outside a pseudoconsole: empty for every process, both builds. | P | title veto removed |
 | P4 | `conhost.exe` instances are children of **f4**, not of cmd. A child enumeration on cmd's PID never sees them. | P | relied on |
-| P5 | `PSEUDOCONSOLE_RESIZE_QUIRK` (0x2) is **accepted and ignored** on 19045.7663: identical bytes on resize either way. Same on 22000.2538, to the byte. | P | Windows live-grid reflow dropped |
+| P5 | `PSEUDOCONSOLE_RESIZE_QUIRK` (0x2) is **accepted and ignored** on 19045.7663. On 22000.2538 an actual byte comparison, not a length comparison, found the live stream and both resize repaints identical to flag 0. | P | Windows live-grid reflow dropped |
 | P6 | In the **resize repaint** on 19045 the wrap point carries a **hard CRLF**: no soft-wrap signal there. Full-width rows are padded to width with spaces. A row that ends short of the width is followed by `ESC[K`; a full row is not. Read P11-P13 before building on this: the CRLF is not universal. | P | the `ESC[K` clause is the exploitable hint (plan §3.3) |
 | P7 | On resize ConPTY repaints the **whole viewport** as one frame: `ESC[?25l ESC[H`, each row + `ESC[K`, CRLF between rows, `ESC[r;cH ESC[?25h`. The line that was three rows at 40 columns comes back as **one row** at 100: ConPTY keeps lines whole and reflows its own buffer. | P | Windows live-grid reflow dropped: ConPTY does it |
 | P8 | That repaint frame does **not** scroll f4's grid at any height 3–14. | M | creep-from-repaint hypothesis retracted |
 | P9 | `ResizePseudoConsole(0,0)` must never be sent (TERMINAL.md rule 4). | C | guarded in `PTY.SetSize` |
 | P10 | Passthrough mode (0x8) exists on Windows 11 22H2+. | C | measured, see P17 |
 | P11 | ConPTY marks a wrap sometimes with a CRLF and sometimes with nothing, **within one build**. On 22000 the live stream breaks the long line with a real CRLF (`wrap, lf, lf`), and it also emits chunks with no line terminator at all, relying on the terminal's autowrap and then moving with an absolute CUP. Line structure must be read from a cursor model; a CRLF-only reading of the same bytes reported a two-row line as one 140-column row. | P | grid model, never a CRLF split |
-| P12 | The **repaint** on 22000 does not break the line: an 80-column logical line is written whole into a 40-column console and only the last row is followed by CRLF (`wrap, lf`); narrowing to 20 gives `wrap, wrap, lf, wrap, wrap, lf`. So in a repaint the join information *is* in the stream. | P | plan §3.3: on such builds the hint is exact rather than a guess |
-| P13 | `ESC[K` appears on every row that ended with a break and on no row that ended by wrapping -- measured over a whole 22000 session, including a line printed at exactly the console width, which is the winpty guess's one known failure case. | P | plan §3.3 (b) is exact here, not a guess |
+| P12 | The **repaint** on 22000 does not break a long logical line: it is written whole into the narrow console and only its last row is followed by CRLF (`wrap, lf`); narrowing to 20 gives `wrap, wrap, lf, wrap, wrap, lf`. A cursor model therefore recovers joins in this repaint. | P | plan §3.3: the frame carries the structure, but P13 says the `ESC[K` shortcut alone is not exact |
+| P13 | `ESC[K` appears after short broken rows and not after wrapped rows, but a hard-broken line of exactly 40 characters also arrived as a full row plus CRLF with no `ESC[K`. The probe's summary missed it because `wrap.el_on_broken_row` examined only the long-line marker; the raw grid records `len=40 end=lf ESC[K=false`. | P | plan §3.3 (b) remains the documented one-in-width guess; the oracle is required to correct viewport rows |
 | P14 | The resize repaint opens with `ESC[?25l` **and an XTWINOPS size report**, `ESC[8;<rows>;<cols>t`, before `ESC[H`. Nothing in f4 reads it. It is an unambiguous "a repaint for this size starts here" marker, free of charge. | P | see O9 |
-| P15 | The wide-resize oracle works on 22000: `ResizePseudoConsole(4000, 12)` is accepted, the repaint is 287 bytes, and it comes back with the long line rejoined. Timed from the call: first byte at 8 ms, frame complete at 8 ms, round trip out and back 9 ms. | P | plan §3.3 (a) is not just feasible, it is nearly free |
+| P15 | The wide-resize oracle works on 22000: `ResizePseudoConsole(4000, 12)` is accepted, the repaint is 287 bytes, and it comes back with the long line rejoined. Two cursor-model runs measured first byte at 1-8 ms, frame complete at 8 ms, and round trip at 8-9 ms. | P | plan §3.3 (a) is not just feasible, it is nearly free |
 | P16 | The repaint covers the **viewport only**. Thirty lines printed into a twelve-row console and then widened: the frame begins at LINE_21. conhost keeps no scrollback on ConPTY's behalf. | P | step-zero question 1 answered: the oracle recovers structure, never history |
-| P17 | Passthrough (0x8) is accepted on 22000 and produces output identical to flag 0, byte for byte, through wrap and resize alike. From outside it is a no-op, exactly like the resize quirk. | P | P10 closed |
-| P18 | cmd's `<title> - <command>` **is** forwarded through ConPTY as OSC 0, verbatim, e.g. `ESC]0;F4PROBE_TITLE_XYZ - timeout  /t 3 /nobreakBEL`. | P | see O10; C4 reopened |
-| P19 | The title carries the command form while a batch sits on `pause` as well -- with no child process in existence and no mark to be had. It is the only signal measured so far that says "busy" during a batch's own waiting. | P | O10; this is what `IsBusy` and OSC 133 both miss (C2) |
+| P17 | Passthrough (0x8) is accepted on 22000. An actual byte comparison found its live stream, wide repaint and narrow repaint identical to flag 0. From outside it is a no-op, exactly like the resize quirk. | P | P10 closed |
+| P18 | cmd's `<title> - <command>` **is** forwarded through ConPTY as OSC 0, verbatim, e.g. `ESC]0;F4PROBE_TITLE_XYZ - timeout  /t 3 /nobreakBEL`; the bare title returned after the child's independently confirmed exit. | P | see O10; C4 reopened |
+| P19 | The title carries the command form for ECHO-on, ECHO-off and PROMPT-resetting batches, including while an in-process `pause` has no child and no usable mark. It is the only signal measured so far that says "busy" during a batch's own waiting. | P | O10; this is what `IsBusy` and OSC 133 both miss (C2) |
 
 ### 1.3. f4 itself, Windows path
 
@@ -110,13 +110,13 @@ probe.
 | O1 | The creep (W5). | Sync-induced; onset reported at nightly 2462a68 — bisect candidate. Fix is the self-erasing cleanup line (C6, `TERMINAL_WINDOWS.md` §3 design). |
 | O2 | Startup sync typed before the first prompt settles. | With O1. |
 | O3 | Raw-mode Enter in a nested cmd (W4). | Unexplained. Needs a `--debug` log of the keystrokes as written. |
-| O4 | A batch that resets PROMPT (C8). | Needs a markless completion path; see plan §2.3. |
+| O4 | A batch that resets PROMPT (C8). | The markless signal is now measured without the earlier race: OSC 0 carries the busy batch title and restores the bare title at completion (P18/P19). Implementation in `cmdShellSession` remains open. |
 | O5 | Keyboard modes when switching between two live shells (A2). | Needs modes per session, not per `TerminalView`. |
 | O6 | Reflow vs truncation without an alternate screen (A8). | Measure which programs actually suffer before adding a heuristic. |
-| O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P18). The quirk is still a no-op. 24H2/25H2 remain unmeasured. |
-| O8 | The wrap signal is build-dependent (P6 against P11/P12). | Do not branch on a build number. The `hint` path can tell which world it is in from the stream itself: if a full-width row is ever followed by CRLF *and* by `ESC[K`, the stream is re-breaking lines and the hint is a guess; if full rows never carry `ESC[K`, it is exact. Decide per session, log which. |
+| O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P19), including a child-synchronized repeat of the mark and batch scenarios. The quirk is still a no-op. 24H2/25H2 remain unmeasured; `f4probe 5` records `DisplayVersion`, `BuildLabEx` and an explicit WT/conhost host kind for those runs. |
+| O8 | The wrap signal is build- and frame-dependent (P6 against P11/P12), while the exact-width hard break is ambiguous even on 22000 (P13). | Do not branch on a build number or promote `hint` to exact from the absence of `ESC[K`. Keep it marked as guessed; use the cursor-model oracle to overrule viewport guesses, and accept that rows already outside ConPTY's viewport cannot be made certain. `f4probe 5` gives the exact-width control its own verdict instead of folding it into the long-line summary. |
 | O9 | The XTWINOPS report (P14) as the repaint delimiter. | Today the scratch-view routing keys on `ESC[?25l … ESC[?25h`. `ESC[8;h;wt` says the size as well, so a frame can be matched to the resize that caused it, and a frame that is not ours can be told apart. |
-| O10 | The console title as the busy signal (P18, P19). | It owes nothing to `PROMPT`, so a batch that runs `prompt $P$G` (C8, O4) no longer strands the session, and it needs no marks at all. Cost: one OSC 0 to track per session. This is the markless completion path O4 was waiting for. |
+| O10 | The console title as the busy signal (P18, P19). | Measurement is complete: it owes nothing to `PROMPT`, covers a childless batch `pause`, and was restored only after an independently observed child exit. Implementation is still open: track the OSC 0 baseline per session and use its busy/restored transition to close O4. |
 
 ## 3. Plan for the next session
 
@@ -141,8 +141,9 @@ without a tester. One package, `cmd/f4/internal/conptyfake` or a
 | Wrapped rows delivered as hard CRLF, full rows padded to width, `ESC[K` only after short rows | P6 |
 | The resize repaint frame, with wrapped lines rejoined | P7 |
 | `RESIZE_QUIRK` as a no-op | P5 |
-| Title never forwarded | P3 |
-| Child listings: `PING.EXE`, `timeout.exe`, nested `cmd.exe`, `notepad.exe` (GUI), `start` detaching, conhost absent | P4, C5 |
+| No title readable through process/window enumeration | P3 |
+| OSC 0 busy/restored title around an external command and batches, including a childless `pause` | P18, P19 |
+| Child listings: `PING.EXE`, `timeout.exe`, nested `cmd.exe`, conhost absent; Notepad may be an enumerated GUI child or absent/brokered | P4, C5 |
 | OSC 133 passthrough with arbitrary parameters | P1 |
 | Stream split at arbitrary byte boundaries (ConPTY chunking) | `ansi_parser_sync_test.go` |
 
@@ -173,17 +174,12 @@ would let a terminal reflow is a no-op. The viewport is not the problem —
 ConPTY reflows it (P7). The scrollback is: rows that scrolled off carry no
 join information, so f4 cannot re-wrap them.
 
-Three ways around it, in order of elegance. Try the first — but it rests on
-two things no terminal has needed to know, so **step zero is one more probe
-run**, not code:
-
-- Does conhost keep scrollback under ConPTY beyond the viewport? Extend
-  `tools/conptyprobe` to print more lines than the console height *before* the
-  wide resize. If the wide repaint shows lines that had scrolled off, the
-  oracle also recovers history (a bonus, and a different matching problem);
-  if not, it sees the viewport only, as designed.
-- Is the repaint frame delimited the same way on other builds? On 19045 it is
-  `ESC[?25l … ESC[?25h`; the scratch-view routing keys on that.
+Three ways around it follow, in order of elegance. The standalone probe has
+answered step zero on 22000: conhost does not repaint scrollback (P16), a
+4000-column resize is accepted and cheap (P15), and the frame is delimited by
+cursor visibility plus an XTWINOPS size report (P14). The implementation below
+exists behind `F4_WIN_REFLOW`; what remains is field validation inside f4 and a
+repeat on 24H2/25H2, not another probe on the already measured build.
 
 **(a) The resize oracle — make ConPTY tell us the line structure.** P7 is a
 gift: on any resize ConPTY repaints the viewport with every line **rejoined**.
