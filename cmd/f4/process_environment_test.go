@@ -590,6 +590,15 @@ func setupProcessEnvironmentFailureUI(t *testing.T) {
 	previousDuration := processEnvironmentFailureToastDuration
 	processEnvironmentFailureToastDuration = 20 * time.Millisecond
 	t.Cleanup(func() { processEnvironmentFailureToastDuration = previousDuration })
+	previousToastOverride := toastDurationOverride
+	toastDurationOverride = func(duration time.Duration) time.Duration {
+		const minimumObservableToastDuration = 100 * time.Millisecond
+		if duration < minimumObservableToastDuration {
+			return minimumObservableToastDuration
+		}
+		return duration
+	}
+	t.Cleanup(func() { toastDurationOverride = previousToastOverride })
 	runProcessEnvironmentUIInline(t)
 }
 

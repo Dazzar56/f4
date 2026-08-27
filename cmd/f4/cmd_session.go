@@ -199,7 +199,17 @@ func (s *cmdShellSession) handleMark(mark string, snap promptSnapshot) {
 // settle examines, on the UI goroutine, whether prompt seq is the shell
 // waiting for input, and if so ends whatever f4 was waiting for.
 func (s *cmdShellSession) settle(seq uint64) {
+	// Close can race the timer callback while test cleanup replaces the global
+	// frame manager. Check liveness while holding the session lock, before
+	// touching that global, so a stopped callback cannot read a manager that
+	// cleanup is restoring.
+	s.mu.Lock()
+	if s.closed || seq != s.promptSeq {
+		s.mu.Unlock()
+		return
+	}
 	manager := vtui.FrameManager
+	s.mu.Unlock()
 	if manager == nil {
 		return
 	}
