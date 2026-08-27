@@ -53,6 +53,9 @@ type TerminalView struct {
 	GridHistory     [][]vtui.CharInfo
 	GridHistoryWrap []bool
 
+	// lastShownSize dedupes REFLOW_SHOW lines to shape changes.
+	lastShownSize [2]int
+
 	// reflow accumulates per-pass losses; see reflowStats.
 	reflow   reflowStats
 	styles   []StyleChange
@@ -934,6 +937,16 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 			offset = (tv.Height - 1) - lowestRow
 		}
 	}
+	// The last class no model-side counter can see: what is drawn. Logged
+	// only when the picture changes shape, so a drag produces a few lines
+	// rather than a line per frame. A large offset with a full history is
+	// the "black area" symptom exactly: the model holds the rows and gravity
+	// draws the top of the screen empty anyway.
+	if offset != tv.showOffset || tv.lastShownSize != [2]int{tv.Width, tv.Height} {
+		tv.lastShownSize = [2]int{tv.Width, tv.Height}
+		vtui.DebugLog("REFLOW_SHOW[%p]: %dx%d gravity offset %d (blank rows at top), rows with text %d, history %d",
+			tv, tv.Width, tv.Height, offset, tv.rowsWithTextLocked(), len(tv.GridHistory))
+	}
 	tv.showOffset = offset
 
 	for y, line := range buf {
@@ -1372,6 +1385,19 @@ func (tv *TerminalView) Resize(w, h int) {
 	if tv.Width == w && tv.Height == h {
 		return
 	}
+	// One line per resize, before any branch, so a log can tell three things
+	// that no pass summary can: which TerminalView this is (the display, a
+	// clone, or a scratch view all resize through here), whether the re-wrap
+	// branch will be taken and which gate refused it, and the state the view
+	// was in when the resize arrived. Each of those has hidden a whole class
+	// of bug: a resize applied to a clone the user is not looking at, a
+	// re-wrap silently skipped on the alternate screen, or a height-only
+	// change taking the path that never re-wraps.
+	vtui.DebugLog("REFLOW_ENTER[%p]: %dx%d -> %dx%d rewrap=%v(alt=%v width_changed=%v gate=%v) history=%d cursor=%d,%d",
+		tv, tv.Width, tv.Height, w, h,
+		(terminalReflowEnabled || tv.ReflowOnResize) && !tv.UseAltScreen && w != tv.Width && w > 0 && h > 0,
+		tv.UseAltScreen, w != tv.Width, terminalReflowEnabled || tv.ReflowOnResize,
+		len(tv.GridHistory), tv.CursorX, tv.CursorY)
 
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
@@ -1395,8 +1421,8 @@ func (tv *TerminalView) Resize(w, h int) {
 	// nothing at all about this path. Every "history 0" line in the field
 	// logs so far is that mistake, not a wiped display.
 	defer func() {
-		vtui.DebugLog("REFLOW_RESIZE: no re-wrap; %dx%d -> %dx%d; history %d rows / %d cells; viewport %d cells",
-			tv.Width, tv.Height, w, h, len(tv.GridHistory),
+		vtui.DebugLog("REFLOW_RESIZE[%p alt=%v]: no re-wrap; %dx%d -> %dx%d; history %d rows / %d cells; viewport %d cells",
+			tv, tv.UseAltScreen, tv.Width, tv.Height, w, h, len(tv.GridHistory),
 			tv.historyCellsLocked(), tv.viewportCellsLocked())
 	}()
 
@@ -1836,8 +1862,8 @@ func (tv *TerminalView) reflowLocked(w, h int) {
 		// content is destroyed. Rows are bounded by construction and logical
 		// lines fall when two are merged by a stuck wrap flag, with every
 		// character intact.
-		vtui.DebugLog("REFLOW_WRAP: %dx%d -> %dx%d; chars %d -> %d (%+d); history %d -> %d rows; in: viewport %d + history %d rows (%d cells, %d logical lines); out: %d rows, %d to history; lost: %d skipped rows, %d trimmed non-blanks, %d trimmed blanks, %d past cap",
-			fromW, fromH, w, h, charsBefore, charsAfter, charsAfter-charsBefore,
+		vtui.DebugLog("REFLOW_WRAP[%p alt=%v]: %dx%d -> %dx%d; chars %d -> %d (%+d); history %d -> %d rows; in: viewport %d + history %d rows (%d cells, %d logical lines); out: %d rows, %d to history; lost: %d skipped rows, %d trimmed non-blanks, %d trimmed blanks, %d past cap",
+			tv, tv.UseAltScreen, fromW, fromH, w, h, charsBefore, charsAfter, charsAfter-charsBefore,
 			histBefore, len(tv.GridHistory),
 			st.viewportRowsIn, st.historyRowsIn, cellsIn, len(lines),
 			st.rowsOut, st.pushedToHistory,

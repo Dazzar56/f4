@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/unxed/f4/vfs"
@@ -1155,6 +1156,7 @@ func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
 	shouldProcess := (pf.getActivePTYUnsafe() == p)
 	pf.ptyMutex.Unlock()
 
+	pf.noteConptyFrame(data)
 	if sink := pf.reflowOracle.divert(); sink != nil {
 		// A reflow oracle pass is in flight: these bytes are the repaint
 		// ConPTY sends for the oracle's resizes, meant for its scratch view
@@ -1335,6 +1337,10 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
+			// The other half of every resize: what ConPTY was told. A frame
+			// that later declares a different size (REFLOW_FRAME STALE) is
+			// only explicable next to this line.
+			vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, host mode, overlay rows %d)", w, h, w, termH, cw, ch, n)
 			setPtySize(pty, w, termH, cw, ch)
 			for _, remotePty := range pf.remotePtys {
 				setPtySize(remotePty, w, termH, cw, ch)
@@ -1364,6 +1370,7 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
+			vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, rows %d..%d)", w, h, w, termH, cw, ch, contentY1, termY2)
 			setPtySize(pty, w, termH, cw, ch)
 			for _, remotePty := range pf.remotePtys {
 				setPtySize(remotePty, w, termH, cw, ch)
@@ -5231,4 +5238,39 @@ func expandEnvironmentVariables(s string) string {
 
 func isEnvironmentVariableChar(c byte) bool {
 	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+}
+
+
+// noteConptyFrame logs, for every chunk that opens a ConPTY repaint frame,
+// the size the frame declares against the size the display view has right
+// now. This is the class of bug none of the pass summaries can see: a frame
+// laid out for one size parsed into a view that is already another size
+// lands rows at the wrong width and blanks the rest, and looks exactly like
+// lost history. The XTWINOPS report (ledger P14) is the only thing that says
+// which size a frame belongs to, and until now nothing read it.
+func (pf *PanelsFrame) noteConptyFrame(data []byte) {
+	i := bytes.Index(data, []byte("\x1b[8;"))
+	if i < 0 {
+		return
+	}
+	end := bytes.IndexByte(data[i:], 't')
+	if end < 0 || end > 16 {
+		return
+	}
+	var rows, cols int
+	if _, err := fmt.Sscanf(string(data[i+4:i+end]), "%d;%d", &rows, &cols); err != nil {
+		return
+	}
+	tv := pf.termView
+	if tv == nil {
+		return
+	}
+	match := "ok"
+	if cols != tv.Width || rows != tv.Height {
+		match = "STALE"
+	}
+	diverted := pf.reflowOracle != nil && pf.reflowOracle.divert() != nil
+	vtui.DebugLog("REFLOW_FRAME[%p]: declares %dx%d, view is %dx%d (%s) diverted=%v bytes=%d erases=%d clears=%d",
+		tv, cols, rows, tv.Width, tv.Height, match, diverted, len(data),
+		bytes.Count(data, []byte("\x1b[K")), bytes.Count(data, []byte("\x1b[2J")))
 }
