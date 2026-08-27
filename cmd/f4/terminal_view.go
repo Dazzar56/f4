@@ -87,6 +87,10 @@ type TerminalView struct {
 	// the width and ends in CRLF with no erase-to-end-of-line before it is
 	// taken as a wrapped row. winpty and WezTerm guess the same way.
 	HintWrap bool
+	// ReflowOnResize lets one TerminalView own the reflow even on Windows.
+	// ConPTY still repaints its viewport afterwards, but the local pass is what
+	// reflows GridHistory, including rows ConPTY has already forgotten.
+	ReflowOnResize bool
 	// elBeforeBreak is set by an erase-to-end-of-line and cleared by printed
 	// text, so that a line feed can tell whether ESC[K came just before it.
 	elBeforeBreak bool
@@ -202,6 +206,8 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 		tv.authCache[k] = v
 	}
 	tv.lastAttr = other.lastAttr
+	tv.HintWrap = other.HintWrap
+	tv.ReflowOnResize = other.ReflowOnResize
 	tv.Palette = other.Palette
 	tv.CursorX, tv.CursorY = other.CursorX, other.CursorY
 	tv.UseAltScreen = other.UseAltScreen
@@ -323,7 +329,7 @@ func (tv *TerminalView) pushRowToGridHistory(y int) {
 	tv.GridHistory = append(tv.GridHistory, lineCopy)
 	tv.GridHistoryWrap = append(tv.GridHistoryWrap, tv.WrapFlags[y])
 
-	if len(tv.GridHistory) > 2000 {
+	if len(tv.GridHistory) > maxGridHistoryRows {
 		tv.extrudeGridHistoryRow(0)
 		tv.GridHistory = tv.GridHistory[1:]
 		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
@@ -1309,19 +1315,17 @@ func (tv *TerminalView) URLAt(x, y int) (string, bool) {
 
 // terminalReflowEnabled gates re-wrapping the live grid on a width change.
 //
-// It is off on Windows, and the reason is not that reflow cannot be done
-// there. ConPTY runs a reflow of its own and then repaints the whole viewport
-// with absolute coordinates, so a second reflow here would be fighting it and
-// losing. Turning this on for Windows means first creating the pseudoconsole
-// with PSEUDOCONSOLE_RESIZE_QUIRK, which tells ConPTY to leave the buffer
-// alone and trust the terminal to re-wrap it. See docs/TERMINAL_REFLOW.md.
+// It remains the platform default for ordinary views. A Windows view whose
+// resize oracle has established line boundaries opts in independently through
+// ReflowOnResize: the local pass reflows retained history, then ConPTY's normal
+// repaint supplies the current viewport. See docs/TERMINAL_LEDGER.md §3.3.
 var terminalReflowEnabled = runtime.GOOS != "windows"
 
-// maxReflowHistoryPull bounds how far back into GridHistory a reflow reaches
-// for the rows that soft-wrap into the top of the viewport. Without a bound a
-// pathological stream of never-broken lines would pull the entire history into
-// one relayout.
-const maxReflowHistoryPull = 256
+// GridHistory is the editable tail of the log: oracle corrections can still
+// update its row boundaries. Older rows are extruded into the PieceTable,
+// where a soft wrap is already encoded by the absence of a newline. Keeping a
+// hard bound also makes a full-history reflow cheap enough for every resize.
+const maxGridHistoryRows = 2000
 
 func (tv *TerminalView) Resize(w, h int) {
 	if tv.Width == w && tv.Height == h {
@@ -1337,7 +1341,7 @@ func (tv *TerminalView) Resize(w, h int) {
 	// not: the rows keep their contents, and the existing path below moves
 	// them between the viewport and GridHistory, which is what keeps the
 	// terminal's vertical "accordion" behaviour lossless.
-	if terminalReflowEnabled && !tv.UseAltScreen && w != tv.Width && w > 0 && h > 0 {
+	if (terminalReflowEnabled || tv.ReflowOnResize) && !tv.UseAltScreen && w != tv.Width && w > 0 && h > 0 {
 		tv.reflowLocked(w, h)
 		return
 	}
@@ -1559,18 +1563,14 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 		rows = append(rows, sourceRow{cells: cells, wrapped: wrapped, cursorX: cursorX})
 	}
 
-	// Pull rows back out of GridHistory, for two reasons. A history row that
-	// soft-wraps into what follows is half of a line and has to be re-wrapped
-	// with its other half. And re-wrapping to a wider grid produces fewer rows
-	// than it consumed, so without more material the viewport would come back
-	// part empty with its earlier output stranded in the history.
-	pulled := 0
-	for len(tv.GridHistory) > 0 && pulled < maxReflowHistoryPull {
+	// Pull the complete editable history tail back into the relayout. This is
+	// bounded by maxGridHistoryRows. Rows older than it are already logical
+	// text in the PieceTable and its WrapEngine receives the new width above.
+	// Reflowing only the viewport seam used to strand old rows at their former
+	// width; worse, a line crossing that cutoff could not be joined as a whole.
+	for len(tv.GridHistory) > 0 {
 		last := len(tv.GridHistory) - 1
 		wrapped := tv.GridHistoryWrap[last]
-		if !wrapped && len(rows) >= h {
-			break
-		}
 		row := tv.GridHistory[last]
 		width := significantWidthLocked(row, wrapped)
 		cells := make([]vtui.CharInfo, width)
@@ -1578,7 +1578,6 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 		rows = append([]sourceRow{{cells: cells, wrapped: wrapped, cursorX: -1}}, rows...)
 		tv.GridHistory = tv.GridHistory[:last]
 		tv.GridHistoryWrap = tv.GridHistoryWrap[:last]
-		pulled++
 	}
 
 	var lines []logicalLine
@@ -1726,7 +1725,7 @@ func (tv *TerminalView) pushRowLocked(cells []vtui.CharInfo, wrapped bool) {
 	copy(lineCopy, cells)
 	tv.GridHistory = append(tv.GridHistory, lineCopy)
 	tv.GridHistoryWrap = append(tv.GridHistoryWrap, wrapped)
-	if len(tv.GridHistory) > 2000 {
+	if len(tv.GridHistory) > maxGridHistoryRows {
 		tv.extrudeGridHistoryRow(0)
 		tv.GridHistory = tv.GridHistory[1:]
 		tv.GridHistoryWrap = tv.GridHistoryWrap[1:]
@@ -1762,6 +1761,74 @@ func (tv *TerminalView) RowTexts() []string {
 		out[y] = strings.TrimRight(cellsText(tv.Lines[y]), " ")
 	}
 	return out
+}
+
+// reflowJournalRow names a row in the recent local scrollback or viewport.
+// The text is retained so an oracle result can be rejected if output changes
+// between the snapshot and the stamp.
+type reflowJournalRow struct {
+	text      string
+	wrapped   bool
+	inHistory bool
+	index     int
+}
+
+// reflowJournalSnapshot is the time machine for ConPTY reflow. ConPTY only
+// repaints its own viewport, but f4 has already journalled rows that scrolled
+// out of that viewport. Matching the repaint against this combined tail lets
+// the oracle correct wrap metadata in GridHistory as well as on screen; those
+// flags then survive when the row is extruded into the permanent log.
+func (tv *TerminalView) reflowJournalSnapshot() []reflowJournalRow {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	rows := make([]reflowJournalRow, 0, len(tv.GridHistory)+len(tv.Lines))
+	for i, line := range tv.GridHistory {
+		wrapped := i < len(tv.GridHistoryWrap) && tv.GridHistoryWrap[i]
+		rows = append(rows, reflowJournalRow{
+			text: strings.TrimRight(cellsText(line), " "), wrapped: wrapped,
+			inHistory: true, index: i,
+		})
+	}
+	for i, line := range tv.Lines {
+		wrapped := i < len(tv.WrapFlags) && tv.WrapFlags[i]
+		rows = append(rows, reflowJournalRow{
+			text: strings.TrimRight(cellsText(line), " "), wrapped: wrapped,
+			index: i,
+		})
+	}
+	return rows
+}
+
+// applyReflowJournalFlags stamps only rows that are still byte-for-byte the
+// rows in snap. This makes a late oracle harmless if ordinary output or a UI
+// resize raced it.
+func (tv *TerminalView) applyReflowJournalFlags(snap []reflowJournalRow, flags map[int]bool) (applied, stale int) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	for pos, wrapped := range flags {
+		if pos < 0 || pos >= len(snap) {
+			stale++
+			continue
+		}
+		ref := snap[pos]
+		if ref.inHistory {
+			if ref.index >= len(tv.GridHistory) || ref.index >= len(tv.GridHistoryWrap) ||
+				strings.TrimRight(cellsText(tv.GridHistory[ref.index]), " ") != ref.text {
+				stale++
+				continue
+			}
+			tv.GridHistoryWrap[ref.index] = wrapped
+		} else {
+			if ref.index >= len(tv.Lines) || ref.index >= len(tv.WrapFlags) ||
+				strings.TrimRight(cellsText(tv.Lines[ref.index]), " ") != ref.text {
+				stale++
+				continue
+			}
+			tv.WrapFlags[ref.index] = wrapped
+		}
+		applied++
+	}
+	return applied, stale
 }
 
 // WrapFlagsCopy returns the soft-wrap flags of the primary screen.

@@ -23,6 +23,12 @@ controller automatically starts:
   scrollback, cmd title/OSC, batch, nested-cmd and GUI-child scenarios;
 - the adjacent real f4 in `off`, `hint`, `oracle` and `probe` reflow modes.
 
+For `oracle` and `probe`, executing the scenario is not enough for a successful
+verdict: at least one set of exact consecutive repaint rows must match f4's
+history+viewport journal, and a `nothing stamped` pass makes the matrix
+incomplete. This prevents a successfully launched but ineffective oracle from
+being reported as `complete`.
+
 The controller supplies `F4_WIN_REFLOW`, `VTUI_DEBUG` and isolated profile
 directories to each f4 child itself. It does not change the user's environment
 or configuration. If no companion f4 executable is present, only the f4

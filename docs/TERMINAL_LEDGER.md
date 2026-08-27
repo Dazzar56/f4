@@ -59,6 +59,7 @@ build named is the same on both.
 | P18 | cmd's `<title> - <command>` **is** forwarded through ConPTY as OSC 0, verbatim, e.g. `ESC]0;F4PROBE_TITLE_XYZ - timeout  /t 3 /nobreakBEL`; the bare title returned after the child's independently confirmed exit. | P | see O10; C4 reopened |
 | P19 | The title carries the command form for ECHO-on, ECHO-off and PROMPT-resetting batches, including while an in-process `pause` has no child and no usable mark. It is the only signal measured so far that says "busy" during a batch's own waiting. | P | O10; this is what `IsBusy` and OSC 133 both miss (C2) |
 | P20 | Paired version-5 runs on the same 22000 machine were correctly identified as classic conhost and Windows Terminal. Their complete cursor-model / resize / oracle sections were byte-identical and every cmd semantic verdict agreed. The outer hosts differed in DA1 (`?1;0c`, no sixel, versus `?61;4;...c`, sixel) and window topology, not in the probe's separately created child ConPTY. | P | host graphics detection and child ConPTY semantics are separate decisions; 24H2/25H2 still need measurement |
+| P21 | The version-6 real-f4 matrix captured delimited wide/narrow frames in all ten `oracle`/`probe` passes, but the old matcher rejected all ten and stamped nothing. It assumed ConPTY repaint row *y* was display row *y*; the field log shows the repaint actually overlaps f4's combined recent history and viewport, with extra ConPTY-only private-sync rows. | P | fixed by exact consecutive-pair alignment against the local journal; standalone oracle mechanics remain valid |
 
 ### 1.3. f4 itself, Windows path
 
@@ -70,6 +71,7 @@ build named is the same on both.
 | W4 | With panels hidden and a nested `cmd` at its prompt, Enter in raw mode did nothing; after Ctrl+O, typing through f4's command line worked. | F | **open** (O3); sidestepped by returning the panels at the nested prompt |
 | W5 | The directory sync (`cd /d "…" & rem f4_sync`) costs two or three rows of terminal per folder change; the stream excision erases the text, not the rows. Visible once at startup for one tester; on every folder change for another ("creep"). | F | **open** (O1) |
 | W6 | `IsBusy()` (any child) is cached one second on Toolhelp; `ChildProcesses()` is uncached and only called while a prompt is examined. | C | as designed |
+| W7 | The automatic real-f4 run completed startup, outer resizes, private-sync excision and nested-cmd Enter in `off`, `hint`, `oracle` and `probe`. Its original `complete` verdict only meant the scenario executed; P21 shows the oracle itself had not succeeded. | P | probe verdict fixed: oracle/probe require at least one safe journal match and report `incomplete` on `nothing stamped` |
 
 ### 1.4. f4 itself, all platforms
 
@@ -114,7 +116,7 @@ probe.
 | O4 | A batch that resets PROMPT (C8). | The markless signal is now measured without the earlier race: OSC 0 carries the busy batch title and restores the bare title at completion (P18/P19). Implementation in `cmdShellSession` remains open. |
 | O5 | Keyboard modes when switching between two live shells (A2). | Needs modes per session, not per `TerminalView`. |
 | O6 | Reflow vs truncation without an alternate screen (A8). | Measure which programs actually suffer before adding a heuristic. |
-| O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P20), including a child-synchronized repeat and paired classic-conhost / WT runs. The inner cursor-model section is byte-identical and the quirk is still a no-op. Both runs are 21H2; 24H2/25H2 remain unmeasured. `tools/conptyprobe` version 6 is the in-tree collector for that remaining field run: one launch covers forced conhost, explicit WT, default-terminal handoff and the real-f4 mode matrix without user-managed environment variables. |
+| O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P21), including forced conhost, explicit WT, the configured-default path and a real-f4 mode matrix. The run found the journal-alignment bug rather than a new ConPTY ambiguity. This build now has enough evidence for the implementation below; 24H2/25H2 remain a portability measurement, not a blocker for 22000. |
 | O8 | The wrap signal is build- and frame-dependent (P6 against P11/P12), while the exact-width hard break is ambiguous even on 22000 (P13). | Do not branch on a build number or promote `hint` to exact from the absence of `ESC[K`. Keep it marked as guessed; use the cursor-model oracle to overrule viewport guesses, and accept that rows already outside ConPTY's viewport cannot be made certain. `f4probe 5` gives the exact-width control its own verdict instead of folding it into the long-line summary. |
 | O9 | The XTWINOPS report (P14) as the repaint delimiter. | Today the scratch-view routing keys on `ESC[?25l … ESC[?25h`. `ESC[8;h;wt` says the size as well, so a frame can be matched to the resize that caused it, and a frame that is not ours can be told apart. |
 | O10 | The console title as the busy signal (P18, P19). | Measurement is complete: it owes nothing to `PROMPT`, covers a childless batch `pause`, and was restored only after an independently observed child exit. Implementation is still open: track the OSC 0 baseline per session and use its busy/restored transition to close O4. |
@@ -178,9 +180,11 @@ join information, so f4 cannot re-wrap them.
 Three ways around it follow, in order of elegance. The standalone probe has
 answered step zero on 22000: conhost does not repaint scrollback (P16), a
 4000-column resize is accepted and cheap (P15), and the frame is delimited by
-cursor visibility plus an XTWINOPS size report (P14). The implementation below
-exists behind `F4_WIN_REFLOW`; what remains is field validation inside f4 and a
-repeat on 24H2/25H2, not another probe on the already measured build.
+cursor visibility plus an XTWINOPS size report (P14). The version-6 real-f4
+run then found the implementation error (P21): ConPTY's viewport had been
+compared with f4's differently aligned viewport instead of with f4's local
+history journal. The implementation now uses that journal; a repeat on
+24H2/25H2 is portability work, not missing design information for 22000.
 
 **(a) The resize oracle — make ConPTY tell us the line structure.** P7 is a
 gift: on any resize ConPTY repaints the viewport with every line **rejoined**.
@@ -188,16 +192,20 @@ So the line structure of the current viewport can be *asked for*: resize the
 pseudoconsole to a very wide width (`COORD.X` is `int16`, so up to 32767; a
 few thousand is enough), read the repaint into a shadow grid (not the display),
 resize back, and read the second repaint. The wide frame has one row per
-logical line; matching it against the narrow frame yields, for every viewport
-row, whether it continues into the next. Stamp that onto the cells as
-`ExplicitLineBreak` (A7) — far2l's bit, already declared — and from then on
-those rows carry their join information into `GridHistory` and through any
-reflow. Rules that make it safe: only when the session is idle at a prompt with
-no console child (the cmd session knows exactly when), never on the alternate
-screen, and the oracle frames are parsed into a scratch view so the user never
-sees them. Cost: two repaints per idle prompt, a few hundred bytes each. Rows
-that scrolled off during a long output before the next prompt get no stamp; for
-those, (b).
+logical line; matching it against the narrow frame yields whether each row
+continues into the next. The narrow repaint is aligned by exact consecutive
+row pairs against `GridHistory + viewport`, not by screen coordinate. Only a
+pair unique in both sides is allowed to stamp `GridHistoryWrap`/`WrapFlags`.
+This both tolerates private rows excised by f4 and retroactively corrects rows
+already outside f4's viewport. When those rows later leave the bounded grid
+journal, the corrected boundary is encoded in the permanent log, so history
+which ConPTY has since discarded still reflows correctly. Rules that make it
+safe: only when the session is idle at a prompt with no console child, never
+on the alternate screen, and parse oracle frames into a scratch view. Cost:
+two hidden repaints per idle prompt, a few hundred bytes each. Boundaries which
+scrolled beyond both ConPTY's overlap and the local oracle journal before any
+pass retain the conservative hint from (b); the lost bit cannot be recreated
+post hoc.
 
 **(b) The `ESC[K` hint (winpty's and WezTerm's guess, done honestly).** P6: ConPTY emits
 `ESC[K` after a row that ends short of the width and nothing after a row that
@@ -236,21 +244,19 @@ parser), `cmdShellSession.release` (the trigger). Tests:
 `reflow_oracle_test.go`, driven by `fakeConPTY`, which reproduces P5–P7 from
 the probe bytes — every mode is run through the probe's own scenario.
 
-**The selector.** An environment variable, because it needs no UI, no config
-migration, and can be set per launch by someone who is testing, not
-configuring:
+**The selector.** The safe oracle is now the Windows default. An environment
+variable remains as a diagnostic/escape hatch and can be set per launch:
 
     F4_WIN_REFLOW=oracle    (a) resize oracle, then (b) for rows it did not reach
     F4_WIN_REFLOW=hint      (b) only: the ESC[K full-row guess
-    F4_WIN_REFLOW=off       today's behaviour: Horizontal Preservation, no stamps
+    F4_WIN_REFLOW=off       legacy Horizontal Preservation, no stamps
     F4_WIN_REFLOW=probe     diagnostic: hint on, oracle runs at every idle prompt
                             but stamps nothing; logs what it would have stamped
                             next to what hint did
 
-Unset means `off` until one of the two has been confirmed in the field, at
-which point the confirmed one becomes the default and the variable stays as an
-escape hatch. Read once at startup into `terminalReflowMode`; the Unix path is
-untouched by it (Unix has the real signal and needs neither).
+Unset means `oracle` on Windows and retains the platform's existing reflow on
+Unix. `off` is explicit and remains the escape hatch. Read once at startup
+into `terminalReflowMode`; the Unix path still needs neither hint nor oracle.
 
 **Why `probe` mode is the important one.** It answers the step-zero questions
 from §3.3 without asking anyone to run a separate tool: for each oracle pass it

@@ -297,6 +297,28 @@ const (
 // 7 prompt. Wrapped: the first row of each two-row line.
 var scenarioWrapped = map[int]bool{0: false, 1: false, 2: true, 3: false, 4: true, 5: false, 6: false, 7: false}
 
+func TestWinReflowModeDefaultsToSafeOracleOnlyOnWindows(t *testing.T) {
+	tests := []struct {
+		value   string
+		windows bool
+		want    winReflowMode
+	}{
+		{"", true, winReflowOracle},
+		{"", false, winReflowOff},
+		{"off", true, winReflowOff},
+		{"hint", true, winReflowHint},
+		{"oracle", false, winReflowOracle},
+		{"probe", true, winReflowProbe},
+		{"unknown", true, winReflowOff},
+	}
+	for _, tt := range tests {
+		if got := parseWinReflowMode(tt.value, tt.windows); got != tt.want {
+			t.Errorf("parseWinReflowMode(%q, windows=%v) = %s, want %s",
+				tt.value, tt.windows, got, tt.want)
+		}
+	}
+}
+
 func (h *reflowHarness) playScenario() {
 	h.pty.print("Microsoft Windows [Version 10.0]", "", typedLine, outputLine, "short")
 	h.pty.prompt("C:\\2work-150>")
@@ -383,7 +405,7 @@ func TestWinReflowProbeLogsButDoesNotStamp(t *testing.T) {
 	if after := h.flags(); strings.Join(boolsToStrings(after), "") != strings.Join(boolsToStrings(before), "") {
 		t.Errorf("probe changed the flags: %v -> %v", before, after)
 	}
-	if !h.reported("rows examined") {
+	if !h.reported("safe boundaries") {
 		t.Errorf("probe produced no comparison report: %v", h.report)
 	}
 	if got := h.pty.snapshotResizes(); len(got) != 2 {
@@ -391,23 +413,139 @@ func TestWinReflowProbeLogsButDoesNotStamp(t *testing.T) {
 	}
 }
 
-// If the narrow frame does not match the display -- the screen moved under
-// the pass -- nothing is stamped, rather than stamping the wrong rows.
-func TestWinReflowOracleAbortsOnMismatch(t *testing.T) {
+// A row which differs between the repaint and the journal breaks the exact
+// run around it. Boundaries elsewhere may still be stamped, but the boundary
+// touching the changed row must retain its old value.
+func TestWinReflowOracleSkipsBoundaryAtMismatch(t *testing.T) {
 	h := newReflowHarness(t, winReflowOracle, 40, 12)
 	h.playScenario()
-	// Corrupt the display's idea of one row after the fake rendered it.
+	// Start from deliberately wrong flags, then corrupt row 5. Row 2 belongs
+	// to an earlier exact run and can be corrected; row 4 continues into the
+	// corrupted row 5 and must not be guessed.
 	h.pf.termView.mu.Lock()
+	for i := range h.pf.termView.WrapFlags {
+		h.pf.termView.WrapFlags[i] = false
+	}
 	h.pf.termView.Lines[5][0].Char = 'X'
 	h.pf.termView.mu.Unlock()
-	before := h.flags()
 	h.pf.runReflowOracle()
 	h.waitForOracle(2 * time.Second)
-	if !h.reported("mismatch") {
-		t.Fatalf("expected a mismatch report, got %v", h.report)
+	flags := h.flags()
+	if !flags[2] {
+		t.Fatalf("safe run before the mismatch was not stamped: %v; report=%v", flags, h.report)
 	}
-	if after := h.flags(); strings.Join(boolsToStrings(after), "") != strings.Join(boolsToStrings(before), "") {
-		t.Errorf("a mismatched pass stamped rows: %v -> %v", before, after)
+	if flags[4] {
+		t.Errorf("boundary touching a mismatched row was stamped: %v; report=%v", flags, h.report)
+	}
+}
+
+// The real 22000 log exposed the important offset: ConPTY repainted its
+// viewport from the Windows banner while f4 had already moved several of
+// those rows into GridHistory. The oracle must find the repaint in the
+// combined journal and stamp rows which are no longer on f4's screen.
+func TestWinReflowOracleStampsRowsAlreadyInLocalHistory(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 40, 12)
+	h.playScenario()
+	h.pf.termView.mu.Lock()
+	for i := range h.pf.termView.WrapFlags {
+		h.pf.termView.WrapFlags[i] = false
+	}
+	h.pf.termView.mu.Unlock()
+
+	// Scroll five rows only in the local model. The fake ConPTY deliberately
+	// retains its viewport, reproducing the vertical disagreement from the
+	// field log while leaving the lost rows in f4's journal.
+	h.pf.termView.SetCursor(0, h.pf.termView.Height-1)
+	for range 5 {
+		h.pf.termView.Index()
+	}
+	if len(h.pf.termView.GridHistoryWrap) < 5 {
+		t.Fatalf("setup did not create history: %d rows", len(h.pf.termView.GridHistoryWrap))
+	}
+
+	h.pf.runReflowOracle()
+	h.waitForOracle(2 * time.Second)
+	wantWrapped := map[string]bool{
+		"C:\\2work-150>echo ABCDEFGHIJ0123456789ab": false,
+		"ABCDEFGHIJ0123456789abcdefghij0123456789":  false,
+	}
+	for i, row := range h.pf.termView.GridHistory {
+		if _, wanted := wantWrapped[rowText(row)]; wanted && h.pf.termView.GridHistoryWrap[i] {
+			wantWrapped[rowText(row)] = true
+		}
+	}
+	for row, found := range wantWrapped {
+		if !found {
+			t.Fatalf("oracle did not stamp evicted wrapped row %q in history: %v; report=%v",
+				row, h.pf.termView.GridHistoryWrap, h.report)
+		}
+	}
+	if !h.reported("history row") || !h.reported("history+viewport boundaries stamped") {
+		t.Fatalf("history stamping was not reported: %v", h.report)
+	}
+}
+
+// On Windows the oracle enables local reflow for this view even though the
+// package-wide fallback remains disabled there. ConPTY will repaint the live
+// viewport, while this local pass is what brings confirmed history along.
+func TestWinReflowOracleModeReflowsLocalHistory(t *testing.T) {
+	old := terminalReflowEnabled
+	terminalReflowEnabled = false
+	t.Cleanup(func() { terminalReflowEnabled = old })
+
+	tv := NewTerminalView(4, 2)
+	defer tv.Close()
+	tv.ReflowOnResize = true
+	tv.SetCursor(0, 0)
+	for _, r := range "abcdefghij" {
+		tv.PutChar(r, DefaultTermAttr)
+	}
+	if len(tv.GridHistory) == 0 || !tv.GridHistoryWrap[0] {
+		t.Fatalf("setup did not retain a wrapped history row: history=%d flags=%v",
+			len(tv.GridHistory), tv.GridHistoryWrap)
+	}
+
+	tv.Resize(12, 2)
+	var joined strings.Builder
+	for _, hist := range tv.GridHistory {
+		joined.WriteString(rowText(hist))
+	}
+	for _, row := range tv.Lines {
+		joined.WriteString(rowText(row))
+	}
+	if got := joined.String(); got != "abcdefghij" {
+		t.Fatalf("oracle-owned resize lost/repeated local history: %q", got)
+	}
+}
+
+// The editable journal is bounded, so a resize can afford to reflow all of
+// it. This guards against the old 256-row cutoff leaving most scrollback at
+// the previous width.
+func TestWinReflowOracleModeReflowsEntireLocalJournal(t *testing.T) {
+	old := terminalReflowEnabled
+	terminalReflowEnabled = false
+	t.Cleanup(func() { terminalReflowEnabled = old })
+
+	tv := NewTerminalView(4, 2)
+	defer tv.Close()
+	tv.ReflowOnResize = true
+	tv.SetCursor(0, 0)
+	for range 300 {
+		for _, r := range "abcdefgh" {
+			tv.PutChar(r, DefaultTermAttr)
+		}
+		tv.PutChar('\r', DefaultTermAttr)
+		tv.PutChar('\n', DefaultTermAttr)
+	}
+	if len(tv.GridHistory) <= 256 {
+		t.Fatalf("setup has only %d history rows, want more than the old cutoff", len(tv.GridHistory))
+	}
+
+	tv.Resize(10, 2)
+	for i, row := range tv.GridHistory {
+		if len(row) != 10 {
+			t.Fatalf("history row %d kept old width %d after full-journal reflow", i, len(row))
+		}
 	}
 }
 

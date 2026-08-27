@@ -142,20 +142,24 @@ func probeF4Matrix(w *writer) {
 		d := string(debug)
 		modeConfirmed := strings.Contains(d, "REFLOW: F4_WIN_REFLOW="+mode)
 		oracleSeen := strings.Contains(d, "REFLOW_ORACLE:")
+		oracleCompleted := strings.Contains(d, "safe boundaries") &&
+			!strings.Contains(d, "nothing stamped")
 		syncSeen := strings.Contains(d, "ANSI_PARSER: Excising background Windows CD sync")
 		nestedSeen := strings.Contains(string(nestedOut), "F4PROBE_NESTED_ENTER_OK") ||
 			strings.Contains(d, "F4PROBE_NESTED_ENTER_OK")
 		verdict := "complete"
-		if len(startup) == 0 || readErr != nil || !modeConfirmed || !resizeOK {
+		if len(startup) == 0 || readErr != nil || !modeConfirmed || !resizeOK ||
+			((mode == "oracle" || mode == "probe") && !oracleCompleted) {
 			verdict = "incomplete"
 		}
 		w.printf("startup=%d command=%d total-screen=%d duration=%v exited=%v code=%#x\n",
 			len(startup), len(commandOut), len(screen), time.Since(started).Round(time.Millisecond), !alive, code)
-		w.printf("mode-confirmed=%v oracle-log=%v sync-excision=%v nested-enter=%v resize-ok=%v\n",
-			modeConfirmed, oracleSeen, syncSeen, nestedSeen, resizeOK)
+		w.printf("mode-confirmed=%v oracle-log=%v oracle-completed=%v sync-excision=%v nested-enter=%v resize-ok=%v\n",
+			modeConfirmed, oracleSeen, oracleCompleted, syncSeen, nestedSeen, resizeOK)
 		w.printf("debug excerpt:\n%s\n", Clip(Escape(debug), 14000))
 		w.summary("f4."+mode+".mode_confirmed", yesno(modeConfirmed))
 		w.summary("f4."+mode+".oracle_observed", yesno(oracleSeen))
+		w.summary("f4."+mode+".oracle_completed", yesno(oracleCompleted))
 		w.summary("f4."+mode+".sync_excision_observed", yesno(syncSeen))
 		w.summary("f4."+mode+".nested_enter_observed", yesno(nestedSeen))
 		w.summary("f4."+mode+".outer_resizes", yesno(resizeOK))

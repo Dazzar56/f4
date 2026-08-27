@@ -1322,6 +1322,11 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			termH = 1
 		}
 		if pty := pf.localPTY(); pty != nil {
+			// Resize the parser's grid before asking a PTY to emit its resize
+			// frame. A fast ConPTY can otherwise deliver new-width absolute
+			// coordinates while TerminalView still has the old width.
+			pf.termView.SetPosition(0, 0, w-1, termH-1)
+			pf.termView.Resize(w, termH)
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
 			setPtySize(pty, w, termH, cw, ch)
@@ -1329,9 +1334,6 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 				setPtySize(remotePty, w, termH, cw, ch)
 			}
 			pf.ptyMutex.Unlock()
-
-			pf.termView.SetPosition(0, 0, w-1, termH-1)
-			pf.termView.Resize(w, termH)
 		}
 		if pf.isHostConsoleActive() && n > 0 {
 			vtui.WritePassthrough([]byte(fmt.Sprintf("\x1b[1;%dr", termH)))
@@ -1348,6 +1350,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		}
 
 		if pty := pf.localPTY(); pty != nil {
+			pf.termView.SetPosition(0, contentY1, w-1, termY2)
+			pf.termView.Resize(w, termH)
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
 			setPtySize(pty, w, termH, cw, ch)
@@ -1355,9 +1359,6 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 				setPtySize(remotePty, w, termH, cw, ch)
 			}
 			pf.ptyMutex.Unlock()
-
-			pf.termView.SetPosition(0, contentY1, w-1, termY2)
-			pf.termView.Resize(w, termH)
 		}
 	}
 
@@ -1534,6 +1535,7 @@ func (pf *PanelsFrame) setWinReflowMode(mode winReflowMode) {
 	pf.reflowOracle = newReflowOracle(pf, mode)
 	if pf.termView != nil {
 		pf.termView.HintWrap = mode != winReflowOff
+		pf.termView.ReflowOnResize = mode == winReflowOracle
 	}
 	vtui.DebugLog("REFLOW: F4_WIN_REFLOW=%s", mode)
 }

@@ -320,3 +320,33 @@ ConPTY behaviour on this build.
 
 Both runs still report Windows 11 21H2, build 22000. They answer the paired-host
 question, not the outstanding 24H2/25H2 build question.
+
+### 6.5. The version-6 real-f4 run found the integration bug
+
+The automatic version-6 run completed all three launch contexts on the same
+10.0.22000.2538 machine. Forced conhost was classified as classic conhost and
+explicit `wt.exe` as Windows Terminal. The clean new-console launch selected
+classic conhost too; both default-terminal delegation registry values were
+unset. Its standard handles were redirected by the controller, so its missing
+DA1 answer is not a terminal capability result. Window and process topology
+are sufficient for the host classification.
+
+The adjacent real f4 was then exercised in `off`, `hint`, `oracle` and `probe`
+modes. Startup, outer resizes, nested-cmd Enter and private directory-sync
+excision all ran in every mode. The initial probe summary called that
+`complete`, but the debug logs expose a narrower and more important result:
+all five oracle passes and all five probe passes captured delimited wide and
+narrow frames, then rejected them because row *y* of ConPTY's repaint did not
+equal row *y* of f4's display. Every pass logged `nothing stamped`.
+
+That is not a failure of the resize oracle measured in §6.2. f4 had already
+moved some rows into `GridHistory`, while ConPTY still repainted them, and f4's
+private cmd-sync excision intentionally removes rows which remain in ConPTY's
+buffer. The matcher was comparing two different vertical slices. The fix is
+to align exact consecutive row pairs against f4's combined
+`GridHistory + viewport` journal and stamp those journal rows. Besides fixing
+the offset, this is the way around ConPTY's viewport ceiling: once a row's
+boundary is confirmed, the flag follows that row through local scrollback and
+into the permanent log even after ConPTY has discarded it. Repeated or
+isolated rows are not anchors; the conservative hint remains for boundaries
+which no oracle frame ever overlaps.

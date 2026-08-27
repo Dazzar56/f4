@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -26,10 +27,11 @@ import (
 //     once in W lines, when a real line is exactly the width.
 //   - oracle: at an idle prompt, resize the pseudoconsole very wide, read the
 //     repaint (one row per logical line) into a scratch view, resize back,
-//     read that repaint too, and match the two: for every viewport row,
-//     whether it continues into the next. Written to the display's WrapFlags.
-//     The frames go to the scratch view only; the display never sees them.
-//     Hint stays on underneath for the rows that scrolled off before a pass.
+//     read that repaint too, and match the two. Exact consecutive pairs are
+//     aligned against f4's GridHistory + viewport journal, so confirmed flags
+//     also update rows outside the visible grid and survive after ConPTY
+//     forgets them. The frames go to scratch views only; the display never
+//     sees them. Hint remains for boundaries no oracle pass overlaps.
 //   - probe: oracle without writing anything, logging what it would have
 //     written next to what hint had written, so the field says how often the
 //     guess is wrong and whether the two assumptions the oracle rests on
@@ -46,16 +48,27 @@ const (
 	winReflowProbe
 )
 
-// winReflowModeFromEnv reads F4_WIN_REFLOW. Unset is off until one mode has
-// been confirmed in the field.
+// winReflowModeFromEnv reads F4_WIN_REFLOW. The safe oracle is the Windows
+// default: every stamp is checked against both ConPTY frames and the local
+// journal before it can change history. Explicit off remains the escape hatch.
 func winReflowModeFromEnv() winReflowMode {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("F4_WIN_REFLOW"))) {
+	return parseWinReflowMode(os.Getenv("F4_WIN_REFLOW"), runtime.GOOS == "windows")
+}
+
+func parseWinReflowMode(value string, windows bool) winReflowMode {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "off":
+		return winReflowOff
 	case "hint":
 		return winReflowHint
 	case "oracle":
 		return winReflowOracle
 	case "probe":
 		return winReflowProbe
+	}
+	if value == "" && windows {
+		return winReflowOracle
 	}
 	return winReflowOff
 }
@@ -190,21 +203,12 @@ func (o *reflowOracle) run(pty PtyBackend, cols, rows int) {
 
 	wideRows := trimTrailingEmpty(wide.view.RowTexts())
 	narrowRows := narrow.view.RowTexts()
-	displayRows := display.RowTexts()
+	journal := display.reflowJournalSnapshot()
 
 	oracleReport("wide frame: %d content rows, delimited=%v; narrow frame: delimited=%v; viewport %dx%d",
 		len(wideRows), wide.delimited, narrow.delimited, cols, rows)
 	if len(wideRows) > rows {
 		oracleReport("wide frame holds more rows than the viewport: conhost keeps scrollback under ConPTY")
-	}
-
-	// The narrow frame must be the screen the user sees, or the coordinates
-	// mean nothing.
-	for y := range narrowRows {
-		if y < len(displayRows) && narrowRows[y] != displayRows[y] {
-			oracleReport("mismatch: narrow frame row %d %q differs from the display %q; nothing stamped", y, narrowRows[y], displayRows[y])
-			return
-		}
 	}
 
 	flags, ok := matchWrappedRows(wideRows, narrowRows)
@@ -213,19 +217,103 @@ func (o *reflowOracle) run(pty PtyBackend, cols, rows int) {
 		return
 	}
 
-	current := display.WrapFlagsCopy()
-	disagree := 0
-	for y, wrapped := range flags {
-		if y < len(current) && current[y] != wrapped {
-			disagree++
-			oracleReport("row %d: hint said wrapped=%v, oracle says %v: %q", y, current[y], wrapped, narrowRows[y])
+	// A repaint is ConPTY's viewport, not necessarily f4's viewport. f4 may
+	// already have moved its first rows into GridHistory, and its private cmd
+	// sync excision intentionally removes rows which remain in ConPTY. Align
+	// exact runs against the combined local journal rather than comparing y=y.
+	// A boundary is stamped only when both rows around it match consecutively;
+	// isolated/duplicate anchors cannot corrupt history.
+	alignment := alignReflowRows(narrowRows, journal)
+	sourcePairs := make(map[string]int)
+	for i := 0; i+1 < len(narrowRows); i++ {
+		if narrowRows[i] != "" && narrowRows[i+1] != "" {
+			sourcePairs[reflowRowPairKey(narrowRows[i], narrowRows[i+1])]++
 		}
 	}
-	oracleReport("%d rows examined, %d where hint and oracle disagree", len(flags), disagree)
+	targetPairs := make(map[string]int)
+	for i := 0; i+1 < len(journal); i++ {
+		if journal[i].text != "" && journal[i+1].text != "" {
+			targetPairs[reflowRowPairKey(journal[i].text, journal[i+1].text)]++
+		}
+	}
+	stamps := make(map[int]bool)
+	for i := 0; i+1 < len(alignment); i++ {
+		a, b := alignment[i], alignment[i+1]
+		if b.source == a.source+1 && b.target == a.target+1 {
+			key := reflowRowPairKey(narrowRows[a.source], narrowRows[b.source])
+			// Repeated identical pairs are not anchors. Choosing one occurrence
+			// could stamp a true wrap onto a same-looking hard-broken line.
+			if wrapped, exists := flags[a.source]; exists && sourcePairs[key] == 1 && targetPairs[key] == 1 {
+				stamps[a.target] = wrapped
+			}
+		}
+	}
+	if len(stamps) == 0 {
+		oracleReport("mismatch: no consecutive repaint rows occur in the local history+viewport journal; nothing stamped")
+		return
+	}
+
+	disagree := 0
+	for pos, wrapped := range stamps {
+		if pos < len(journal) && journal[pos].wrapped != wrapped {
+			disagree++
+			where := "viewport"
+			if journal[pos].inHistory {
+				where = "history"
+			}
+			oracleReport("%s row %d: hint said wrapped=%v, oracle says %v: %q",
+				where, journal[pos].index, journal[pos].wrapped, wrapped, journal[pos].text)
+		}
+	}
+	oracleReport("%d/%d repaint rows aligned with history+viewport; %d safe boundaries, %d where hint and oracle disagree",
+		len(alignment), len(narrowRows), len(stamps), disagree)
 
 	if o.mode == winReflowOracle {
-		display.SetWrapFlags(flags)
+		applied, stale := display.applyReflowJournalFlags(journal, stamps)
+		oracleReport("%d history+viewport boundaries stamped, %d became stale", applied, stale)
 	}
+}
+
+func reflowRowPairKey(a, b string) string { return a + "\x00" + b }
+
+type reflowRowAlignment struct {
+	source int // row in the ConPTY narrow repaint
+	target int // row in f4's history+viewport journal
+}
+
+// alignReflowRows computes an exact-row LCS. Empty rows are deliberately not
+// anchors: a screenful of blanks has many equally valid alignments. The caller
+// only trusts consecutive pairs from the result, turning the LCS into a set of
+// verified row boundaries rather than a fuzzy whole-screen guess.
+func alignReflowRows(source []string, target []reflowJournalRow) []reflowRowAlignment {
+	dp := make([][]int, len(source)+1)
+	for i := range dp {
+		dp[i] = make([]int, len(target)+1)
+	}
+	for i := len(source) - 1; i >= 0; i-- {
+		for j := len(target) - 1; j >= 0; j-- {
+			if source[i] != "" && source[i] == target[j].text {
+				dp[i][j] = dp[i+1][j+1] + 1
+			} else if dp[i+1][j] >= dp[i][j+1] {
+				dp[i][j] = dp[i+1][j]
+			} else {
+				dp[i][j] = dp[i][j+1]
+			}
+		}
+	}
+	var out []reflowRowAlignment
+	for i, j := 0, 0; i < len(source) && j < len(target); {
+		if source[i] != "" && source[i] == target[j].text && dp[i][j] == dp[i+1][j+1]+1 {
+			out = append(out, reflowRowAlignment{source: i, target: j})
+			i++
+			j++
+		} else if dp[i+1][j] >= dp[i][j+1] {
+			i++
+		} else {
+			j++
+		}
+	}
+	return out
 }
 
 type capturedFrame struct {

@@ -272,7 +272,7 @@ path that can restore a title-based veto without enumerating a window.
 | 4 | Examine the screen at settle time, not a snapshot at the mark (§3.3) | shipped |
 | 5 | Self-erasing directory sync cleanup (section 3) | next |
 | 6 | Startup sync typed before the first prompt settles | with 5 |
-| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe complete on 19045 and 22000, including paired WT/conhost on 22000; 24H2/25H2 and in-f4 field validation remain. The in-tree `tools/conptyprobe` version 6 automates the host and f4-mode matrix for that run. |
+| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe and real-f4 matrix complete on 22000. The matrix found the old row-for-row matcher stamped nothing; f4 now aligns the repaint against `GridHistory + viewport` and preserves confirmed boundaries after ConPTY discards them. 24H2/25H2 remain portability measurements. |
 | 8 | OSC 0 title as the markless completion path for a batch that resets `PROMPT` | signal confirmed by the synchronized probe; implementation pending |
 
 Steps 2–4 have field evidence on 19045. The standalone Go probe has now also
@@ -280,10 +280,12 @@ replaced the failed PowerShell experiment for step 7 and produced complete
 results on 19045 and 22000. On 22000 the complete cursor-model section was
 byte-identical when the probe itself ran under classic conhost and Windows
 Terminal; only the outer host's window topology and DA1/SIXEL capability
-differed. That pair does not substitute for 24H2/25H2 and does not exercise
-f4's scratch-frame routing, so `F4_WIN_REFLOW=oracle` still needs a real in-f4
-run checking for flicker, cursor jumps and matcher failures. Step 8 is
-measured but not implemented.
+differed. The subsequent version-6 real-f4 run did exercise scratch-frame
+routing: every frame was delimited, but all old row-for-row matches failed
+because ConPTY's viewport and f4's viewport were vertically offset. The fix
+matches unique consecutive pairs in f4's combined history+viewport journal;
+the probe now treats `nothing stamped` as incomplete. Step 8 is measured but
+not implemented.
 
 ## 4. Issue #362 — Ctrl+C does not interrupt in f4-gui
 
