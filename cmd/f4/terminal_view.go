@@ -54,9 +54,9 @@ type TerminalView struct {
 	GridHistoryWrap []bool
 
 	// reflow accumulates per-pass losses; see reflowStats.
-	reflow reflowStats
-	styles          []StyleChange
-	lastAttr        uint64
+	reflow   reflowStats
+	styles   []StyleChange
+	lastAttr uint64
 
 	// Скроллинг истории (визуальный ряд)
 	ScrollTopRow int
