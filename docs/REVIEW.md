@@ -82,7 +82,7 @@ The following color entities and features from `far2l` have been explicitly post
 - **Explicit Disabled Colors:** Transition to dedicated disabled color slots from themes/palette instead of using the dynamically computed `DimColor` fallback.
 - **Granular Lists & Comboboxes:** Support custom coloring for `Dialog.List.*` and `Dialog.Combo.*` sub-elements.
 - **Default Buttons:** Map and apply styling for `Dialog.DefaultButton.*` elements.
-- **Editor & Viewer Selection:** Map and support dedicated selection slots `Editor.Text.Selected` / `Viewer.Text.Selected` (currently falls back to standard text selection).
+- **Editor Selection:** Map and support a dedicated `Editor.Text.Selected` slot. Viewer search now uses the dedicated `Viewer.Text.Selected` slot.
 - **Secondary Widgets:** Support `Clock`, `Panel.ScreensNumber`, and `Panel.DragText` slots.
 ### Localization debt and open questions
 

@@ -440,6 +440,22 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		// Build []vtui.CharInfo for the line
 		var cellByteOffsets []int
 		vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, width)
+		if vv.lastSearchFound && vv.lastSearch != "" {
+			matchStart := vv.lastSearchOffset
+			matchEnd := matchStart + int64(len(vv.lastSearch))
+			rowStart := currOffset
+			rowEnd := rowStart + int64(row.textLen)
+			if matchStart < rowEnd && matchEnd > rowStart {
+				applyViewerSearchAttr(
+					vv.rowCells,
+					string(data[:row.textLen]),
+					cellByteOffsets,
+					int(matchStart-rowStart),
+					int(matchEnd-rowStart),
+					vtui.Palette[ColViewerSelectedText],
+				)
+			}
+		}
 
 		rowLinks := urlCellRanges(string(data[:row.textLen]), cellByteOffsets)
 		applyURLHoverAttr(vv.rowCells, rowLinks, vv.hoverURL)

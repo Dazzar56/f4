@@ -84,3 +84,41 @@ func TestLayoutViewerTextRowDoesNotSplitCombiningSequence(t *testing.T) {
 		t.Fatalf("combining row rendered %d cells, want one", len(cells))
 	}
 }
+
+func TestApplyViewerSearchAttrHighlightsOnlyCurrentMatch(t *testing.T) {
+	text := "needle before needle after"
+	baseAttr := vtui.SetRGBBoth(0, 0xD0D0D0, 0x232323)
+	selectedAttr := vtui.SetRGBBoth(0, 0x2E3436, 0xFCE94F)
+	cells, offsets := viewerTextCells(text, baseAttr, 8, 100)
+
+	matchStart := strings.Index(text, "needle")
+	matchEnd := matchStart + len("needle")
+	applyViewerSearchAttr(cells, text, offsets, matchStart, matchEnd, selectedAttr)
+
+	for i, offset := range offsets {
+		want := baseAttr
+		if offset >= matchStart && offset < matchEnd {
+			want = selectedAttr
+		}
+		if cells[i].Attributes != want {
+			t.Fatalf("cell %d at source offset %d has attributes %016x, want %016x", i, offset, cells[i].Attributes, want)
+		}
+	}
+}
+
+func TestApplyViewerSearchAttrKeepsGraphemeTogether(t *testing.T) {
+	text := "a\u0301 tail"
+	baseAttr := vtui.SetRGBBoth(0, 0xD0D0D0, 0x232323)
+	selectedAttr := vtui.SetRGBBoth(0, 0x2E3436, 0xFCE94F)
+	cells, offsets := viewerTextCells(text, baseAttr, 8, 100)
+
+	// The search result covers only the base rune, but the terminal cell also
+	// owns its combining mark. Highlight the complete visible grapheme.
+	applyViewerSearchAttr(cells, text, offsets, 0, len("a"), selectedAttr)
+	if len(cells) == 0 || cells[0].Attributes != selectedAttr {
+		t.Fatalf("base grapheme was not highlighted: %#v", cells)
+	}
+	if len(cells) < 2 || cells[1].Attributes != baseAttr {
+		t.Fatalf("text after the matched grapheme changed attributes")
+	}
+}
