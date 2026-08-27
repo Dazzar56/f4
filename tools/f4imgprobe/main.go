@@ -317,48 +317,82 @@ func describeHost() {
 // ------------------------------------------------------- conhost overlays ----
 
 // testConhostOverlays runs both overlay mechanisms against the same event: a
-// console repaint under the picture. That single comparison is the whole
-// question behind "it flickers and disappears".
+// console repaint under the picture.
+//
+// The child-window half of this test cannot ask anything while it runs. A
+// window whose parent belongs to another process attaches the two threads'
+// input queues (handover F7), and the first field run of this probe froze the
+// console exactly there -- the probe was asking a question through an input
+// queue its own test had just wedged. So the child test now narrates what is
+// about to happen, runs unattended, destroys the window, and only then asks.
+// Whether the input queue actually froze is measured rather than asked.
 func testConhostOverlays(console uintptr) {
+	inst, _, _ := procGetModuleHandleW.Call(0)
+	x, y, w, h := pictureRect(console)
+
 	section("Overlay test 1: a child window of the console (what f4 does today)")
 	report("Expected to fail: the console window has no WS_CLIPCHILDREN, so its")
 	report("own repaint paints over the child and nothing redraws the child after.")
 
-	inst, _, _ := procGetModuleHandleW.Call(0)
 	if !registerClass(inst, "f4imgprobeChild", childWndProc) {
-		report("could not register a window class; overlay tests skipped")
-		return
-	}
-	x, y, w, h := pictureRect(console)
-
-	child, _, _ := procCreateWindowExW.Call(0,
-		uintptr(unsafe.Pointer(utf16Ptr("f4imgprobeChild"))), 0,
-		uintptr(wsChild|wsVisible),
-		uintptr(uint32(x)), uintptr(uint32(y)), uintptr(w), uintptr(h),
-		console, 0, inst, 0)
-	if child == 0 {
-		report("CreateWindowEx (child of the console) failed")
+		report("could not register a window class; child overlay test skipped")
 	} else {
-		report("created a child window of the console, %dx%d px at %d,%d", w, h, x, y)
-		pump(400 * time.Millisecond)
-		a1 := askYN("Do you see a red square inside the console window?")
-		report("child overlay visible at first: %s", a1)
+		fmt.Print("\r\nWATCH THE MIDDLE OF THIS WINDOW. For about six seconds a RED square\r\n")
+		fmt.Print("will appear there, then lines of text will be printed underneath it.\r\n")
+		fmt.Print("Do not type or click during that time -- this test is expected to\r\n")
+		fmt.Print("freeze the console, and the probe measures that by itself.\r\n")
+		fmt.Print("Starting in three seconds...\r\n")
+		pump(3 * time.Second)
 
-		// The event under suspicion: make the console repaint underneath it.
-		fmt.Print("\r\n")
-		for i := 0; i < 12; i++ {
-			fmt.Printf("console repaint line %d\r\n", i)
+		cx, cy := x-clientOriginX(console), y-clientOriginY(console)
+		child, _, _ := procCreateWindowExW.Call(0,
+			uintptr(unsafe.Pointer(utf16Ptr("f4imgprobeChild"))), 0,
+			uintptr(wsChild|wsVisible),
+			uintptr(uint32(cx)), uintptr(uint32(cy)), uintptr(w), uintptr(h),
+			console, 0, inst, 0)
+		if child == 0 {
+			report("CreateWindowEx (child of the console) failed")
+		} else {
+			report("created a child window of the console, %dx%d px at %d,%d in its client area", w, h, cx, cy)
+			pump(1500 * time.Millisecond)
+
+			// F7/F8, measured: if the console's window thread has stopped
+			// answering while our child window exists, that is the freeze the
+			// issue describes, and it is a number rather than an impression.
+			// Deliberately not measured from here. A cross-process child
+			// attaches this thread's input queue to the console's, so a
+			// message sent from this thread is exactly the one call that
+			// still succeeds while everything the user does is frozen. The
+			// first field run reported "answered: true" while the tester
+			// could not type. The tester's answer below is the measurement.
+			report("console responsiveness during the child window: asked, not measured")
+			report("(a message sent from this thread cannot detect the freeze: F7 attaches")
+			report(" this very thread to the console's input queue.)")
+
+			fmt.Print("\r\n")
+			for i := 0; i < 12; i++ {
+				fmt.Printf("console repaint line %d\r\n", i)
+			}
+			pump(2 * time.Second)
+			procDestroyWindow.Call(child)
+			pump(300 * time.Millisecond)
+
+			report("child overlay: %s", askChoice("What happened to the RED square?",
+				"it appeared and stayed whole, undamaged by the text",
+				"it appeared, then part of it was erased or cut away",
+				"it appeared and then vanished completely",
+				"it never appeared at all"))
+			report("input during the child window: %s", askChoice(
+				"While the red square was on screen, did the console stop responding?",
+				"no, everything stayed responsive",
+				"yes, typing and clicking did nothing until the square went away",
+				"cannot tell"))
 		}
-		pump(400 * time.Millisecond)
-		a2 := askYN("Is the red square still there, whole and undamaged?")
-		report("child overlay survives a console repaint: %s", a2)
-		procDestroyWindow.Call(child)
-		pump(100 * time.Millisecond)
 	}
 
 	section("Overlay test 2: a top-level layered window (the proposed fix)")
-	report("No parent and no owner, positioned and filled in one")
-	report("UpdateLayeredWindow call, then lifted just above the console.")
+	report("No parent and no owner, so no input queue is attached; positioned and")
+	report("filled in one UpdateLayeredWindow call, then lifted just above the console.")
 
 	if !registerClass(inst, "f4imgprobeLayered", defaultWndProc) {
 		report("could not register the layered window class")
@@ -381,38 +415,65 @@ func testConhostOverlays(console uintptr) {
 		return
 	}
 	procShowWindow.Call(top, swShowNoActivate)
-	procSetWindowPos.Call(top, console, 0, 0, 0, 0, uintptr(swpNoMove|swpNoSize|swpNoActivate))
+	// SetWindowPos(hwnd, console, ...) would put the window *behind* the
+	// console: the second argument names what to sit after. Directly above the
+	// console means after whatever precedes it in the z-order, or HWND_TOP.
+	after, _, _ := procGetWindow.Call(console, gwHwndPrev)
+	if after != 0 && windowLongOf(after, gwlExStyle)&wsExTopmost != 0 {
+		after = 0
+	}
+	procSetWindowPos.Call(top, after, 0, 0, 0, 0, uintptr(swpNoMove|swpNoSize|swpNoActivate))
 	prev, _, _ := procGetWindow.Call(console, gwHwndPrev)
-	report("placed above the console: %v", prev == top)
-	pump(400 * time.Millisecond)
+	report("placed directly above the console: %v (console's GW_HWNDPREV %#x, ours %#x)",
+		prev == top, prev, top)
+	pump(500 * time.Millisecond)
 
-	b1 := askYN("Do you see a blue square over the console window?")
-	report("layered overlay visible at first: %s", b1)
+	first := askChoice("Do you see a BLUE square over the console window?",
+		"yes, a solid blue square",
+		"yes, but it is somewhere unexpected or the wrong shape",
+		"no, nothing blue")
+	report("layered overlay visible at first: %s", first)
+	if strings.HasPrefix(first, "no") {
+		report("layered overlay survives a console repaint: not asked (nothing was visible)")
+		return
+	}
+
+	ok, d := consoleResponds(console, 2*time.Second)
+	report("console answered a message while the layered window existed: %v (%v)", ok, d)
 
 	fmt.Print("\r\n")
 	for i := 0; i < 12; i++ {
 		fmt.Printf("console repaint line %d\r\n", i)
 	}
-	pump(400 * time.Millisecond)
-	b2 := askYN("Is the blue square still there, whole and undamaged?")
-	report("layered overlay survives a console repaint: %s", b2)
+	pump(700 * time.Millisecond)
+	report("layered overlay after a console repaint: %s", askChoice(
+		"What happened to the BLUE square while that text was printed?",
+		"nothing, it stayed whole",
+		"part of it was erased or cut away",
+		"it vanished completely",
+		"it flickered but came back whole"))
 
-	// The other half of the complaint is a freeze, and its suspected cause is
-	// f4 waiting on the console's window thread. Time a call that would block
-	// if conhost were wedged; a healthy console answers in single milliseconds.
+	fmt.Print("\r\nNow please MOVE the console window with the mouse, then come back here.\r\n")
+	report("layered overlay when the console moves: %s", askChoice(
+		"After moving the window, where is the blue square?",
+		"it moved with the console window",
+		"it stayed where it was on the screen",
+		"it disappeared"))
+	report("(f4 would run a tracking timer; this probe deliberately does not, so")
+	report(" 'it stayed where it was' is the expected answer and means the tracker is required.)")
+	procShowWindow.Call(top, swHide)
+}
+
+// consoleResponds asks the console's window thread a question that costs it
+// nothing and reports whether it answered. A wedged console (F8) is the whole
+// second half of the conhost complaint, and this turns it into a measurement.
+func consoleResponds(console uintptr, timeout time.Duration) (bool, time.Duration) {
+	const smtoAbortIfHung = 0x0002
 	start := time.Now()
 	var result uintptr
-	procSendMessageTimeoutW.Call(console, wmNull, 0, 0, 0x0002 /*SMTO_ABORTIFHUNG*/, 2000,
-		uintptr(unsafe.Pointer(&result)))
-	report("console window answered a message in %v (a wedged console would take 2s)",
-		time.Since(start).Round(time.Millisecond))
-
-	fmt.Print("\r\nNow please MOVE the console window with the mouse, then come back.\r\n")
-	b3 := askYN("After moving the window: did the blue square stay over the console?")
-	report("layered overlay follows the console when moved: %s", b3)
-	report("(f4 would run a tracking timer here; this probe deliberately does not,")
-	report(" so a 'no' is expected and tells us the tracker is required, not optional.)")
-	procShowWindow.Call(top, swHide)
+	r, _, _ := procSendMessageTimeoutW.Call(console, wmNull, 0, 0, smtoAbortIfHung,
+		uintptr(timeout/time.Millisecond), uintptr(unsafe.Pointer(&result)))
+	return r != 0, time.Since(start).Round(time.Millisecond)
 }
 
 // pictureRect is a square in the middle of the console's client area, in screen
@@ -531,36 +592,51 @@ func testSixel() {
 	fmt.Print("A square should appear below: red on the left, blue on the right.\r\n\r\n")
 	os.Stdout.WriteString(sixelSquare())
 	fmt.Print("\r\n\r\n\r\n\r\n\r\n\r\n")
-	s1 := askYN("Do you see the red and blue square?")
+	s1 := askChoice("Do you see a coloured area below the text?",
+		"yes: red on the left, blue on the right, and it looks square",
+		"yes: red and blue, but the shape is not square",
+		"yes, but the colours or the layout are different from that",
+		"no, nothing coloured appeared")
 	report("sixel image appeared at all: %s", s1)
-	if strings.HasPrefix(s1, "no") {
+	if strings.HasPrefix(s1, "no,") {
 		report("(no image: either this terminal has no sixel support, or it is")
 		report(" switched off in its settings -- both belong in the report.)")
 		return
 	}
+	report("(the image is 90x90 pixels: two halves of 45x90 each. If it looks")
+	report(" taller or wider than a square, the terminal is scaling it, which is")
+	report(" a finding about the cell size and not about the image.)")
 
-	// 1. Text written somewhere else on the screen. This is the ordinary case
-	//    for f4: the panels repaint constantly while the picture is shown.
+	// From here the shape no longer matters; only what survives does. Each
+	// question offers "partly erased" as its own answer, because that is what
+	// a repaint over an image looks like and it is neither yes nor no.
+	survives := func(what string) string {
+		return askChoice("What happened to the coloured area after "+what+"?",
+			"nothing, it is completely unchanged",
+			"part of it was blanked or covered, the rest is still there",
+			"it disappeared completely",
+			"it is still there but has moved on the screen",
+			"it moved up past the top edge and was cut off there")
+	}
+
+	// 1. Text written elsewhere: the ordinary case for f4, whose panels
+	//    repaint constantly while a picture is shown.
 	fmt.Print("text written below the image, nothing near it\r\n")
 	pause(600 * time.Millisecond)
-	s2 := askYN("Is the image still there after that line of text?")
-	report("survives text written elsewhere: %s", s2)
+	report("survives text written elsewhere: %s", survives("that line of text"))
 
-	// 2. A repaint of the rows the image occupies, cursor moved with CUP and
-	//    the line erased -- exactly what a full-screen redraw does.
-	fmt.Print("\x1b[3;1H\x1b[K\x1b[4;1H\x1b[K")
-	fmt.Print("\x1b[12;1H")
+	// 2. A repaint of the rows the image occupies: cursor moved with CUP and
+	//    the line erased, which is what a full-screen redraw does.
+	fmt.Print("\x1b[3;1H\x1b[K\x1b[4;1H\x1b[K\x1b[12;1H")
 	pause(600 * time.Millisecond)
-	s3 := askYN("Is the image still there after erasing two of its own lines?")
-	report("survives an erase of its own rows (ESC[K): %s", s3)
+	report("survives ESC[K over its own top rows: %s", survives("erasing two of its own top rows"))
 
 	// 3. Scrolling: new output at the bottom pushes the image up.
 	for i := 0; i < 3; i++ {
 		fmt.Printf("scrolling line %d\r\n", i)
 	}
 	pause(600 * time.Millisecond)
-	s4 := askYN("Is the image still there, moved up by three lines?")
-	report("survives scrolling: %s", s4)
+	report("survives scrolling: %s", survives("three lines of scrolling"))
 
 	// 4. The alternate screen. f4 uses it, and an image drawn on one buffer
 	//    has no reason to exist on the other.
@@ -568,7 +644,10 @@ func testSixel() {
 	fmt.Print("This is the alternate screen. The same image is drawn here.\r\n\r\n")
 	os.Stdout.WriteString(sixelSquare())
 	fmt.Print("\r\n\r\n\r\n\r\n\r\n\r\n")
-	s5 := askYN("Do you see the square on this alternate screen?")
+	s5 := askChoice("Do you see the coloured area on this alternate screen?",
+		"yes, the same as before",
+		"yes, but damaged or incomplete",
+		"no, nothing")
 	fmt.Print("\x1b[?1049l")
 	report("sixel works on the alternate screen: %s", s5)
 
@@ -582,21 +661,27 @@ func testSixel() {
 		time.Sleep(120 * time.Millisecond)
 	}
 	fmt.Print("\x1b[14;1H")
-	s6 := askYN("During those redraws, did the image stay steady (Y) or blink (N)?")
-	report("steady when redrawn 20 times: %s", s6)
+	report("steady when redrawn 20 times: %s", askChoice("During those redraws the image was:",
+		"steady, no visible change",
+		"flickering or blinking",
+		"disappearing and coming back",
+		"gone after the first few redraws"))
 
-	fmt.Print("\r\nNow please RESIZE the terminal window, then come back.\r\n")
-	s7 := askYN("After resizing: is the image still on the screen?")
-	report("survives a window resize: %s", s7)
+	fmt.Print("\r\nNow please RESIZE the terminal window with the mouse, then come back.\r\n")
+	report("survives a window resize: %s", survives("resizing the window"))
 }
 
 // sixelSquare is a 90x90 square, red on the left half and blue on the right.
 // Deliberately small: the point is whether it is there, not what it is.
 func sixelSquare() string {
 	var b strings.Builder
-	b.WriteString("\x1bPq#0;2;90;10;10#1;2;10;10;90")
+	// P1=7 is a 1:1 pixel aspect ratio. Without it the DCS default is 2:1
+	// and the terminal draws the image twice as tall as it is wide -- the
+	// first field runs reported "not square" and that was this header, not
+	// the terminal and not f4.
+	b.WriteString("\x1bP7;0;0q#0;2;90;10;10#1;2;10;10;90")
 	for band := 0; band < 15; band++ { // 15 bands of 6 pixels = 90 tall
-		b.WriteString("#0!45~$#1!45?!45~-")
+		b.WriteString("#0!45~$#1!45?!45~-") // 45 red + 45 blue = 90 px wide, 90 tall
 	}
 	b.WriteString("\x1b\\")
 	return b.String()
@@ -604,9 +689,17 @@ func sixelSquare() string {
 
 // ------------------------------------------------------------- asking you ----
 
-// askYN pumps window messages while it waits, so the overlay windows created
-// above stay alive and painted while the question is on the screen.
-func askYN(question string) string {
+// askChoice asks a question with a numbered list of answers. Every question
+// about a picture is asked this way, because a picture has more states than
+// yes and no: the first field run met a coloured area that was not the shape
+// the question described, and rows that had been blanked while the rest of the
+// image survived, and neither could be answered honestly with Y or N. An
+// answer nobody can give truthfully is worse than no answer, because it lands
+// in the report looking like data.
+func askChoice(question string, options ...string) string {
+	if len(options) == 0 || len(options) > 9 {
+		return "not asked (bad question)"
+	}
 	inMode, ok := consoleMode(stdInput)
 	if !ok {
 		return "not asked (no console input)"
@@ -614,25 +707,32 @@ func askYN(question string) string {
 	setConsoleMode(stdInput, inMode&^(enableLineInput|enableEchoInput|enableProcessedInput))
 	defer setConsoleMode(stdInput, inMode)
 	procFlushConsoleInputBuffer.Call(stdHandle(stdInput))
-	fmt.Print("\r\n" + question + " [Y/N] ")
 
-	deadline := time.Now().Add(3 * time.Minute)
+	fmt.Print("\r\n" + question + "\r\n")
+	for i, opt := range options {
+		fmt.Printf("  %d) %s\r\n", i+1, opt)
+	}
+	fmt.Printf("  0) something else -- describe it yourself at the top of the report\r\n")
+	fmt.Printf("Press 0-%d: ", len(options))
+	// The pump keeps running while the question waits: the overlay windows
+	// created above must stay alive and painted while they are being judged.
+
+	deadline := time.Now().Add(5 * time.Minute)
 	for time.Now().Before(deadline) {
 		pumpOnce()
-		if ch := readCharNonBlocking(); ch != 0 {
-			switch ch {
-			case 'y', 'Y':
-				fmt.Print("Y\r\n")
-				return "yes"
-			case 'n', 'N':
-				fmt.Print("N\r\n")
-				return "no"
-			}
+		ch := readCharNonBlocking()
+		switch {
+		case ch == '0':
+			fmt.Print("0\r\n")
+			return "none of the offered answers (see the tester's own note)"
+		case ch >= '1' && ch <= rune('0'+len(options)):
+			fmt.Printf("%c\r\n", ch)
+			return options[ch-'1']
 		}
 		time.Sleep(15 * time.Millisecond)
 	}
 	fmt.Print("(no answer)\r\n")
-	return "no answer within three minutes"
+	return "no answer within five minutes"
 }
 
 // pause keeps the message pump running instead of sleeping, so a window that
@@ -762,6 +862,20 @@ func classNameOf(hwnd uintptr) string {
 func isWindowVisible(hwnd uintptr) bool {
 	r, _, _ := procIsWindowVisible.Call(hwnd)
 	return r != 0
+}
+
+func windowLongOf(hwnd, index uintptr) uintptr {
+	v, _, _ := procGetWindowLongPtrW.Call(hwnd, index)
+	return v
+}
+
+func clientOriginX(hwnd uintptr) int32 { p := clientOrigin(hwnd); return p.X }
+func clientOriginY(hwnd uintptr) int32 { p := clientOrigin(hwnd); return p.Y }
+
+func clientOrigin(hwnd uintptr) point {
+	p := point{}
+	procClientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&p)))
+	return p
 }
 
 func clientRectOf(hwnd uintptr) rect {
