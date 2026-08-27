@@ -137,38 +137,48 @@ version of that probe split on CRLF, saw a two-row wrapped line as one
 meaningless. On this build ConPTY often marks a line break with **no bytes at
 all**.
 
-### 5.1. There is no CRLF at the wrap point here
+### 5.1. The live stream and the repaint disagree with each other
 
-A 40-column console, one typed line whose echo is 65 characters. ConPTY sent
-the 65 characters as one run and then moved with `ESC[9;1H`. The break between
-row 1 and row 2 exists only because the terminal wrapped: nothing in the stream
-says so, and nothing in the stream says otherwise either.
+Measured with a cursor model, a 40-column console, one line of exactly 40
+characters and one of 60:
 
-The repaint after narrowing back from 100 columns does the same thing: an
-80-column line written whole into a 40-column console, with a CRLF only after
-the last row.
+| | how the long line's rows end |
+| --- | --- |
+| live stream | `wrap, lf, lf` -- a real CRLF at the break |
+| repaint after narrowing 100 -> 40 | `wrap, lf` -- no CRLF at the break |
+| repaint after narrowing 40 -> 20 | `wrap, wrap, lf, wrap, wrap, lf` |
 
-**This is the opposite of §1 on 19045**, where the repaint cut the line at the
-width and put a real CRLF there. Both are ConPTY; they differ by build.
+So it is not a build that "has" or "lacks" the signal. The **live** stream
+breaks the line itself, as §1 saw on 19045. The **repaint** does not: it writes
+the logical line whole and lets the terminal's autowrap place it, and only the
+last row carries a CRLF.
 
-### 5.2. Which means the join information is not always lost
+An earlier draft of this section claimed the opposite for the live stream. It
+was written from a hand-read of one chunk in which cmd happened to move with an
+absolute CUP instead, and it was wrong. Both shapes occur; only a cursor model
+tells them apart, which is why the probe now carries one.
 
-If a row ends because it ran off the right edge, the next row continues it. If
-it ends on a CRLF, it does not. On a build that behaves like 22000 that is not
-a heuristic -- it is the actual structure, and `ExplicitLineBreak` can be
-stamped from it with no oracle and no guessing. `ESC[K` agrees: it follows
-short rows and never a full one, so the two signals corroborate each other.
+### 5.2. `ESC[K` is exact here, not a guess
 
-On a build that behaves like 19045 the same reading is the winpty guess, wrong
-once in W lines. The code must therefore not branch on a build number but on
-what the stream is doing; see ledger item O8.
+Measured over the whole run: `ESC[K` appeared on rows that ended with a break
+and on **no** row that ended by wrapping. The winpty guess -- a full row with no
+`ESC[K` is a continuation -- was right every time here, and its one-in-W failure
+case (a hard-broken line exactly the width of the console) did not occur even
+though the probe deliberately printed one.
 
-### 5.3. The oracle is feasible, and cheap
+That is enough to stamp `ExplicitLineBreak` from the repaint with no oracle at
+all. It is not enough to assume the same on another build; the code must read
+what the stream is doing rather than branch on a build number, ledger item O8.
 
-`ResizePseudoConsole(4000, 12)` is accepted. The repaint is about 287 bytes and
-brings the long line back as one row. Two resizes per idle prompt is a few
-hundred bytes and one round trip -- affordable at an idle prompt, and pointless
-on a build where §5.2 already gives the answer for free.
+### 5.3. The oracle is feasible, and very cheap
+
+`ResizePseudoConsole(4000, 12)` is accepted. The repaint is 287 bytes and
+brings the long line back as one row. Timed from the resize call: **first byte
+after 8 ms, frame complete at 8 ms, the whole round trip out and back 9 ms.**
+
+That number matters. An earlier run reported 509 ms, which was the probe
+measuring its own quiet window and nothing else. At 9 ms the oracle is
+affordable at every idle prompt, not just occasionally.
 
 ### 5.4. There is no scrollback behind ConPTY
 
@@ -180,7 +190,8 @@ the answer is no.
 
 ### 5.5. The repaint announces its own size
 
-Every repaint opens `ESC[?25l ESC[8;<rows>;<cols>t ESC[H`. The XTWINOPS report
+Every repaint opens `ESC[?25l ESC[8;<rows>;<cols>t ESC[H` -- measured
+verbatim as `ESC[8;12;100t` for a resize to 100 columns. The XTWINOPS report
 was there all along and nothing in f4 reads it. It is a better frame delimiter
 than the cursor-visibility pair, because it also says *which* size the frame
 describes -- so a frame can be matched to the resize that asked for it.
@@ -200,3 +211,18 @@ external programs and for batch files alike, and the bare title comes back when
 the command ends. That is a completion signal that does not depend on `PROMPT`
 at all -- which is exactly what a batch running `prompt $P$G` takes away from
 us today.
+
+
+## 6. What this run did *not* establish
+
+The probe typed the OSC 133 `PROMPT` after `timeout /t 3 /nobreak` and waited
+for the stream to go quiet rather than for the process to exit. `timeout`
+counts down without printing, so the wait ended early and the `prompt` command
+was swallowed by the still-running child. Everything downstream of that in the
+run -- mark passthrough, mark order, the batch mark counts -- was measured with
+no marks configured and means nothing. Those questions are still answered only
+by the 19045 and 26200 field reports (P1, P2) and by an earlier 22000 run that
+agreed with them.
+
+Recorded here because a log full of `= 0` reads like a finding, and this one is
+not one. The probe should wait on the child, not on silence.

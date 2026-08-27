@@ -49,14 +49,15 @@ build named is the same on both.
 | P8 | That repaint frame does **not** scroll f4's grid at any height 3–14. | M | creep-from-repaint hypothesis retracted |
 | P9 | `ResizePseudoConsole(0,0)` must never be sent (TERMINAL.md rule 4). | C | guarded in `PTY.SetSize` |
 | P10 | Passthrough mode (0x8) exists on Windows 11 22H2+. | C | measured, see P17 |
-| P11 | In the **live** stream ConPTY may mark a wrap with nothing at all. On 22000 it wrote the 65-character echo of a typed line into a 40-column console as one run and let the terminal's own autowrap carry it to the second row, then moved on with an absolute `ESC[9;1H`. There is no CRLF anywhere in that chunk. | P | line structure must be read from a cursor model, never from CRLFs |
-| P12 | The **narrow** repaint on 22000 does the same: an 80-column logical line is written whole into a 40-column console and only the last row is followed by CRLF. So on this build the join information *is* in the stream -- a row that ended by running off the edge is a continuation, and one that ended on a CRLF is not. | P | reopens plan §3.3; on such builds the hint is exact rather than a guess |
-| P13 | `ESC[K` follows a row that ends short of the width and does not follow a row that filled it. Confirmed on 22000, where it lines up exactly with the wrap/no-wrap distinction of P12. | P | plan §3.3 (b) |
+| P11 | ConPTY marks a wrap sometimes with a CRLF and sometimes with nothing, **within one build**. On 22000 the live stream breaks the long line with a real CRLF (`wrap, lf, lf`), and it also emits chunks with no line terminator at all, relying on the terminal's autowrap and then moving with an absolute CUP. Line structure must be read from a cursor model; a CRLF-only reading of the same bytes reported a two-row line as one 140-column row. | P | grid model, never a CRLF split |
+| P12 | The **repaint** on 22000 does not break the line: an 80-column logical line is written whole into a 40-column console and only the last row is followed by CRLF (`wrap, lf`); narrowing to 20 gives `wrap, wrap, lf, wrap, wrap, lf`. So in a repaint the join information *is* in the stream. | P | plan §3.3: on such builds the hint is exact rather than a guess |
+| P13 | `ESC[K` appears on every row that ended with a break and on no row that ended by wrapping -- measured over a whole 22000 session, including a line printed at exactly the console width, which is the winpty guess's one known failure case. | P | plan §3.3 (b) is exact here, not a guess |
 | P14 | The resize repaint opens with `ESC[?25l` **and an XTWINOPS size report**, `ESC[8;<rows>;<cols>t`, before `ESC[H`. Nothing in f4 reads it. It is an unambiguous "a repaint for this size starts here" marker, free of charge. | P | see O9 |
-| P15 | The wide-resize oracle works on 22000: `ResizePseudoConsole(4000, 12)` is accepted and the repaint (~287 bytes) comes back with the long line rejoined into one row. | P | plan §3.3 (a) is feasible here |
+| P15 | The wide-resize oracle works on 22000: `ResizePseudoConsole(4000, 12)` is accepted, the repaint is 287 bytes, and it comes back with the long line rejoined. Timed from the call: first byte at 8 ms, frame complete at 8 ms, round trip out and back 9 ms. | P | plan §3.3 (a) is not just feasible, it is nearly free |
 | P16 | The repaint covers the **viewport only**. Thirty lines printed into a twelve-row console and then widened: the frame begins at LINE_21. conhost keeps no scrollback on ConPTY's behalf. | P | step-zero question 1 answered: the oracle recovers structure, never history |
 | P17 | Passthrough (0x8) is accepted on 22000 and produces output identical to flag 0, byte for byte, through wrap and resize alike. From outside it is a no-op, exactly like the resize quirk. | P | P10 closed |
-| P18 | cmd's `<title> - <command>` **is** forwarded through ConPTY as OSC 0, both for an external program and for a batch file, and the bare title is restored when the command ends. | P | see O10; C4 reopened |
+| P18 | cmd's `<title> - <command>` **is** forwarded through ConPTY as OSC 0, verbatim, e.g. `ESC]0;F4PROBE_TITLE_XYZ - timeout  /t 3 /nobreakBEL`. | P | see O10; C4 reopened |
+| P19 | The title carries the command form while a batch sits on `pause` as well -- with no child process in existence and no mark to be had. It is the only signal measured so far that says "busy" during a batch's own waiting. | P | O10; this is what `IsBusy` and OSC 133 both miss (C2) |
 
 ### 1.3. f4 itself, Windows path
 
@@ -115,7 +116,7 @@ probe.
 | O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P18). The quirk is still a no-op. 24H2/25H2 remain unmeasured. |
 | O8 | The wrap signal is build-dependent (P6 against P11/P12). | Do not branch on a build number. The `hint` path can tell which world it is in from the stream itself: if a full-width row is ever followed by CRLF *and* by `ESC[K`, the stream is re-breaking lines and the hint is a guess; if full rows never carry `ESC[K`, it is exact. Decide per session, log which. |
 | O9 | The XTWINOPS report (P14) as the repaint delimiter. | Today the scratch-view routing keys on `ESC[?25l … ESC[?25h`. `ESC[8;h;wt` says the size as well, so a frame can be matched to the resize that caused it, and a frame that is not ours can be told apart. |
-| O10 | The console title as the busy signal (P18). | It owes nothing to `PROMPT`, so a batch that runs `prompt $P$G` (C8, O4) no longer strands the session, and it needs no marks at all. Cost: one OSC 0 to track per session. This is the markless completion path O4 was waiting for. |
+| O10 | The console title as the busy signal (P18, P19). | It owes nothing to `PROMPT`, so a batch that runs `prompt $P$G` (C8, O4) no longer strands the session, and it needs no marks at all. Cost: one OSC 0 to track per session. This is the markless completion path O4 was waiting for. |
 
 ## 3. Plan for the next session
 
