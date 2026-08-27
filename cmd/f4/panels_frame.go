@@ -1330,9 +1330,20 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// frame. A fast ConPTY can otherwise deliver new-width absolute
 			// coordinates while TerminalView still has the old width.
 			pf.termView.SetPosition(0, 0, w-1, termH-1)
-			widthChanged := pf.termView.Width != w
+			// Absorb ConPTY's repaint on *any* size change, not only width.
+			// A mouse drag on a corner arrives as a mix of width, height and
+			// combined steps; on the height-only steps the frame used to
+			// land on the display, and ConPTY remembers only its viewport,
+			// so each such frame rewrote rows f4 had just pulled back from
+			// history and erased the rest with ESC[K. The field log shows it
+			// exactly: characters preserved within every re-wrap pass and
+			// lost only between them, 130 frames landing, none diverted
+			// (docs/TERMINAL_CONPTY_FINDINGS.md 6.15). The height-only path
+			// refills from GridHistory itself, so f4's viewport is
+			// authoritative there too.
+			sizeChanged := pf.termView.Width != w || pf.termView.Height != termH
 			pf.termView.Resize(w, termH)
-			if widthChanged {
+			if sizeChanged {
 				pf.reflowOracle.absorbResizeRepaint()
 			}
 			pf.ptyMutex.Lock()
@@ -1363,9 +1374,20 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 		if pty := pf.localPTY(); pty != nil {
 			pf.termView.SetPosition(0, contentY1, w-1, termY2)
-			widthChanged := pf.termView.Width != w
+			// Absorb ConPTY's repaint on *any* size change, not only width.
+			// A mouse drag on a corner arrives as a mix of width, height and
+			// combined steps; on the height-only steps the frame used to
+			// land on the display, and ConPTY remembers only its viewport,
+			// so each such frame rewrote rows f4 had just pulled back from
+			// history and erased the rest with ESC[K. The field log shows it
+			// exactly: characters preserved within every re-wrap pass and
+			// lost only between them, 130 frames landing, none diverted
+			// (docs/TERMINAL_CONPTY_FINDINGS.md 6.15). The height-only path
+			// refills from GridHistory itself, so f4's viewport is
+			// authoritative there too.
+			sizeChanged := pf.termView.Width != w || pf.termView.Height != termH
 			pf.termView.Resize(w, termH)
-			if widthChanged {
+			if sizeChanged {
 				pf.reflowOracle.absorbResizeRepaint()
 			}
 			pf.ptyMutex.Lock()

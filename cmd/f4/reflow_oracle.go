@@ -458,7 +458,8 @@ func winReflowLogLines(mode winReflowMode) []string {
 var absorbWindow = 250 * time.Millisecond
 
 // absorbResizeRepaint keeps ConPTY's own repaint away from the display for one
-// frame after f4 has re-wrapped its grid on a width change.
+// frame after f4 has resized its grid -- any resize: the height-only path
+// refills the viewport from GridHistory and is as authoritative as the re-wrap.
 //
 // The two of them disagree about what the viewport should contain, and f4 is
 // the one with the evidence. ConPTY keeps no scrollback (P16): its buffer is

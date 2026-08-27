@@ -753,3 +753,45 @@ instrumentation was extended one number at a time. The counters added last are
 deliberately the full set the remaining hypotheses need, and two of them exist
 only because a counter that cannot observe its subject is worse than none: it
 produces a zero that reads as evidence.
+
+
+### 6.15. Found: the loss happens between passes, on the height-only steps
+
+The around-the-re-wrap instrumentation of 6.14 answers it on its first log.
+
+Every `REFLOW_WRAP` pass -- more than 130 of them -- reports `chars N -> N
+(+0)`: the re-wrap destroys nothing. The character total falls **between**
+passes instead: 79125 after one pass, 79044 at the start of the next, then
+78875, 78237, 77579, 76341. Whatever takes the characters runs while no
+re-wrap is running.
+
+Between passes only two things touch the grid, and both are now visible:
+
+- `REFLOW_ENTER ... rewrap=false width_changed=false`: height-only resizes,
+  taking the branch that moves rows by hand. That branch already refills the
+  viewport from `GridHistory` when the height grows, so it is not the loss.
+- `REFLOW_FRAME`: 130 ConPTY repaint frames landing on the display, none of
+  them diverted, two of them `STALE` (declaring a size the view no longer had).
+  The absorber was gated on a width change, so on every height-only step the
+  frame landed as pixels: it rewrote the viewport with ConPTY's own rows --
+  which remember nothing above the screen -- and erased the rest with `ESC[K`.
+
+Why it took this long to see: the tester dragged the window's corner every
+time, and a corner drag is a stream of width, height and combined steps. The
+width steps re-wrapped correctly and were absorbed; the height steps let the
+frame through. The two interleaved on every drag, so each hypothesis about the
+re-wrap was tested on a log where the re-wrap was innocent and the damage was
+done in the gaps.
+
+**Fix:** absorb the repaint on any size change, not only on width. The
+height-only path is as authoritative as the re-wrap, since it refills from
+history itself. A test drives a height-only resize and requires the diversion
+to be open afterwards.
+
+**What is confirmed on the way.** The re-wrap is lossless (6.14 test matrix and
+the field `+0` on every pass); the logical-line bound removed the cap loss
+(6.12); the gravity offset in `Show` is not the black area -- the log shows
+offset 0-2 with a full history. The two `STALE` frames are recorded and not
+explained; with the absorber covering every resize they no longer reach the
+display, but they say the size ConPTY lays out for can lag f4's by a step,
+which is exactly what reading the XTWINOPS report (O9) is for.

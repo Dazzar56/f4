@@ -738,3 +738,17 @@ func TestAbsorbResizeRepaintNeverStealsFromAPass(t *testing.T) {
 		t.Fatal("absorb replaced the sink of a running oracle pass")
 	}
 }
+
+func TestHandleResizeAbsorbsOnHeightOnlyChange(t *testing.T) {
+	// The corner-drag bug: a height-only step let ConPTY's repaint land and
+	// erase rows the view had just refilled from history.
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	pf.reflowOracle = newReflowOracle(pf, winReflowOracle)
+	pf.termView.ReflowOnResize = true
+	pf.termView.Resize(80, 20)
+	pf.reflowOracle.absorbResizeRepaint()
+	if pf.reflowOracle.divert() == nil {
+		t.Fatal("a height-only resize must divert the repaint that follows it")
+	}
+}
