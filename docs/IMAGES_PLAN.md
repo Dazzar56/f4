@@ -227,6 +227,16 @@ these are `scale` (time on the thread holding the screen lock), `frames`
 against `new` (a rescale storm), and `blank` (paints that found no frame
 buffer). Nothing further should be guessed until one of those logs arrives.
 
+A later paired `f4probe 5` run on Windows 11 21H2 / build 22000 closed the
+host-identification measurement, but not the application case above. Classic
+conhost returned a visible `ConsoleWindowClass` with a 960x480 client and DA1
+without sixel. Windows Terminal returned a *visible* 0x0
+`PseudoConsoleWindow` owned by its hosting window and DA1 with sixel parameter
+4. This confirms that visibility alone is the wrong overlay gate and DA1 is
+the right capability fallback. The WT run had `WT_SESSION`, so direct-launch
+handoff without that variable still needs the `VTUI_DEBUG=1` f4 log described
+above; inbox conhost on 24H2/25H2 also remains unmeasured.
+
 **6b. Kitty polish, what is left.** Unicode placeholders (`U=1` and the
 character `U+10EEEE`), and a negative `z`, which needs a change in vtui first:
 see the entry in section 8.

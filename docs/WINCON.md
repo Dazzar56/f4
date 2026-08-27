@@ -10,14 +10,24 @@ wire the way they do on any capable terminal — that is what the full colour
 sixel encoder in vtui is for, and it is a better answer than an overlay in
 every respect.
 
-This is for **conhost**: `cmd.exe` in its own window, which has no image
-protocol of any kind and never will.
+This is for a **classic conhost that does not advertise an image protocol**.
+That is measured on Windows 10 19045 and Windows 11 22000. A newer inbox
+conhost may advertise sixel; in that case the native protocol should win and
+the overlay is unnecessary.
 
-The two are told apart by `GetConsoleWindow`. On conhost it returns the real,
-visible window. Under Windows Terminal the console lives in a pseudoconsole
-whose window exists and is never shown, so `IsWindowVisible` is false and
-`Source.Trusted()` says no. Drawing over a window nobody sees would put the
+They cannot be told apart by visibility alone. On classic conhost,
+`GetConsoleWindow` returns a real visible `ConsoleWindowClass` with a non-zero
+client area. A paired 10.0.22000.2538 run under Windows Terminal returned a
+formally visible `PseudoConsoleWindow` whose client area is 0x0 and whose
+owner is `CASCADIA_HOSTING_WINDOW_CLASS`. The current `IsWindowVisible`-only
+classification can therefore trust the wrong window; drawing over it puts the
 pictures nowhere.
+
+The host decision must include the window class. When the environment does
+not already select a graphics protocol, DA1 is the independent capability
+check: the paired run got `ESC[?1;0c` from classic conhost and an answer
+containing parameter 4 (sixel) from Windows Terminal. See
+`WINCON_805_HANDOVER.md` F2-F4 and F13-F14 for the measured fix plan.
 
 ## 2. A child of the console window
 

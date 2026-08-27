@@ -6,7 +6,8 @@ Index of everything known about the terminal, with status and the plan:
 Sections 1-4 come from a probe run on a real machine (10.0.19045.7663,
 `tools/conptyprobe`, log in issue #425) plus two field reports. **Section 5 is
 a second build, 10.0.22000.2538, and it changes the conclusion of section 2.1.
-Read it before acting on anything above.**
+Section 6 records the synchronized repeat and the paired classic-conhost / WT
+run. Read both before acting on anything above.**
 
 The original text of this file is left as it was written, because being able to
 see what one build taught us -- and how confidently -- is the point of keeping
@@ -125,7 +126,7 @@ information.
 | 3 | Self-erasing directory sync cleanup | next — the sync is the remaining creep suspect |
 | 4 | Stop resizing ConPTY for the keybar (§2.2 option 2) | later, for flicker |
 | 5 | Windows reflow of the live grid | **dropped** — ConPTY does it; the flag is a no-op. The history's join information is recovered instead, behind `F4_WIN_REFLOW` (`TERMINAL_LEDGER.md` §3.3.1) |
-| 6 | Re-run the cursor-model probe on Windows 11 24H2/25H2 | pending; 22000 is measured, but only a newer ConPTY can reopen step 5 |
+| 6 | Re-run the cursor-model probe on Windows 11 24H2/25H2 | pending; paired classic-conhost / WT runs on 22000 are complete, but only a newer ConPTY can reopen step 5 |
 
 
 ## 5. The second build: 10.0.22000.2538
@@ -286,3 +287,36 @@ process already exists, otherwise compares the global `notepad.exe` PID set
 before and after launch, records the actual parent chain and windows, and
 terminates only newly observed PIDs. A missing new PID is logged and left
 untouched rather than risking another application instance.
+
+In both paired version-5 runs it found two new Notepad PIDs: a direct child of
+cmd and its child. It closed 2/2 in both cases, so no window was left behind.
+The contrast with the earlier run is the finding: the new cleanup works when
+the launch is observable, while Notepad parentage itself remains unsuitable as
+an invariant.
+
+### 6.4. The outer host is separate from the ConPTY being tested
+
+`f4probe 5` was run twice on the same 10.0.22000.2538 installation, once in a
+classic conhost window and once in Windows Terminal. The classifier did
+separate them:
+
+- classic conhost: no `WT_SESSION`, `ConsoleWindowClass`, 960x480 client,
+  DA1 `ESC[?1;0c`, no sixel;
+- Windows Terminal: `WT_SESSION` set, `PseudoConsoleWindow`, 0x0 client owned
+  by `CASCADIA_HOSTING_WINDOW_CLASS`, DA1 containing parameter 4, so sixel is
+  advertised.
+
+DA2 was `ESC[>0;10;1c` in both. Neither host answered XTVERSION or the two
+sixel-geometry queries; silence there does not override WT's positive DA1.
+
+The probe creates a separate hidden pseudoconsole for its cmd scenarios. The
+entire cursor-model section -- flag 0, the live stream, all resize repaints,
+the wide oracle, scrollback test and flags 0x2/0x8 -- is byte-for-byte
+identical between the two logs. All prompt, OSC 133, title, batch and child
+verdicts agree too, although one ECHO-on batch transcript used a different
+but semantically equivalent cursor/CRLF layout. Thus the outer host changes
+the capabilities available to f4 itself; it did not change the measured child
+ConPTY behaviour on this build.
+
+Both runs still report Windows 11 21H2, build 22000. They answer the paired-host
+question, not the outstanding 24H2/25H2 build question.

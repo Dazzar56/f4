@@ -153,12 +153,12 @@ stay a raw-mode child like ssh or python) and ignores GUI children, whose
 subsystem is read from the PE header of the image (`pe_subsystem.go`,
 `PTY.ChildProcesses`). cmd does not wait for a GUI program, so `notepad` typed
 at the prompt leaves cmd idle. It is not safe to require Notepad to appear in
-that child list: on 22000 `f4probe` opened a visible Notepad but saw no direct
-child or descendant, and therefore failed to close it. That does not hurt the
-session rule — an absent child cannot veto the prompt, while an enumerated GUI
-child is ignored. A console child that is not a shell holds the terminal for
-as long as it runs — that wait is deliberately unbounded, `ping -t` is
-forever.
+that child list: one 22000 run opened a visible Notepad but saw no descendant,
+while both paired version-5 runs found a direct child plus its child and closed
+both new PIDs. That variability does not hurt the session rule — an absent
+child cannot veto the prompt, while an enumerated GUI child is ignored. A
+console child that is not a shell holds the terminal for as long as it runs —
+that wait is deliberately unbounded, `ping -t` is forever.
 
 Open: with the panels hidden and a nested `cmd` at its prompt, Enter typed in
 raw mode reportedly did nothing while `dir` typed after `Ctrl+O` (through f4's
@@ -272,14 +272,18 @@ path that can restore a title-based veto without enumerating a window.
 | 4 | Examine the screen at settle time, not a snapshot at the mark (§3.3) | shipped |
 | 5 | Self-erasing directory sync cleanup (section 3) | next |
 | 6 | Startup sync typed before the first prompt settles | with 5 |
-| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe complete on 19045 and 22000; `f4probe 5` is ready for paired WT/conhost 24H2/25H2 runs; implementation is behind `F4_WIN_REFLOW` and still needs in-f4 field validation |
+| 7 | ConPTY reflow experiments (`TERMINAL_REFLOW.md` §3) | standalone probe complete on 19045 and 22000, including paired WT/conhost on 22000; 24H2/25H2 and in-f4 field validation remain |
 | 8 | OSC 0 title as the markless completion path for a batch that resets `PROMPT` | signal confirmed by the synchronized probe; implementation pending |
 
 Steps 2–4 have field evidence on 19045. The standalone Go probe has now also
 replaced the failed PowerShell experiment for step 7 and produced complete
-results on 19045 and 22000. It does not exercise f4's scratch-frame routing,
-so `F4_WIN_REFLOW=oracle` still needs a real in-f4 run checking for flicker,
-cursor jumps and matcher failures. Step 8 is measured but not implemented.
+results on 19045 and 22000. On 22000 the complete cursor-model section was
+byte-identical when the probe itself ran under classic conhost and Windows
+Terminal; only the outer host's window topology and DA1/SIXEL capability
+differed. That pair does not substitute for 24H2/25H2 and does not exercise
+f4's scratch-frame routing, so `F4_WIN_REFLOW=oracle` still needs a real in-f4
+run checking for flicker, cursor jumps and matcher failures. Step 8 is
+measured but not implemented.
 
 ## 4. Issue #362 — Ctrl+C does not interrupt in f4-gui
 

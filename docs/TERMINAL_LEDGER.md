@@ -30,7 +30,7 @@ build named is the same on both.
 | C2 | cmd interprets batch files in-process: no child appears for the batch itself, only for programs it runs. | C, P | handled |
 | C3 | cmd prints CRLF then the prompt after a command; nothing before the prompt after `cls`. | C | noted (sync cleanup design) |
 | C4 | cmd's console title takes the form `<title> - <command>` while running something. | C, P | **reopened** (O10). P3 says the title cannot be read by enumerating windows; P18 says it arrives in the VT stream anyway. The veto was dropped on the strength of the wrong one of those two. |
-| C5 | cmd does not wait for a GUI program. Its process topology is not stable enough to say that `notepad` is always cmd's child: on 22000 the probe opened a visible Notepad but found no direct child or descendant, so its cleanup missed the process. | C, F, P | handled for session completion: an absent child cannot hold the terminal, and an enumerated GUI child is ignored; do not use Notepad parentage as a probe invariant |
+| C5 | cmd does not wait for a GUI program. Its process topology is not stable enough to say that `notepad` is always cmd's child: one 22000 run opened a visible Notepad but found no descendant, while both paired version-5 runs found a direct child plus its child and safely closed both new PIDs. | C, F, P | handled for session completion: an absent child cannot hold the terminal, and an enumerated GUI child is ignored; do not use Notepad parentage as a probe invariant |
 | C6 | `%VAR%` with ESC in it expands inside a typed line (`$E` in PROMPT works; env-manager's `type` of a file holding `ESC]133;E` works). Basis for any self-erasing cleanup line. | C | design only |
 | C7 | A nested `cmd` prints the same prompt and accepts the same typed lines; PowerShell rejects `cd /d`. Hence only `cmd.exe` is exempt from the child veto. | C, F | handled |
 | C8 | A batch that runs `prompt $P$G` strips the marks from every later prompt. The synchronized 22000 run saw one mark before the reset took effect and none for either later line or the final prompt. | C, P | **open** (O4): needs the title path measured in P18/P19 |
@@ -58,6 +58,7 @@ build named is the same on both.
 | P17 | Passthrough (0x8) is accepted on 22000. An actual byte comparison found its live stream, wide repaint and narrow repaint identical to flag 0. From outside it is a no-op, exactly like the resize quirk. | P | P10 closed |
 | P18 | cmd's `<title> - <command>` **is** forwarded through ConPTY as OSC 0, verbatim, e.g. `ESC]0;F4PROBE_TITLE_XYZ - timeout  /t 3 /nobreakBEL`; the bare title returned after the child's independently confirmed exit. | P | see O10; C4 reopened |
 | P19 | The title carries the command form for ECHO-on, ECHO-off and PROMPT-resetting batches, including while an in-process `pause` has no child and no usable mark. It is the only signal measured so far that says "busy" during a batch's own waiting. | P | O10; this is what `IsBusy` and OSC 133 both miss (C2) |
+| P20 | Paired version-5 runs on the same 22000 machine were correctly identified as classic conhost and Windows Terminal. Their complete cursor-model / resize / oracle sections were byte-identical and every cmd semantic verdict agreed. The outer hosts differed in DA1 (`?1;0c`, no sixel, versus `?61;4;...c`, sixel) and window topology, not in the probe's separately created child ConPTY. | P | host graphics detection and child ConPTY semantics are separate decisions; 24H2/25H2 still need measurement |
 
 ### 1.3. f4 itself, Windows path
 
@@ -87,7 +88,7 @@ build named is the same on both.
 
 | Terminal | Reflow | Under ConPTY |
 | --- | --- | --- |
-| Windows Terminal | yes | owns conhost; `RESIZE_QUIRK` means something only there |
+| Windows Terminal | yes | reflows in its own hosting path; the paired 22000 run did not change the probe's separately created child ConPTY stream (P20), and the tested OS flag remained a no-op |
 | WezTerm | yes | per-character guess whether ConPTY inserted a hard break (`enable_conpty_quirks`) — P6 shows why it is a guess |
 | Alacritty | yes | pads with blank rows on resize |
 | xterm.js | yes | throttles resize |
@@ -113,7 +114,7 @@ probe.
 | O4 | A batch that resets PROMPT (C8). | The markless signal is now measured without the earlier race: OSC 0 carries the busy batch title and restores the bare title at completion (P18/P19). Implementation in `cmdShellSession` remains open. |
 | O5 | Keyboard modes when switching between two live shells (A2). | Needs modes per session, not per `TerminalView`. |
 | O6 | Reflow vs truncation without an alternate screen (A8). | Measure which programs actually suffer before adding a heuristic. |
-| O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P19), including a child-synchronized repeat of the mark and batch scenarios. The quirk is still a no-op. 24H2/25H2 remain unmeasured; `f4probe 5` records `DisplayVersion`, `BuildLabEx` and an explicit WT/conhost host kind for those runs. |
+| O7 | Windows 11 ConPTY: re-run the probe. | Done for 10.0.22000.2538 (P11-P20), including a child-synchronized repeat and paired classic-conhost / WT runs. The inner cursor-model section is byte-identical and the quirk is still a no-op. Both runs are 21H2; 24H2/25H2 remain unmeasured. |
 | O8 | The wrap signal is build- and frame-dependent (P6 against P11/P12), while the exact-width hard break is ambiguous even on 22000 (P13). | Do not branch on a build number or promote `hint` to exact from the absence of `ESC[K`. Keep it marked as guessed; use the cursor-model oracle to overrule viewport guesses, and accept that rows already outside ConPTY's viewport cannot be made certain. `f4probe 5` gives the exact-width control its own verdict instead of folding it into the long-line summary. |
 | O9 | The XTWINOPS report (P14) as the repaint delimiter. | Today the scratch-view routing keys on `ESC[?25l … ESC[?25h`. `ESC[8;h;wt` says the size as well, so a frame can be matched to the resize that caused it, and a frame that is not ours can be told apart. |
 | O10 | The console title as the busy signal (P18, P19). | Measurement is complete: it owes nothing to `PROMPT`, covers a childless batch `pause`, and was restored only after an independently observed child exit. Implementation is still open: track the OSC 0 baseline per session and use its busy/restored transition to close O4. |
@@ -143,7 +144,7 @@ without a tester. One package, `cmd/f4/internal/conptyfake` or a
 | `RESIZE_QUIRK` as a no-op | P5 |
 | No title readable through process/window enumeration | P3 |
 | OSC 0 busy/restored title around an external command and batches, including a childless `pause` | P18, P19 |
-| Child listings: `PING.EXE`, `timeout.exe`, nested `cmd.exe`, conhost absent; Notepad may be an enumerated GUI child or absent/brokered | P4, C5 |
+| Child listings: `PING.EXE`, `timeout.exe`, nested `cmd.exe`, conhost absent; Notepad may be absent/brokered or a direct GUI child with another process below it | P4, C5 |
 | OSC 133 passthrough with arbitrary parameters | P1 |
 | Stream split at arbitrary byte boundaries (ConPTY chunking) | `ansi_parser_sync_test.go` |
 
