@@ -56,7 +56,7 @@ target and the pointer says no. That is upstream, not here.
 
 ## When nothing happens
 
-Run with `VTUI_DEBUG=1` and read debug.log. f4 logs why a drag out was not
+Run with `VTUI_DEBUG=1` and read `Logs/debug.log` inside the active f4 profile. f4 logs why a drag out was not
 started and what a drop at a cell would do; vtui logs the protocol side, and
 the diagnosing section of its DRAGDROP.md lists every line and what a
 missing one means.

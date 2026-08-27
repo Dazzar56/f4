@@ -84,6 +84,7 @@ func sudoStartupMode(args []string, askpassParent bool) (dispatcher string, askp
 
 func main() {
 	vtui.AppName = "f4"
+	configureF4DebugLogPath(GetF4ConfigDir())
 	if archivePath, archiveKind, found, err := parseUpdateHelperArgs(os.Args[1:]); found {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -266,6 +267,7 @@ func main() {
 			}
 			os.Exit(RunNewPlugin(pluginName, os.Stdout, os.Stderr))
 		case "-test-plugins":
+			configureF4DebugLogPath(GetF4ConfigDir())
 			vtui.ConfigDiskLogging(true)
 			vtui.DebugLog("--- PLUGIN TEST MODE ---")
 			pm := NewPluginManager()
@@ -326,6 +328,7 @@ func main() {
 			}
 		}
 	}
+	configureF4DebugLogPath(GetF4ConfigDir())
 
 	if version {
 		fmt.Println(getFormattedVersionInfo())
@@ -341,7 +344,7 @@ The following switches may be used in the command line:
  --attached             Force run in Attached-mode
  --client [clientPath]
  --cpuprofile [cpuprofile]
- --debug                Log to "debug.log" (equivalent to --log=1)
+ --debug                Log to profile Logs/debug.log (equivalent to --log=1)
  --dump-screen-after N  Auto-run Debug.ScreenDump N seconds after startup
                          (bypasses hotkeys entirely -- useful under Wine
                          tty mode, where complex combos like CtrlAltP can
@@ -357,7 +360,8 @@ The following switches may be used in the command line:
                          "auto" ignores the configured default for this run
  --input [InputMode]    Defines the preferred vtinput parser method;
                          [InputMode] values: "", "ansi", "ConPTY"
- --log [logfile]        If =1 or =true uses "debug.log", otherwise logfile
+ --log [logfile]        If =1 or =true uses profile Logs/debug.log,
+                         otherwise logfile
  --new-plugin [pluginName]
  --server [serverPath]
  -test-plugins          Plugin test mode

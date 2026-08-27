@@ -211,12 +211,14 @@ go generate ./cmd/f4
 ```
 
 **5. Debug Mode**
-To enable detailed logging to `debug.log`, run with the `--debug` flag:
+To enable detailed logging to `Logs/debug.log` inside the active f4 profile,
+run with the `--debug` flag:
 ```bash
 ./f4 --debug
 ```
 
-You can also specify a custom log file using `--log`:
+You can also specify a custom log file using `--log`; an explicit path is
+kept unchanged:
 ```bash
 ./f4 --log /tmp/f4_trace.log
 ```
