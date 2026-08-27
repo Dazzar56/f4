@@ -651,3 +651,32 @@ func TestHintOffLeavesUnixWrapsAlone(t *testing.T) {
 		t.Error("a genuine soft wrap was lost")
 	}
 }
+
+func TestWinReflowLogLinesNameTheSwitchesNotJustTheMode(t *testing.T) {
+	// A field log must answer "was re-wrapping even on?" without anyone
+	// reading panels_frame.go to find out.
+	oracle := winReflowLogLines(winReflowOracle)
+	if len(oracle) != 1 {
+		t.Fatalf("oracle mode should not warn: %q", oracle)
+	}
+	if !strings.Contains(oracle[0], "rewrap_on_resize=true") ||
+		!strings.Contains(oracle[0], "hint_wrap=true") ||
+		!strings.Contains(oracle[0], "oracle_passes=true") {
+		t.Fatalf("oracle line does not name its switches: %q", oracle[0])
+	}
+
+	for _, mode := range []winReflowMode{winReflowOff, winReflowHint, winReflowProbe} {
+		lines := winReflowLogLines(mode)
+		if !strings.Contains(lines[0], "rewrap_on_resize=false") {
+			t.Errorf("%v: expected rewrap off, got %q", mode, lines[0])
+		}
+		if len(lines) != 2 || !strings.Contains(lines[1], "F4_WIN_REFLOW=oracle") {
+			t.Errorf("%v: a mode that does not re-wrap must say so and name the mode that does: %q", mode, lines)
+		}
+	}
+
+	// The probe's matrix greps for this prefix; keep it parseable.
+	if !strings.HasPrefix(winReflowLogLines(winReflowProbe)[0], "REFLOW: F4_WIN_REFLOW=probe") {
+		t.Fatal("tools/conptyprobe matches on this prefix")
+	}
+}

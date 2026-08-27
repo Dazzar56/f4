@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -404,4 +405,28 @@ func trimTrailingEmpty(rows []string) []string {
 		n--
 	}
 	return rows[:n]
+}
+
+// winReflowLogLines is what a run writes about its own reflow settings.
+//
+// The mode name alone is not enough to read a field log by. A field report of
+// "the history does not come back when I resize" was once taken at face value
+// and investigated as a matcher bug; the log had been made in `probe` mode,
+// which re-wraps nothing by design, and nothing in it said so. Establishing
+// that cost a round trip with the tester. So the line names the two switches
+// the mode actually sets, and a mode that will not re-join the scrollback says
+// that in words, next to the way to turn it on.
+func winReflowLogLines(mode winReflowMode) []string {
+	hint := mode != winReflowOff
+	rewrap := mode == winReflowOracle
+	oracle := mode == winReflowOracle || mode == winReflowProbe
+	lines := []string{fmt.Sprintf(
+		"REFLOW: F4_WIN_REFLOW=%s hint_wrap=%v rewrap_on_resize=%v oracle_passes=%v",
+		mode, hint, rewrap, oracle)}
+	if !rewrap {
+		lines = append(lines, "REFLOW: this mode does not re-wrap on resize, so the "+
+			"scrollback will not be re-joined however the window is dragged "+
+			"(F4_WIN_REFLOW=oracle does, and is the Windows default)")
+	}
+	return lines
 }

@@ -1533,11 +1533,15 @@ func (pf *PanelsFrame) endExecution() {
 // modes that ask ConPTY. See reflow_oracle.go.
 func (pf *PanelsFrame) setWinReflowMode(mode winReflowMode) {
 	pf.reflowOracle = newReflowOracle(pf, mode)
+	hint := mode != winReflowOff
+	rewrap := mode == winReflowOracle
 	if pf.termView != nil {
-		pf.termView.HintWrap = mode != winReflowOff
-		pf.termView.ReflowOnResize = mode == winReflowOracle
+		pf.termView.HintWrap = hint
+		pf.termView.ReflowOnResize = rewrap
 	}
-	vtui.DebugLog("REFLOW: F4_WIN_REFLOW=%s", mode)
+	for _, line := range winReflowLogLines(mode) {
+		vtui.DebugLog("%s", line)
+	}
 }
 
 // runReflowOracle asks the oracle for a pass at the current geometry. Called

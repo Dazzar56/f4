@@ -441,5 +441,8 @@ re-wrap:
    is the "widening frees rows and nothing refills them" symptom (A6) and may
    be the same bug or a second one.
 
-A `REFLOW:` line naming the mode and whether `ReflowOnResize` is on would have
-made step 1 unnecessary; add it before the next field run.
+The `REFLOW:` line now names the switches rather than the mode alone
+(`hint_wrap`, `rewrap_on_resize`, `oracle_passes`), and a mode that will not
+re-join the scrollback says so in the log next to the way to turn it on. Step 1
+above would have been unnecessary with that line present, which is the whole
+reason it exists.
