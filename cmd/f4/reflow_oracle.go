@@ -116,7 +116,7 @@ type reflowOracle struct {
 	frameDone chan struct{}
 	// absorbCount accumulates the bytes the current diversion has swallowed.
 	absorbCount *int
-	lastByte  time.Time
+	lastByte    time.Time
 }
 
 func newReflowOracle(pf *PanelsFrame, mode winReflowMode) *reflowOracle {
