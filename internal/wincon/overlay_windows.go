@@ -9,30 +9,37 @@ package wincon
 // terminal. This is for conhost — cmd.exe in its own window — which has no
 // image protocol of any kind and never will.
 //
-// The shape is the same as the X side, and for the same reasons. The overlay
-// is a **child window of the console window**, not a window over the top of
-// everything: the system then moves it with the console, clips it to the
-// console, keeps it out of the task list and out of alt-tab, puts anything
-// raised above the console above it too, and destroys it with its parent. It
-// stops being a separate window and starts being part of the console, which
-// is the whole point.
+// The overlay is a **top-level layered window with no parent and no owner**,
+// placed over the console's client area and kept there by a timer. It used
+// to be a child of the console window, which is the shape PictureView takes
+// in Far and the shape the X side takes, and it was wrong here for one
+// reason that no amount of care around it could fix: the console window
+// belongs to conhost.exe, and a parent/child or owner/owned relationship
+// across processes attaches the two threads' input queues, transitively
+// (Raymond Chen, 2013-04-12 and 2011-03-31). Measured in the field on
+// 10.0.22000: for as long as the child window existed the console accepted
+// no keys and no mouse (docs/WINCON_805_HANDOVER.md F7, F22). That is the
+// "flickers, freezes, 17% CPU" of issue #805. A window with no parent and
+// no owner has nothing to couple; the same field run showed the layered one
+// visible, above the console, surviving a console repaint and freezing
+// nothing (F23).
 //
-// One caveat is real and worth knowing about. The console window belongs to
-// conhost.exe, a different process, so parenting to it attaches the two
-// threads' input queues. That is how every overlay onto a console works and
-// it is what makes the picture behave; the price is that a wedged conhost can
-// wedge the thread that pumps the overlay.
+// What the child got for free, this window does for itself: a timer on the
+// pump thread reads where the console is and what it looks like and moves,
+// hides, shows or restacks the overlay to match (trackStep in layered.go,
+// tested without a window). The frame goes in with UpdateLayeredWindow --
+// position, size and premultiplied pixels in one call -- so there is no
+// WM_PAINT, no background to erase, no black rectangle before the first
+// paint, and no region: gaps in the picture are alpha zero.
 //
-// **Hence the invariant of this file: no caller ever waits on the pump
-// thread.** SetWindowPos, ShowWindow and SetWindowRgn on a window owned by
-// another thread are synchronous — they send messages to the owner and wait —
-// so calling one of them from the thread that is drawing a frame puts that
-// frame behind conhost, and conhost is what draws f4's own text and delivers
-// its keys. Issue #805 is what that looks like from the outside: the picture
-// never arrives, the whole interface stops, and Esc is answered when Windows
-// breaks the wait, minutes later. So the calls below only write down what
-// they want (overlay_state.go) and post one thread message; every user32 and gdi32
-// call that touches the window happens on the pump thread and nowhere else.
+// **Two invariants, and both are load-bearing.** No caller ever waits on the
+// pump thread: the public methods write what they want into overlay_state.go
+// and post one thread message, and every user32/gdi32 call that touches the
+// window happens on the pump thread. And the console window is only ever
+// read: GetClientRect, ClientToScreen, IsWindow, IsWindowVisible, IsIconic,
+// GetWindow and GetWindowLongPtrW, none of which sends it a message. Never
+// SendMessage, SetWindowPos, ShowWindow or anything else that would wait on
+// conhost -- that is the wait the child window used to be stuck in.
 
 import (
 	"fmt"
@@ -54,62 +61,74 @@ var (
 	procGetStdHandle            = kernel32.NewProc("GetStdHandle")
 	procGetModuleHandleW        = kernel32.NewProc("GetModuleHandleW")
 
-	procIsWindowVisible    = user32.NewProc("IsWindowVisible")
-	procGetClassNameW      = user32.NewProc("GetClassNameW")
-	procRegisterClassExW   = user32.NewProc("RegisterClassExW")
-	procCreateWindowExW    = user32.NewProc("CreateWindowExW")
-	procDestroyWindow      = user32.NewProc("DestroyWindow")
-	procDefWindowProcW     = user32.NewProc("DefWindowProcW")
-	procGetMessageW        = user32.NewProc("GetMessageW")
-	procPeekMessageW       = user32.NewProc("PeekMessageW")
-	procTranslateMessage   = user32.NewProc("TranslateMessage")
-	procDispatchMessageW   = user32.NewProc("DispatchMessageW")
-	procPostMessageW       = user32.NewProc("PostMessageW")
-	procPostThreadMessageW = user32.NewProc("PostThreadMessageW")
-	procPostQuitMessage    = user32.NewProc("PostQuitMessage")
-	procGetCurrentThreadId = kernel32.NewProc("GetCurrentThreadId")
-	procSetWindowPos       = user32.NewProc("SetWindowPos")
-	procShowWindow         = user32.NewProc("ShowWindow")
-	procGetClientRect      = user32.NewProc("GetClientRect")
-	procInvalidateRect     = user32.NewProc("InvalidateRect")
-	procBeginPaint         = user32.NewProc("BeginPaint")
-	procEndPaint           = user32.NewProc("EndPaint")
-	procSetWindowRgn       = user32.NewProc("SetWindowRgn")
+	procIsWindowVisible     = user32.NewProc("IsWindowVisible")
+	procGetClassNameW       = user32.NewProc("GetClassNameW")
+	procRegisterClassExW    = user32.NewProc("RegisterClassExW")
+	procCreateWindowExW     = user32.NewProc("CreateWindowExW")
+	procDestroyWindow       = user32.NewProc("DestroyWindow")
+	procDefWindowProcW      = user32.NewProc("DefWindowProcW")
+	procGetMessageW         = user32.NewProc("GetMessageW")
+	procPeekMessageW        = user32.NewProc("PeekMessageW")
+	procTranslateMessage    = user32.NewProc("TranslateMessage")
+	procDispatchMessageW    = user32.NewProc("DispatchMessageW")
+	procPostMessageW        = user32.NewProc("PostMessageW")
+	procPostThreadMessageW  = user32.NewProc("PostThreadMessageW")
+	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
+	procGetCurrentThreadId  = kernel32.NewProc("GetCurrentThreadId")
+	procSetWindowPos        = user32.NewProc("SetWindowPos")
+	procShowWindow          = user32.NewProc("ShowWindow")
+	procGetClientRect       = user32.NewProc("GetClientRect")
+	procUpdateLayeredWindow = user32.NewProc("UpdateLayeredWindow")
+	procClientToScreen      = user32.NewProc("ClientToScreen")
+	procIsWindow            = user32.NewProc("IsWindow")
+	procIsIconic            = user32.NewProc("IsIconic")
+	procGetWindow           = user32.NewProc("GetWindow")
+	procGetWindowLongPtrW   = user32.NewProc("GetWindowLongPtrW")
+	procSetTimer            = user32.NewProc("SetTimer")
+	procKillTimer           = user32.NewProc("KillTimer")
+	procGetDC               = user32.NewProc("GetDC")
+	procReleaseDC           = user32.NewProc("ReleaseDC")
 
-	procStretchDIBits     = gdi32.NewProc("StretchDIBits")
-	procCreateRectRgn     = gdi32.NewProc("CreateRectRgn")
-	procCombineRgn        = gdi32.NewProc("CombineRgn")
-	procDeleteObject      = gdi32.NewProc("DeleteObject")
-	procSetStretchBltMode = gdi32.NewProc("SetStretchBltMode")
+	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
+	procCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
+	procSelectObject       = gdi32.NewProc("SelectObject")
+	procDeleteDC           = gdi32.NewProc("DeleteDC")
+	procDeleteObject       = gdi32.NewProc("DeleteObject")
 )
 
 const (
-	wsChild        = 0x40000000
-	wsVisible      = 0x10000000
-	wsClipSiblings = 0x04000000
+	wsVisible = 0x10000000
 
 	swpNoActivate = 0x0010
-	swpNoZOrder   = 0x0004
-	swpShowWindow = 0x0040
 	swpNoMove     = 0x0002
 	swpNoSize     = 0x0001
 
-	swHide = 0
+	swHide           = 0
+	swShowNoActivate = 4
 
-	wmPaint       = 0x000F
-	wmEraseBkgnd  = 0x0014
-	wmNCHitTest   = 0x0084
+	wsPopup         = 0x80000000
+	wsExLayered     = 0x00080000
+	wsExTransparent = 0x00000020
+	wsExToolWindow  = 0x00000080
+	wsExNoActivate  = 0x08000000
+	wsExTopmost     = 0x00000008
+	gwlExStyle      = ^uintptr(19) // -20
+	gwHwndPrev      = 3
+	wmTimer         = 0x0113
+	ulwAlpha        = 0x00000002
+	acSrcOver       = 0x00
+	acSrcAlpha      = 0x01
+	trackTimerID    = 1
+	trackTimerMs    = 33
+
 	wmDestroy     = 0x0002
 	wmApp         = 0x8000
 	wmOverlayQuit = wmApp + 1
 	wmOverlaySync = wmApp + 2
 	pmNoRemove    = 0x0000
 
-	htTransparent = ^uintptr(0) // HTTRANSPARENT is -1
-
 	diRGBColors     = 0
 	srcCopy         = 0x00CC0020
-	rgnOr           = 2
 	colorOnColor    = 3
 	biRGB           = 0
 	stdOutputHandle = ^uintptr(10) // STD_OUTPUT_HANDLE is -11
@@ -152,15 +171,6 @@ type wndClassExW struct {
 	IconSm     uintptr
 }
 
-type paintStruct struct {
-	Hdc         uintptr
-	Erase       int32
-	RcPaint     rect
-	Restore     int32
-	IncUpdate   int32
-	RgbReserved [32]byte
-}
-
 type bitmapInfoHeader struct {
 	Size          uint32
 	Width         int32
@@ -173,6 +183,12 @@ type bitmapInfoHeader struct {
 	YPelsPerMeter int32
 	ClrUsed       uint32
 	ClrImportant  uint32
+}
+
+type size struct{ Cx, Cy int32 }
+
+type blendFunction struct {
+	BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat byte
 }
 
 type coord struct{ X, Y int16 }
@@ -262,9 +278,18 @@ type Overlay struct {
 
 	// mu guards the handle and the frame buffer, both of which the pump
 	// thread reads while it paints.
-	mu       sync.Mutex
-	parent   uintptr
-	hwnd     uintptr
+	mu sync.Mutex
+	// target is the console window the picture follows. It is read and
+	// never written to: not a parent, not an owner, never sent a message.
+	// That is the whole of the difference from the child window this
+	// replaced (docs/WINCON_805_HANDOVER.md F7, F22, F23).
+	target uintptr
+	hwnd   uintptr
+	// tracker is what the timer believes; only the pump thread touches it.
+	tracker trackerState
+	// shown remembers whether a frame has ever been pushed, since a layered
+	// window has nothing to show before its first UpdateLayeredWindow.
+	shown    bool
 	threadID uint32
 	ready    chan error
 	pix      []byte
@@ -324,25 +349,6 @@ func registerClass() {
 
 func wndProc(hwnd uintptr, message uint32, wparam, lparam uintptr) uintptr {
 	switch message {
-	case wmNCHitTest:
-		// The mouse belongs to the console underneath. This is the same
-		// rule as the empty input region on the X side, and it is what
-		// keeps selecting text working while a picture is on the screen.
-		return htTransparent
-
-	case wmEraseBkgnd:
-		// Painting the background would flash before the picture lands.
-		return 1
-
-	case wmPaint:
-		regMu.Lock()
-		o := reg[hwnd]
-		regMu.Unlock()
-		if o != nil {
-			o.paint(hwnd)
-			return 0
-		}
-
 	case wmOverlaySync:
 		regMu.Lock()
 		o := reg[hwnd]
@@ -384,11 +390,10 @@ func New() (*Overlay, error) {
 		return nil, classErr
 	}
 
-	o := &Overlay{parent: parent, ready: make(chan error, 1)}
-	// The window lives on a thread of its own, pumping its own messages.
-	// It has to: a window belongs to the thread that created it, and this
-	// one is parented across a process boundary, so a conhost that stops
-	// answering must not be able to stop anything else in f4.
+	o := &Overlay{target: parent, ready: make(chan error, 1)}
+	// The window lives on a thread of its own, pumping its own messages: a
+	// window belongs to the thread that created it, and the tracking timer
+	// runs there too. Nothing in f4 ever waits for this thread.
 	go o.pump()
 	select {
 	case err := <-o.ready:
@@ -421,13 +426,20 @@ func (o *Overlay) pump() {
 	o.mu.Unlock()
 
 	inst, _, _ := procGetModuleHandleW.Call(0)
+	// A top-level window: no parent, no owner. A child of the console
+	// window coupled the two processes' input queues and froze the console
+	// for as long as it existed (F7, measured in the field as F22); an owned
+	// window does the same, transitively. A parentless one has nothing to
+	// couple. Layered, so the frame is pushed with UpdateLayeredWindow and
+	// there is never a paint; transparent to the mouse; a tool window, so it
+	// has no taskbar button; never activated, so focus stays in the console.
 	hwnd, _, err := procCreateWindowExW.Call(
-		0,
+		uintptr(wsExLayered|wsExTransparent|wsExToolWindow|wsExNoActivate),
 		classAtom,
 		0,
-		uintptr(wsChild|wsClipSiblings),
+		uintptr(wsPopup),
 		0, 0, 1, 1,
-		o.parent, 0, inst, 0,
+		0, 0, inst, 0,
 	)
 	if hwnd == 0 {
 		o.ready <- fmt.Errorf("the overlay window could not be created: %w", err)
@@ -453,6 +465,7 @@ func (o *Overlay) pump() {
 		return
 	}
 
+	procSetTimer.Call(hwnd, trackTimerID, trackTimerMs, 0)
 	for {
 		r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
 		if int32(r) <= 0 {
@@ -464,58 +477,20 @@ func (o *Overlay) pump() {
 				o.apply(hwnd)
 				continue
 			case wmOverlayQuit:
+				procKillTimer.Call(hwnd, trackTimerID)
 				procDestroyWindow.Call(hwnd)
 				continue
 			}
+		}
+		if m.HWnd == hwnd && m.Message == wmTimer {
+			o.track(hwnd)
+			continue
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
 	}
 }
 
-// paint blits the cached frame. It runs on the pump thread.
-func (o *Overlay) paint(hwnd uintptr) {
-	var ps paintStruct
-	hdc, _, _ := procBeginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
-	if hdc == 0 {
-		return
-	}
-	defer procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
-
-	o.stats.paints.Add(1)
-
-	o.mu.Lock()
-	pix, w, h := o.pix, o.pixW, o.pixH
-	o.mu.Unlock()
-	if len(pix) == 0 || w <= 0 || h <= 0 {
-		// Nothing to paint, and WM_ERASEBKGND is refused, so the window
-		// keeps whatever it held. This is what the reported black
-		// rectangle is from in here, and it is worth counting even now
-		// that take() holds the move back until the pixels are here.
-		o.stats.blank.Add(1)
-		return
-	}
-
-	bi := bitmapInfoHeader{
-		Size:        uint32(unsafe.Sizeof(bitmapInfoHeader{})),
-		Width:       int32(w),
-		Height:      int32(h),
-		Planes:      1,
-		BitCount:    32,
-		Compression: biRGB,
-	}
-	procSetStretchBltMode.Call(hdc, colorOnColor)
-	procStretchDIBits.Call(hdc,
-		0, 0, uintptr(w), uintptr(h),
-		0, 0, uintptr(w), uintptr(h),
-		uintptr(unsafe.Pointer(&pix[0])),
-		uintptr(unsafe.Pointer(&bi)),
-		diRGBColors, srcCopy)
-}
-
-// Place moves the overlay, in the console's client coordinates. It returns as
-// soon as the request has been written down: the window itself is moved on the
-// pump thread, because SetWindowPos on another thread's window waits for it.
 func (o *Overlay) Place(r Rect) error {
 	if r.W <= 0 || r.H <= 0 {
 		o.Hide()
@@ -547,8 +522,13 @@ func (o *Overlay) post() {
 	}
 }
 
-// apply is the other half, on the pump thread: every call that moves, shows,
-// hides or reshapes the window is here and nowhere else.
+// apply is the other half, on the pump thread: every call that shows, hides
+// or paints the window is here, in track, and nowhere else.
+//
+// Position, size and pixels travel in one UpdateLayeredWindow call, which is
+// what makes the old rule -- move only in the wake-up that also paints --
+// hold by construction, and makes a black rectangle before the first paint
+// impossible: a layered window has no contents at all until this call.
 func (o *Overlay) apply(hwnd uintptr) {
 	ops := o.st.take()
 	if ops.Empty() {
@@ -557,57 +537,146 @@ func (o *Overlay) apply(hwnd uintptr) {
 	o.stats.applies.Add(1)
 	if ops.Hide {
 		procShowWindow.Call(hwnd, swHide)
+		o.tracker.WantVisible = false
+		o.tracker.OnScreen = false
 		return
 	}
-	if ops.SetRegion {
-		o.stats.regions.Add(1)
-		applyRegion(hwnd, ops.Region)
-	}
-	if ops.Move {
-		o.stats.moves.Add(1)
-		procSetWindowPos.Call(hwnd, 0,
-			uintptr(int32(ops.Rect.X)), uintptr(int32(ops.Rect.Y)),
-			uintptr(int32(ops.Rect.W)), uintptr(int32(ops.Rect.H)),
-			swpNoActivate|swpNoZOrder|swpShowWindow)
-	}
-	if ops.Invalidate {
-		o.stats.invalidates.Add(1)
-		procInvalidateRect.Call(hwnd, 0, 0)
+	// SetRegion is accepted and ignored: gaps between thumbnails are alpha
+	// zero in the frame already, and a layered window shows nothing there.
+	if ops.Move || ops.Invalidate {
+		o.push(hwnd)
 	}
 }
 
-// applyRegion builds the region and hands it over. On the pump thread, so the
-// window is given an object made on the thread that owns the window.
-func applyRegion(hwnd uintptr, rects []Rect) {
-	if len(rects) == 0 {
-		procSetWindowRgn.Call(hwnd, 0, 1)
+// push composes the cached frame at the console's current client origin and
+// hands it to the window. Screen coordinates come from two calls that only
+// read the console window; nothing here can wait on conhost.
+func (o *Overlay) push(hwnd uintptr) {
+	o.mu.Lock()
+	pix, w, h := o.pix, o.pixW, o.pixH
+	target := o.target
+	o.mu.Unlock()
+	rect := o.st.currentRect()
+	if len(pix) == 0 || w <= 0 || h <= 0 || rect.W <= 0 || rect.H <= 0 {
 		return
 	}
-	var combined uintptr
-	for _, r := range rects {
-		if r.W <= 0 || r.H <= 0 {
-			continue
-		}
-		part, _, _ := procCreateRectRgn.Call(
-			uintptr(int32(r.X)), uintptr(int32(r.Y)),
-			uintptr(int32(r.X+r.W)), uintptr(int32(r.Y+r.H)))
-		if part == 0 {
-			continue
-		}
-		if combined == 0 {
-			combined = part
-			continue
-		}
-		procCombineRgn.Call(combined, combined, part, rgnOr)
-		procDeleteObject.Call(part)
+	origin := point{}
+	procClientToScreen.Call(target, uintptr(unsafe.Pointer(&origin)))
+	x := int(origin.X) + rect.X
+	y := int(origin.Y) + rect.Y
+
+	screenDC, _, _ := procGetDC.Call(0)
+	memDC, _, _ := procCreateCompatibleDC.Call(screenDC)
+	bih := bitmapInfoHeader{
+		Size:     uint32(unsafe.Sizeof(bitmapInfoHeader{})),
+		Width:    int32(rect.W),
+		Height:   -int32(rect.H), // top-down
+		Planes:   1,
+		BitCount: 32,
 	}
-	if combined == 0 {
+	var bits unsafe.Pointer
+	dib, _, _ := procCreateDIBSection.Call(memDC, uintptr(unsafe.Pointer(&bih)), 0,
+		uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if dib == 0 || bits == nil {
+		procDeleteDC.Call(memDC)
+		procReleaseDC.Call(0, screenDC)
+		o.stats.blank.Add(1)
 		return
 	}
-	// The window owns the region once it is set, so it is not deleted here.
-	if r, _, _ := procSetWindowRgn.Call(hwnd, combined, 1); r == 0 {
-		procDeleteObject.Call(combined)
+	dst := unsafe.Slice((*byte)(bits), rect.W*rect.H*4)
+	// The frame may be smaller than the placement rectangle; whatever it
+	// does not cover stays alpha zero, which is to say invisible.
+	scaled := make([]byte, rect.W*rect.H*4)
+	blitInto(scaled, rect.W, rect.H, pix, w, h, w*4, 0, 0)
+	premultiplyBGRA(dst, scaled, rect.W, rect.H, rect.W*4)
+
+	old, _, _ := procSelectObject.Call(memDC, dib)
+	pt := point{X: int32(x), Y: int32(y)}
+	sz := size{Cx: int32(rect.W), Cy: int32(rect.H)}
+	src := point{}
+	bf := blendFunction{BlendOp: acSrcOver, SourceConstantAlpha: 255, AlphaFormat: acSrcAlpha}
+	r, _, _ := procUpdateLayeredWindow.Call(hwnd, screenDC,
+		uintptr(unsafe.Pointer(&pt)), uintptr(unsafe.Pointer(&sz)),
+		memDC, uintptr(unsafe.Pointer(&src)), 0,
+		uintptr(unsafe.Pointer(&bf)), ulwAlpha)
+	procSelectObject.Call(memDC, old)
+	procDeleteObject.Call(dib)
+	procDeleteDC.Call(memDC)
+	procReleaseDC.Call(0, screenDC)
+	if r == 0 {
+		o.stats.blank.Add(1)
+		return
 	}
+	o.stats.paints.Add(1)
+	o.tracker.WantVisible = true
+	o.tracker.X, o.tracker.Y = x, y
+	if !o.shown {
+		o.shown = true
+		procShowWindow.Call(hwnd, swShowNoActivate)
+		o.tracker.OnScreen = true
+	}
+	// Land directly above the console now rather than at the next tick.
+	o.track(hwnd)
+}
+
+// track is one tick of following the console: read it, decide, act. The
+// decision is trackStep, tested without a window; everything the console
+// window is asked here only reads.
+func (o *Overlay) track(hwnd uintptr) {
+	o.mu.Lock()
+	target := o.target
+	o.mu.Unlock()
+	obs := observeConsole(target, hwnd)
+	ops := trackStep(o.tracker, obs)
+	if ops.CloseOverlay {
+		o.Close()
+		return
+	}
+	if ops.Hide {
+		procShowWindow.Call(hwnd, swHide)
+		o.tracker.OnScreen = false
+		return
+	}
+	if ops.Show && o.shown {
+		procShowWindow.Call(hwnd, swShowNoActivate)
+		o.tracker.OnScreen = true
+	}
+	if ops.MoveTo && o.shown {
+		o.stats.moves.Add(1)
+		pt := point{X: int32(ops.X), Y: int32(ops.Y)}
+		procUpdateLayeredWindow.Call(hwnd, 0, uintptr(unsafe.Pointer(&pt)), 0, 0, 0, 0, 0, 0)
+		o.tracker.X, o.tracker.Y = ops.X, ops.Y
+	}
+	if ops.Restack && o.shown {
+		procSetWindowPos.Call(hwnd, ops.After, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoActivate)
+	}
+}
+
+// observeConsole gathers what trackStep needs, with reads only.
+func observeConsole(target, self uintptr) consoleObservation {
+	var obs consoleObservation
+	obs.Self = self
+	if alive, _, _ := procIsWindow.Call(target); alive == 0 {
+		return obs
+	}
+	obs.Alive = true
+	v, _, _ := procIsWindowVisible.Call(target)
+	obs.Visible = v != 0
+	ic, _, _ := procIsIconic.Call(target)
+	obs.Iconic = ic != 0
+	var r rect
+	procGetClientRect.Call(target, uintptr(unsafe.Pointer(&r)))
+	obs.ClientW, obs.ClientH = int(r.Right-r.Left), int(r.Bottom-r.Top)
+	origin := point{}
+	procClientToScreen.Call(target, uintptr(unsafe.Pointer(&origin)))
+	obs.ClientX, obs.ClientY = int(origin.X), int(origin.Y)
+	prev, _, _ := procGetWindow.Call(target, gwHwndPrev)
+	obs.PrevInZOrder = prev
+	if prev != 0 {
+		ex, _, _ := procGetWindowLongPtrW.Call(prev, gwlExStyle)
+		obs.PrevTopmost = ex&wsExTopmost != 0
+	}
+	return obs
 }
 
 // Draw hands over the pixels, RGBA, top row first, and asks for a repaint.
@@ -632,20 +701,15 @@ func (o *Overlay) Draw(pix []byte, w, h, stride int) error {
 	return nil
 }
 
-// SetBounds limits the overlay to a set of rectangles given relative to its
-// own corner, so the text between them stays the console's. This is what lets
-// a grid of thumbnails be one window with its captions showing through.
+// SetBounds is kept for the caller and does nothing: the gaps between
+// thumbnails are alpha zero in the frame, and a layered window shows nothing
+// where alpha is zero. A region was the child window's way of achieving the
+// same, and it is gone with the child.
 func (o *Overlay) SetBounds(rects []Rect) bool {
 	o.mu.Lock()
 	hwnd := o.hwnd
 	o.mu.Unlock()
-	if hwnd == 0 {
-		return false
-	}
-	if o.st.setRegion(rects) {
-		o.post()
-	}
-	return true
+	return hwnd != 0
 }
 
 // Hide takes the picture off the screen without giving up the window.
@@ -665,10 +729,10 @@ func (o *Overlay) Visible() bool {
 // ClientSize is the console window's client area in pixels.
 func (o *Overlay) ClientSize() (int, int, bool) {
 	o.mu.Lock()
-	parent := o.parent
+	target := o.target
 	o.mu.Unlock()
 	var r rect
-	res, _, _ := procGetClientRect.Call(parent, uintptr(unsafe.Pointer(&r)))
+	res, _, _ := procGetClientRect.Call(target, uintptr(unsafe.Pointer(&r)))
 	if res == 0 {
 		return 0, 0, false
 	}

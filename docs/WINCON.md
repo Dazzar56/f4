@@ -5,91 +5,73 @@ that has no way of showing one itself.
 
 ## 1. conhost only, and on purpose
 
-**Windows Terminal is not this.** It renders sixel, so pictures go down the
-wire the way they do on any capable terminal — that is what the full colour
-sixel encoder in vtui is for, and it is a better answer than an overlay in
-every respect.
+The overlay draws on a classic console window and nothing else, and it decides
+that from two facts it asks for on the spot, not from how f4 was started.
 
-This is for a **classic conhost that does not advertise an image protocol**.
-That is measured on Windows 10 19045 and Windows 11 22000. A newer inbox
-conhost may advertise sixel; in that case the native protocol should win and
-the overlay is unnecessary.
+**The window says what it is.** `GetConsoleWindow` is asked for its class name
+(`wincon.ClassifyConsoleWindow`). `ConsoleWindowClass`, visible, is conhost:
+draw. `PseudoConsoleWindow` is the 0x0 helper window on this side of a
+pseudoconsole -- Windows Terminal, VS Code, anything on the far end of a pty --
+and it is reported *visible* whether or not its tab is on screen, because
+OpenConsole minimizes it rather than hiding it. Visibility alone therefore
+said "draw here" and every frame went into a window with no client area,
+which is the picture-never-appears report of #805 (handover F2, F3). The class
+decides; an unfamiliar class is not trusted either.
 
-They cannot be told apart by visibility alone. On classic conhost,
-`GetConsoleWindow` returns a real visible `ConsoleWindowClass` with a non-zero
-client area. A paired 10.0.22000.2538 run under Windows Terminal returned a
-formally visible `PseudoConsoleWindow` whose client area is 0x0 and whose
-owner is `CASCADIA_HOSTING_WINDOW_CLASS`. The current `IsWindowVisible`-only
-classification can therefore trust the wrong window; drawing over it puts the
-pictures nowhere.
+**The terminal says what it can draw.** Before the overlay is considered at
+all, f4 asks DA1 when no graphics protocol has been chosen and nothing forced
+one (`probeGraphicsIfUnknown`). Windows Terminal answers with parameter `4`
+on every launch path, including the default-terminal handoff where
+`WT_SESSION` is absent, and takes the sixel path; conhost on 10.0.22000
+answers `ESC[?1;0c` and falls through to the overlay (F13, F14). So the one
+case the environment could not describe -- Terminal as the default
+application, f4 started from a shortcut -- is settled by asking.
 
-The host decision must include the window class. When the environment does
-not already select a graphics protocol, DA1 is the independent capability
-check: the paired run got `ESC[?1;0c` from classic conhost and an answer
-containing parameter 4 (sixel) from Windows Terminal. See
-`WINCON_805_HANDOVER.md` F2-F4 and F13-F14 for the measured fix plan.
+## 2. Not a child, not owned: a top-level layered window
 
-## 2. A child of the console window
+The overlay is a `WS_POPUP` window with no parent and no owner, styled
+`WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`. It
+used to be a child of the console window, and everything that was wrong with
+it followed from that one relationship.
 
-Same decision as the X side and for the same reasons: the overlay is a child
-window of the console's, not a window over the top of everything.
+**Why not a child.** The console window belongs to conhost.exe. A parent/child
+relationship across processes attaches the two threads' input queues, and so
+does owner/owned, transitively (Raymond Chen, "Is it legal to have a
+cross-process parent/child or owner/owned window relationship?", 2013-04-12;
+and 2011-03-31). Measured on 10.0.22000 with `tools/f4imgprobe`: for as long
+as a child window of the console existed, the console accepted no keys and no
+mouse; destroy it and input returned (handover F22). That, not repainting, is
+the "flickers and freezes" of #805 on that build -- the child's picture was
+not even damaged by a console repaint there (F6 did not reproduce). A window
+with no parent and no owner has nothing to couple, and the same field run
+showed it visible, directly above the console, surviving a repaint whole and
+freezing nothing (F23).
 
-- it moves with the console, because the system moves children;
-- it is clipped to the console's client area;
-- anything raised above the console is above it too;
-- it is not top-level, so no task list and no alt-tab ever offers it;
-- it is destroyed with its parent.
+**What a child got for free, and how this window does it instead.**
 
-`WM_NCHITTEST` answers `HTTRANSPARENT`, so the mouse goes to the console
-underneath and selecting text keeps working — the same rule as the empty input
-region on the X side. `WM_ERASEBKGND` is answered so the background never
-flashes before a picture lands.
+- *Following the console.* A 33 ms timer on the pump thread reads the
+  console's client origin and rectangle, whether it is alive, visible or
+  minimized, and what sits directly above it in the z-order, and decides what
+  to do (`trackStep` in `layered.go`, tested without a window): hide when the
+  console is minimized or hidden, move when it moves, close when it dies, and
+  restack to sit directly above the console -- or at the top of the ordinary
+  band if the window above is topmost. The field run confirmed the tracker is
+  a requirement, not a nicety: without one the window stays where it was when
+  the console moves (Q9).
+- *Painting.* The frame is pushed with `UpdateLayeredWindow`: position, size
+  and premultiplied BGRA pixels in one call. There is no `WM_PAINT`, nothing to
+  erase, no black rectangle before the first paint, and no region -- the gaps
+  between thumbnails are alpha zero in the frame. `SetBounds` is kept for the
+  caller and does nothing.
+- *The mouse.* `WS_EX_TRANSPARENT` passes clicks through to the console, which
+  is what keeps text selection working under a picture.
 
-**One caveat is real.** The console window belongs to `conhost.exe`, a
-different process, so parenting to it attaches the two threads' input queues.
-That is how every overlay onto a console works, and it is what makes the
-picture behave; the price is that a wedged conhost can wedge the thread that
-pumps the overlay.
-
-**So nothing else in f4 waits on that thread.** This is an invariant, not an
-observation, and issue #805 is what breaking it looked like: `Place`, `Hide`
-and `SetBounds` used to call `SetWindowPos`, `ShowWindow` and `SetWindowRgn`
-from whichever thread called them, and those three are *synchronous* on a
-window owned by another thread — they send messages to the owner and wait for
-it. The caller was `RenderExternal`, which runs with the vtui screen locked, so
-one frame of f4 ended up waiting on the pump thread, the pump thread shares an
-input queue with conhost, and conhost is what draws f4's own text and delivers
-its keys. From the outside: a black rectangle where the picture should be, the
-whole interface stopped, and `Esc` answered when Windows broke the wait a
-couple of minutes later.
-
-The invariant is kept by splitting the overlay in two. `overlay_state.go` is
-what the window *should* look like — position, region, whether the frame buffer
-has changed, and one flag that keeps at most one wake-up outstanding no matter
-how many changes arrive. Callers write there and post a single `WM_APP+2` with
-`PostThreadMessageW`, which does not wait and does not route the wake-up through
-the cross-process child HWND. The pump thread answers that message and makes
-every window call there is. The rule to keep: **`user32` and `gdi32`
-calls that touch the overlay window live in `wndProc`, `paint` and `apply`, and
-nowhere else.** `GetClientRect` on the parent is the one exception and is safe:
-it reads window data and sends nothing.
-
-**And the window is never shown or moved except in the wake-up that paints
-it.** The report had two halves and the threading is only the first of them:
-`WM_ERASEBKGND` is answered so the background never flashes, which also means
-an unpainted window shows whatever it last held — black, the first time. A
-frame places the window, then reshapes it, then hands over the pixels, so the
-pump thread could show an empty window and keep it there for as long as
-scaling a photograph takes. `take` therefore holds a move back until the frame
-buffer has been replaced; the `Draw` that follows is at most one wake-up away,
-and the two then happen together. The same rule covers a resize, because
-`paint` blits the frame buffer at its own size and leaves the rest of a larger
-window alone.
-
-`New` bounds its own wait too. Creating the window is the call that performs
-the attach, so it is the one place at startup a wedged conhost could hold f4
-up; after five seconds f4 goes on without an overlay, which is a perfectly good
-outcome.
+**Two invariants.** No caller waits on the pump thread: public methods write
+into `overlay_state.go` and post one thread message. And the console window is
+only ever *read* -- `GetClientRect`, `ClientToScreen`, `IsWindow`,
+`IsWindowVisible`, `IsIconic`, `GetWindow`, `GetWindowLongPtrW` -- never
+`SendMessage`, `SetWindowPos` or `ShowWindow` with its handle, because those
+wait on conhost, and that wait is exactly where the child window used to hang.
 
 ## 3. The geometry is the easy part here
 
