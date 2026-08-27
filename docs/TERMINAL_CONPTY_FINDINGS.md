@@ -515,3 +515,63 @@ O9, the XTWINOPS size report, so a frame can be tied to the resize that caused
 it and told apart from ordinary output. Dropping is the conservative first
 half; the field run says whether the seam is now right or merely no longer
 overwritten.
+
+
+### 6.10. The re-wrap is lossy, and a resize drag runs it hundreds of times
+
+The `REFLOW_WRAP:` line added for this question answers it on the first field
+log, and the answer is not the one any hypothesis so far predicted. The history
+is not failing to come back. **It is being destroyed, a little at a time, by
+the re-wrap itself.**
+
+Read the logical-line count across one drag (each line is one `reflowLocked`
+call, 183 of them in this run):
+
+    history 2000 -> 1885; 1858 logical lines
+    history 1885 -> 1877; 1856 logical lines
+    ...
+    history 1792 -> 2000; 1811 logical lines
+    history 2000 -> 2000; 1520 logical lines
+    history 2000 -> 2000; 1025 logical lines
+    history 2000 -> 2000;  937 logical lines
+    history 2000 -> 2000;  817 logical lines
+    history 2000 -> 2000;  744 logical lines
+    ...
+    history    9 ->    0;   10 logical lines
+    history    0 ->    0;    1 logical line
+
+`unwrapLocked` collects the history correctly -- that half was never wrong. But
+the number of *logical lines* it reconstructs falls on almost every pass, from
+1858 to 744 and eventually to one. The rows are not being pushed back out of
+the viewport; they are ceasing to exist. `GridHistory` reaching its 2000-row
+cap hides this at first (the count is pinned at the cap while the content
+underneath thins out), and then the cap stops being reached at all and the
+history collapses to zero.
+
+That explains every symptom in one stroke, including the ones the previous two
+patches did not touch:
+
+- rows do not come back on a widen because by then they are gone;
+- the flash during the drag was real content, destroyed by the next pass rather
+  than overwritten by ConPTY (which the absorber has already ruled out: it
+  fired 174 times in the previous run with no change to the symptom);
+- a large shrink and re-expand ends in blackness because a long drag is
+  hundreds of passes, and the loss compounds until nothing is left.
+
+It also explains why this is a Windows-only report despite `reflowLocked`
+being shared code: on Unix a resize delivers one reflow, while a ConPTY drag
+delivers one per pixel step -- 183 here, 575 `FM_RESIZE` events. A pass that
+loses a fraction of a percent is invisible once and fatal five hundred times.
+
+**Next step, and it is now a narrow one.** `reflowLocked` and `unwrapLocked`
+must be shown to be lossless in isolation, before anything else is attempted:
+a test that builds a known viewport plus history, re-wraps it through a
+sequence of widths (including width-and-height changes together, as a drag
+sends), and asserts that the logical text is identical at every step and at the
+end. The field log says the invariant is violated; the test says where. Likely
+suspects, in the order the code makes them reachable: `lastRow` in
+`unwrapLocked` truncating at the last row with text while the cursor sits above
+real content below it; `significantWidthLocked` trimming cells that a wrapped
+row still needs; and the interaction with the 2000-row cap when the re-wrap
+produces more rows than it consumed. None of these is confirmed -- the
+measurement to make is the round-trip test, not another field run.
