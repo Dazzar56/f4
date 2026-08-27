@@ -385,31 +385,61 @@ refusal as a failure will keep reporting a working mechanism as broken, and
 the log will look like evidence against the design.
 
 
-### 6.7. Field report: the scrollback still does not come back (open)
+### 6.7. Field report: the scrollback does not come back -- read from the log
 
 Observed by the maintainer on 10.0.22000, in **both** classic conhost and
-Windows Terminal, with the oracle default in place:
+Windows Terminal: rows that scrolled off are not restored on a widen; a
+correct-looking history flashes during the resize drag and is replaced; after
+shrinking a long way and expanding again the freed area stays black.
 
-- rows that had scrolled off the screen are not restored on a widen, in either
-  host;
-- while the window is being dragged to a new size, something that looks like
-  the correct reflowed history **flashes** and is immediately replaced;
-- after shrinking a long way and expanding again, even the flash stops and the
-  freed area stays black.
+A `--debug` log of that exact sequence was taken, and it answers more than the
+symptom. **The run was made with `F4_WIN_REFLOW=probe`, and in that mode f4
+does not re-wrap anything by design.** `terminalReflowEnabled` is false on
+Windows and `ReflowOnResize` is set only for `winReflowOracle`
+(`panels_frame.go`), so `TerminalView.Resize` never reaches `reflowLocked`:
+`probe` is documented as "stamps nothing", and not re-wrapping is the same
+decision applied to the resize path. The log agrees exactly: across 488
+`FM_RESIZE` events there is not one reflow, only 84 more
+`ScrollUp extruding row 0 to history` and zero rows pulled back down.
 
-Not diagnosed, and deliberately not patched yet. What the shape of it suggests,
-as a starting hypothesis rather than a finding: the flash is ConPTY's own
-repaint landing (P7) and being overwritten by f4's next redraw, which composes
-the viewport from `GridHistory` — so the question is who wins at the seam, not
-whether the oracle stamped anything. The blackness after a large shrink is a
-separate symptom and points at rows being dropped rather than re-laid-out: a
-viewport refill that finds nothing to refill from (A6).
+So the first thing this log establishes is that **the symptom was measured in
+the one mode that cannot show the feature**, and the retraction is cheaper than
+any fix: repeat the sequence with `F4_WIN_REFLOW=oracle`, which is also the
+Windows default and therefore what users actually run.
 
-**Next step, before any code changes.** One run with `F4_WIN_REFLOW=probe` and
-`--debug`, doing exactly this resize sequence, and then three questions of the
-log: whether `REFLOW_ORACLE:` stamped the rows that are failing to come back;
-whether f4's own repaint follows ConPTY's frame within the same resize, and in
-which order; and how many rows `GridHistory` holds before and after the large
-shrink. The answers decide which of the two symptoms is one bug and which is
-two. Do not change the matcher or the reflow path until that log exists — this
-is the mistake §6.5 already records once.
+Two things it establishes regardless of mode, because they do not depend on the
+re-wrap:
+
+- **The oracle almost never fires in a working session.** It ran twice in the
+  whole log: once at startup (`1 safe boundary`) and once aborted by its own
+  safety rule (`display changed during the pass`). During the entire resize it
+  ran zero times, because it only fires at a settled prompt with no console
+  child and a resize drag never offers one. Whatever the re-wrap does, the rows
+  it works on carry boundaries from the `ESC[K` hint and essentially never from
+  the oracle. That is not a failure of the oracle -- §6.6 measured it agreeing
+  with the hint everywhere it could check -- but it does mean the hint, not the
+  oracle, is what the history's correctness rests on in practice.
+- **Nothing is fighting over the seam.** The hypothesis in the previous version
+  of this section -- ConPTY's repaint landing and losing to f4's redraw -- has
+  no support in the log: there is no repeated repaint of the same rows, just
+  extrusion into history. The flash during the drag is ConPTY's own reflowed
+  frame arriving and not being kept, which is exactly what a mode that does not
+  re-wrap should look like.
+
+**Next step, in this order, and stop at the first one that explains it.**
+
+1. Re-run the same resize sequence with `F4_WIN_REFLOW=oracle` and `--debug`.
+   If the history comes back, the report is a mode artefact and the remaining
+   work is documentation plus deciding whether `probe` should re-wrap.
+2. If it still does not, the log now has a specific question: does
+   `reflowLocked` run at all (it is reached only on a **width** change -- the
+   drag in this log changed width and height together, and every step went
+   through `Resize`), and does it pull rows back from `GridHistory` when the
+   viewport grows (A6, the Unix path already does this)? The zero
+   `ScrollDown` count is the thing to explain.
+3. Only then consider the black area after a large shrink and re-expand, which
+   is the "widening frees rows and nothing refills them" symptom (A6) and may
+   be the same bug or a second one.
+
+A `REFLOW:` line naming the mode and whether `ReflowOnResize` is on would have
+made step 1 unnecessary; add it before the next field run.
