@@ -118,5 +118,5 @@ information.
 | 2 | ~~Repaint bracket~~ — retracted, the repaint does not scroll (§2.2) | dropped |
 | 3 | Self-erasing directory sync cleanup | next — the sync is the remaining creep suspect |
 | 4 | Stop resizing ConPTY for the keybar (§2.2 option 2) | later, for flicker |
-| 5 | Windows reflow of the live grid | **dropped** — ConPTY does it; the flag is a no-op; the history cannot be re-joined |
+| 5 | Windows reflow of the live grid | **dropped** — ConPTY does it; the flag is a no-op. The history's join information is recovered instead, behind `F4_WIN_REFLOW` (`TERMINAL_LEDGER.md` §3.3.1) |
 | 6 | Re-run `tools/conptyprobe` on a Windows 11 build | when a tester has one; only a newer build can reopen step 5 |

@@ -257,6 +257,7 @@ type PanelsFrame struct {
 	ignoreNextPrompt      bool
 	returnToPanels        bool
 	cmdSession            *cmdShellSession // local cmd.exe completion tracking (Windows)
+	reflowOracle          *reflowOracle    // Windows reflow mode and the resize oracle (F4_WIN_REFLOW)
 	workspaceCommandTitle string
 
 	menuBar *vtui.MenuBar
@@ -457,6 +458,7 @@ func NewPanelsFrame() *PanelsFrame {
 				pf.cmdSession.handleMark(mark, snap)
 			}
 		}
+		pf.setWinReflowMode(winReflowModeFromEnv())
 	}
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
@@ -1135,27 +1137,45 @@ func (pf *PanelsFrame) initPTY() {
 				})
 				return
 			}
-			pf.processEnvironmentShellOutput(buf[:n])
-
-			pf.ptyMutex.Lock()
-			shouldProcess := (pf.getActivePTYUnsafe() == p)
-			pf.ptyMutex.Unlock()
-
-			if shouldProcess {
-				if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
-					vtui.WritePassthrough(buf[:n])
-					pf.parser.Process(buf[:n])
-					if pf.overlayLines() > 0 && time.Since(pf.lastOverlayDraw) > 30*time.Millisecond {
-						pf.drawHostConsoleOverlay()
-						pf.lastOverlayDraw = time.Now()
-					}
-				} else {
-					pf.parser.Process(buf[:n])
-					pf.terminalRedraw.request()
-				}
-			}
+			pf.consumeLocalOutput(p, buf[:n])
 		}
 	}()
+}
+
+// consumeLocalOutput routes one read from the local PTY: to the reflow
+// oracle's scratch parser while one of its passes is in flight, otherwise to
+// the display's parser (and the host console in passthrough mode). Tests
+// drive it directly with a fake PTY, so it must contain everything the read
+// loop does with the bytes.
+func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
+	pf.processEnvironmentShellOutput(data)
+	pf.reflowOracle.noteOutput()
+
+	pf.ptyMutex.Lock()
+	shouldProcess := (pf.getActivePTYUnsafe() == p)
+	pf.ptyMutex.Unlock()
+
+	if sink := pf.reflowOracle.divert(); sink != nil {
+		// A reflow oracle pass is in flight: these bytes are the repaint
+		// ConPTY sends for the oracle's resizes, meant for its scratch view
+		// and never for the display.
+		sink.Process(data)
+		return
+	}
+	if !shouldProcess {
+		return
+	}
+	if pf.shellMode == ShellModeHost && pf.isHostConsoleActive() {
+		vtui.WritePassthrough(data)
+		pf.parser.Process(data)
+		if pf.overlayLines() > 0 && time.Since(pf.lastOverlayDraw) > 30*time.Millisecond {
+			pf.drawHostConsoleOverlay()
+			pf.lastOverlayDraw = time.Now()
+		}
+		return
+	}
+	pf.parser.Process(data)
+	pf.terminalRedraw.request()
 }
 
 // reportLocalPTYFailure surfaces a NewPTY() failure to the person instead of
@@ -1505,6 +1525,26 @@ func (pf *PanelsFrame) endExecution() {
 		pf.RefreshAll()
 		vtui.FrameManager.Redraw()
 	}
+}
+
+// setWinReflowMode installs the Windows reflow mode: the ESC[K wrap hint on
+// the terminal view for every mode but off, and the resize oracle for the
+// modes that ask ConPTY. See reflow_oracle.go.
+func (pf *PanelsFrame) setWinReflowMode(mode winReflowMode) {
+	pf.reflowOracle = newReflowOracle(pf, mode)
+	if pf.termView != nil {
+		pf.termView.HintWrap = mode != winReflowOff
+	}
+	vtui.DebugLog("REFLOW: F4_WIN_REFLOW=%s", mode)
+}
+
+// runReflowOracle asks the oracle for a pass at the current geometry. Called
+// by the cmd session once a prompt has settled with no console child.
+func (pf *PanelsFrame) runReflowOracle() {
+	if pf.reflowOracle == nil || pf.termView == nil {
+		return
+	}
+	pf.reflowOracle.maybeRun(pf.localPTY(), pf.termView.Width, pf.termView.Height)
 }
 
 // noteLocalShellLineSent tells the cmd session that a line was typed into

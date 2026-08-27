@@ -209,12 +209,19 @@ viewport must be *accepted* (parsed, not fought) rather than duplicated — on a
 width change f4 should let ConPTY's repaint land and reflow only the history
 above it, then stitch the two at the seam using the stamps.
 
-### 3.3.1. Both hypotheses at once: a switch, so one tester run decides
+### 3.3.1. Both hypotheses at once: a switch, so one tester run decides — **implemented**
 
 The tester who can run this is not always available, and two hypotheses are
 open at the same time. So the implementation ships **both** (a) and (b) behind
 one selector and a diagnostic mode, and a single run of the build reports on
 each. Nothing is guessed at in the field; the field just reads back.
+
+Code: `cmd/f4/reflow_oracle.go` (modes, the oracle, the matcher),
+`TerminalView.HintWrap` and `elBeforeBreak` in `terminal_view.go` (the hint),
+`PanelsFrame.consumeLocalOutput` (the diversion of frames to the scratch
+parser), `cmdShellSession.release` (the trigger). Tests:
+`reflow_oracle_test.go`, driven by `fakeConPTY`, which reproduces P5–P7 from
+the probe bytes — every mode is run through the probe's own scenario.
 
 **The selector.** An environment variable, because it needs no UI, no config
 migration, and can be set per launch by someone who is testing, not
@@ -223,8 +230,9 @@ configuring:
     F4_WIN_REFLOW=oracle    (a) resize oracle, then (b) for rows it did not reach
     F4_WIN_REFLOW=hint      (b) only: the ESC[K full-row guess
     F4_WIN_REFLOW=off       today's behaviour: Horizontal Preservation, no stamps
-    F4_WIN_REFLOW=probe     diagnostic: run the oracle at every idle prompt, stamp
-                            nothing, log what it would have stamped
+    F4_WIN_REFLOW=probe     diagnostic: hint on, oracle runs at every idle prompt
+                            but stamps nothing; logs what it would have stamped
+                            next to what hint did
 
 Unset means `off` until one of the two has been confirmed in the field, at
 which point the confirmed one becomes the default and the variable stays as an
@@ -276,6 +284,14 @@ acceptable on builds where the oracle is unavailable.
 
 `off`:
 - Exactly today. This is the control group for the tester.
+
+**Two things the implementation settled that the design left open.** The
+oracle never writes a partial result: a narrow frame that differs from the
+display, or two frames that do not describe the same text, abort the pass with
+a `mismatch` line and stamp nothing. And the pass waits for the stream to be
+quiet (`oracleQuietBefore`) before its first resize, so the diversion never
+swallows ordinary output; the display's cursor and rows are compared before
+and after, and a change there also aborts.
 
 **What the tester reports, per mode, in one message:**
 

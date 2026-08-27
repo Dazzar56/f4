@@ -81,6 +81,15 @@ type TerminalView struct {
 
 	Muted         bool
 	lastCharWasCR bool
+
+	// HintWrap turns on the ESC[K wrap guess for streams that carry no
+	// soft-wrap signal (ConPTY, docs/TERMINAL_LEDGER.md P6): a row that fills
+	// the width and ends in CRLF with no erase-to-end-of-line before it is
+	// taken as a wrapped row. winpty and WezTerm guess the same way.
+	HintWrap bool
+	// elBeforeBreak is set by an erase-to-end-of-line and cleared by printed
+	// text, so that a line feed can tell whether ESC[K came just before it.
+	elBeforeBreak bool
 	authCache     map[string]int
 
 	OnTitleChange func(string)
@@ -88,6 +97,8 @@ type TerminalView struct {
 	// OnShellMark receives every OSC 133 mark (A, B, C, D, E...) together
 	// with the cursor state at that moment. It runs on the PTY goroutine.
 	OnShellMark func(mark string, snap promptSnapshot)
+	// OnCursorShown fires on DECTCEM set (ESC[?25h), the end of a ConPTY frame.
+	OnCursorShown func()
 
 	// --- Mouse-driven text selection over the visible viewport ---
 	// Coordinates are absolute (screen) columns/rows, chosen so the
@@ -431,8 +442,15 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	if r == '\n' {
 		// vtui.DebugLog("TERM_VIEW: LF (CursorY: %d -> %d)", tv.CursorY, tv.CursorY+1)
 		if !tv.UseAltScreen && tv.CursorY >= 0 && tv.CursorY < tv.Height {
-			tv.WrapFlags[tv.CursorY] = false // Hard break
+			// A line feed is a hard break -- unless the stream cannot say
+			// (HintWrap) and the row it ends is full to the last column with
+			// no ESC[K before the break, which is how a wrapped row looks
+			// from ConPTY. A row that ends short of the width is always a
+			// real break: ConPTY erases the rest of it first.
+			tv.WrapFlags[tv.CursorY] = tv.HintWrap && !tv.elBeforeBreak &&
+				significantWidthLocked(tv.Lines[tv.CursorY], false) >= tv.Width
 		}
+		tv.elBeforeBreak = false
 		tv.newline()
 		return
 	}
@@ -470,6 +488,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	}
 
 	buf := tv.getBuffer()
+	tv.elBeforeBreak = false
 	if tv.CursorY >= 0 && tv.CursorY < tv.Height && tv.CursorX >= 0 && tv.CursorX+w <= tv.Width {
 		buf[tv.CursorY][tv.CursorX] = vtui.CharInfo{Char: uint64(r), Attributes: attr}
 		for i := 1; i < w; i++ {
@@ -796,6 +815,7 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	if tv.Muted {
 		return
 	}
+	tv.elBeforeBreak = true
 	buf := tv.getBuffer()
 	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
 		return
@@ -1730,6 +1750,38 @@ func (tv *TerminalView) ResetKeyboardProtocols() {
 	tv.Win32InputMode = false
 	tv.KittyFlags = 0
 	tv.ApplicationCursorKeys = false
+}
+
+// RowTexts returns the text of every row of the primary screen with trailing
+// blanks removed. Used by the reflow oracle to compare frames.
+func (tv *TerminalView) RowTexts() []string {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	out := make([]string, tv.Height)
+	for y := 0; y < tv.Height && y < len(tv.Lines); y++ {
+		out[y] = strings.TrimRight(cellsText(tv.Lines[y]), " ")
+	}
+	return out
+}
+
+// WrapFlagsCopy returns the soft-wrap flags of the primary screen.
+func (tv *TerminalView) WrapFlagsCopy() []bool {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return append([]bool(nil), tv.WrapFlags...)
+}
+
+// SetWrapFlags overwrites the soft-wrap flags of the given rows. It is the
+// oracle's way of writing what ConPTY told it; rows outside the grid are
+// ignored.
+func (tv *TerminalView) SetWrapFlags(flags map[int]bool) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	for y, wrapped := range flags {
+		if y >= 0 && y < len(tv.WrapFlags) {
+			tv.WrapFlags[y] = wrapped
+		}
+	}
 }
 
 func (tv *TerminalView) IsModal() bool         { return false }
