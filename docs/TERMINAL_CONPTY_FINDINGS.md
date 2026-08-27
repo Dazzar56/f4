@@ -446,3 +446,47 @@ The `REFLOW:` line now names the switches rather than the mode alone
 re-join the scrollback says so in the log next to the way to turn it on. Step 1
 above would have been unnecessary with that line present, which is the whole
 reason it exists.
+
+
+### 6.8. The oracle works; ConPTY's repaint overwrites what it recovers
+
+A second field log, this time in the default `oracle` mode (the new `REFLOW:`
+line confirms it: `hint_wrap=true rewrap_on_resize=true oracle_passes=true`),
+resolves the report of §6.7. The parts we built are not the problem.
+
+**The oracle is fine.** Its second pass in that session aligned 27 of 29
+repaint rows and stamped **25 boundaries**, with `0 became stale` and `0 where
+hint and oracle disagree`. Whatever is wrong, it is not the matcher, not the
+journal alignment and not the stamps.
+
+**f4's history is fine.** 4728 rows were extruded into `GridHistory` during the
+`dir` that filled the screen. Nothing was lost on the way in.
+
+**What overwrites it is ConPTY.** Across 444 resize events the pty delivered
+**197 full-viewport repaints**, each opening
+`ESC[?25l ESC[8;<rows>;<cols>t ESC[H` and rewriting every row. f4 re-wraps its
+grid from history on the width change, and then the next repaint lands on the
+display and replaces those rows with ConPTY's own. That is exactly the reported
+"the correct history flashes and is immediately replaced": the flash is f4's
+result, visible until the following frame.
+
+**And that explains the blackness.** ConPTY keeps no scrollback (P16): its
+buffer is the viewport and nothing more. Shrink the window to 24 rows and its
+buffer holds 24 rows; expand again and it repaints those 24 rows plus blank
+space, and the blank space overwrites everything f4 had recovered from its own
+history. The rows are still in `GridHistory`; they are simply painted over.
+
+So the question is not how to recover the line structure -- that is solved and
+measured -- but **who owns the viewport during a resize**. Today ConPTY has the
+last word and f4 has the data.
+
+**Next step.** This is what §3.3 already prescribes in its last paragraph, now
+with a log behind it: on a width change, ConPTY's repaint must be *accepted as
+structure rather than applied as pixels* -- parsed, matched against
+`GridHistory + viewport`, and stitched at the seam, with f4's history winning
+above the seam. The frames are unambiguous to find: every one of the 197
+carries the XTWINOPS size report `ESC[8;<rows>;<cols>t` (P14), which names the
+size the frame describes, and nothing in f4 reads it yet (O9). Reading it is
+the prerequisite, not a nicety: without it there is no way to tell a resize
+repaint from ordinary output, and no way to know which resize a late frame
+belongs to.
