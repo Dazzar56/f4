@@ -19,7 +19,16 @@ func (f *fakeConPTY) printBatch(lines ...string) {
 	f.mu.Lock()
 	var sb strings.Builder
 	sb.WriteString("\x1b[?25l")
-	fmt.Fprintf(&sb, "\x1b[%d;1H", f.viewRowsLocked()+1)
+	// At the bottom of the screen ConPTY does not address a row that does
+	// not exist: it writes on the last row and lets the line feed scroll.
+	// An earlier version of this fake moved to row+1 past the height, which
+	// the terminal clamps -- and the clamp overwrote the previous line,
+	// which then looked like the code losing output.
+	if row := f.viewRowsLocked() + 1; row > f.rows {
+		fmt.Fprintf(&sb, "\x1b[%d;1H\r\n", f.rows)
+	} else {
+		fmt.Fprintf(&sb, "\x1b[%d;1H", row)
+	}
 	for _, line := range lines {
 		f.lines = append(f.lines, line)
 		rows := wrapAt(line, f.cols)
@@ -275,7 +284,7 @@ func TestAbsorbTakesOnlyTheRepaintOutOfACoalescedRead(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			h := newReflowHarness(t, winReflowOracle, 80, 24)
 			h.pty.prompt("C:\\>dir")
-			h.settle(20 * time.Millisecond)
+			h.settle(120 * time.Millisecond)        // past the quiet window: idle
 			h.pf.reflowOracle.absorbResizeRepaint() // one repaint owed
 			h.pty.out <- []byte(chunk)
 			h.settle(150 * time.Millisecond)
@@ -285,7 +294,11 @@ func TestAbsorbTakesOnlyTheRepaintOutOfACoalescedRead(t *testing.T) {
 					t.Fatalf("%s: output around the repaint was eaten: %q missing", name, want)
 				}
 			}
-			if strings.Contains(joined, "repaint row") {
+			// Output *before* the frame in the same read means the shell was
+			// printing, and then the frame is ConPTY's correction and must
+			// land (6.22). Only the idle case drops it.
+			if !strings.Contains(name, "before") && !strings.Contains(name, "both") &&
+				strings.Contains(joined, "repaint row") {
 				t.Fatalf("%s: the repaint itself reached the display", name)
 			}
 		})
@@ -379,4 +392,87 @@ func TestResizeDuringMidLineSplitOutput(t *testing.T) {
 			t.Fatalf("mid-line split output lost around a resize: %q", name)
 		}
 	}
+}
+
+// The photo, from the raw bytes of the field log (findings 6.22). During a
+// dir, after a resize, ConPTY sent
+//
+//	...640 808 Windows.Graphics.\r\n ESC[20;53H .dll\r\n
+//
+// -- the tail of a wrapped line placed by an absolute move, as a *delta*
+// against the repaint it had just sent. Drop that repaint and the tail lands
+// relative to a screen f4 never showed. So while output is flowing the
+// repaint must be applied, not absorbed; idle, it is dropped as before.
+func TestRepaintIsAppliedWhileACommandIsPrinting(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 60, 20)
+	h.pty.prompt("C:\\>dir")
+	h.settle(20 * time.Millisecond)
+	for i := 0; i < 10; i++ {
+		h.pty.printBatch(fmt.Sprintf("04.04.2024  16:15   %8d  before_%02d.dll", i, i))
+		h.settle(3 * time.Millisecond)
+	}
+	// A resize arrives mid-listing; the stream has not been quiet.
+	h.pf.ResizeConsole(53, 20)
+	h.settle(30 * time.Millisecond)
+	// ConPTY's repaint for 53 columns, then its delta-style continuation
+	// exactly as the field log had it: first half, CRLF, absolute move to
+	// the row below at the wrap column, the tail.
+	repaint := "\x1b[?25l\x1b[8;20;53t\x1b[H"
+	for i := 0; i < 10; i++ {
+		repaint += fmt.Sprintf("04.04.2024  16:15   %8d  before_%02d.dll\x1b[K\r\n", i, i)
+	}
+	repaint += "\x1b[?25h"
+	h.pty.out <- []byte(repaint)
+	h.pty.out <- []byte("04.04.2024  16:15      640 808 Windows.Graphics.\r\n\x1b[12;1H.Printing.dll\x1b[K\r\n")
+	h.settle(200 * time.Millisecond)
+
+	lines := h.logicalLines()
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "Windows.Graphics.") || !strings.Contains(joined, ".Printing.dll") {
+		t.Fatalf("the continuation was lost: %q", joined)
+	}
+	// The repaint was applied, so the ten rows it carried are on screen
+	// exactly once and the shell's own layout won.
+	h.pf.termView.mu.Lock()
+	rowsWithBefore := 0
+	for y := 0; y < h.pf.termView.Height; y++ {
+		if strings.Contains(reflowRowText(h.pf.termView.Lines[y]), "before_") {
+			rowsWithBefore++
+		}
+	}
+	h.pf.termView.mu.Unlock()
+	if rowsWithBefore != 10 {
+		t.Fatalf("expected the repaint's 10 rows on screen, found %d", rowsWithBefore)
+	}
+	h.repMu.Lock()
+	defer h.repMu.Unlock()
+	for _, r := range h.report {
+		if strings.Contains(r, "absorbed resize repaint") {
+			t.Fatalf("a repaint was absorbed while the shell was printing: %s", r)
+		}
+	}
+}
+
+// And the mirror: with the stream quiet, the same repaint is dropped, so the
+// history above it survives -- the idle-drag behaviour of 6.15/6.16.
+func TestRepaintIsAbsorbedWhenIdle(t *testing.T) {
+	h := newReflowHarness(t, winReflowOracle, 60, 20)
+	for i := 0; i < 80; i++ {
+		h.pty.print(fmt.Sprintf("line %02d %s", i, strings.Repeat("x", 50)))
+	}
+	h.settle(300 * time.Millisecond) // past absorbQuietBefore
+	before := h.visibleText()
+	h.pf.ResizeConsole(53, 20)
+	h.settle(150 * time.Millisecond)
+	if after := h.visibleText(); after < before {
+		t.Fatalf("an idle resize lost content: %d -> %d", before, after)
+	}
+	h.repMu.Lock()
+	defer h.repMu.Unlock()
+	for _, r := range h.report {
+		if strings.Contains(r, "absorbed resize repaint") {
+			return
+		}
+	}
+	t.Fatal("the idle repaint was not absorbed")
 }

@@ -177,7 +177,13 @@ type reflowOracle struct {
 	pendingRepaints int
 	// absorbedBytes counts the open repaint's size, for the give-up guard.
 	absorbedBytes int
-	lastByte      time.Time
+	// lastDisplayByte is when output last went to the display; a repaint is
+	// only dropped once the stream has been quiet, since ConPTY's next bytes
+	// are a delta against it. lastStepAbsorbed marks the step just decided.
+	lastDisplayByte   time.Time
+	lastStepAbsorbed  bool
+	absorbSkippedBusy int
+	lastByte          time.Time
 }
 
 func newReflowOracle(pf *PanelsFrame, mode winReflowMode) *reflowOracle {
@@ -586,6 +592,15 @@ func (o *reflowOracle) route(data []byte) routeStep {
 		// An oracle pass owns the stream, all of it.
 		return routeStep{o.sink, len(data)}
 	}
+	// Anything that is not an absorbed frame is display output and marks
+	// the stream as active; the deferred update below happens on every
+	// path that returns a nil sink.
+	defer func() {
+		if o.absorbing == nil && !o.lastStepAbsorbed {
+			o.lastDisplayByte = time.Now()
+		}
+		o.lastStepAbsorbed = false
+	}()
 	if o.absorbing != nil {
 		// Inside a repaint being absorbed: take it through to the close and
 		// not one byte further. And not forever: no measured build omits
@@ -598,6 +613,7 @@ func (o *reflowOracle) route(data []byte) routeStep {
 			o.absorbedFrames++
 			o.absorbedBytes = 0
 			o.reportAbsorbLocked(n, false)
+			o.lastStepAbsorbed = true
 			return routeStep{p, n}
 		}
 		o.absorbedBytes += len(data)
@@ -610,6 +626,23 @@ func (o *reflowOracle) route(data []byte) routeStep {
 		return routeStep{p, len(data)}
 	}
 	if o.mode != winReflowOracle || o.pendingRepaints == 0 {
+		return routeStep{nil, len(data)}
+	}
+	// Only while the shell is idle. ConPTY's output after a repaint is a
+	// *delta against that repaint*: it assumes the terminal shows what the
+	// frame drew and sends only what changed -- "cursor to (20,53), write
+	// .dll". Drop the frame while a command is printing and every later
+	// byte lands relative to a screen the terminal never saw; the field
+	// log shows exactly that, tails of wrapped lines placed at the column
+	// where ConPTY's buffer had them (docs/TERMINAL_CONPTY_FINDINGS.md
+	// 6.22). Idle, there are no deltas and the frame can go; busy, it is
+	// ConPTY's correction of everything in flight and must land. Busy is
+	// judged two ways, because each alone has a blind spot: bytes for the
+	// display arrived recently (a command that pauses would fool it), or
+	// the PTY reports a child process (cached for a second, so the start
+	// of a command can slip past it).
+	if time.Since(o.lastDisplayByte) < absorbQuietBefore || o.pf.ptyBusyForReflow() {
+		o.absorbSkippedBusy++
 		return routeStep{nil, len(data)}
 	}
 	start := resizeRepaintStart(data)
@@ -646,10 +679,12 @@ func (o *reflowOracle) route(data []byte) routeStep {
 		o.reportAbsorbLocked(n, true)
 		p.Process(data[:n])
 		scratch.Close()
+		o.lastStepAbsorbed = true
 		return routeStep{discardParser, n}
 	}
 	o.absorbing = p
 	o.absorbedBytes = len(data)
+	o.lastStepAbsorbed = true
 	return routeStep{p, len(data)}
 }
 
@@ -658,6 +693,10 @@ func (o *reflowOracle) route(data []byte) routeStep {
 // legitimate is larger, and past it the only safe reading is "this was not a
 // frame after all".
 var maxAbsorbBytes = 1 << 20
+
+// absorbQuietBefore is how long the display stream must have been silent
+// before a resize repaint is dropped rather than applied.
+var absorbQuietBefore = 200 * time.Millisecond
 
 // resizeRepaintStart returns where a resize repaint begins in data, or -1.
 //

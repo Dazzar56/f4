@@ -343,9 +343,11 @@ type reflowHarness struct {
 
 func newReflowHarness(t *testing.T, mode winReflowMode, cols, rows int) *reflowHarness {
 	t.Helper()
-	oldTimeout, oldQuiet := oracleFrameTimeout, oracleQuietBefore
-	oracleFrameTimeout, oracleQuietBefore = 200*time.Millisecond, 20*time.Millisecond
-	t.Cleanup(func() { oracleFrameTimeout, oracleQuietBefore = oldTimeout, oldQuiet })
+	oldTimeout, oldQuiet, oldAbsorbQuiet := oracleFrameTimeout, oracleQuietBefore, absorbQuietBefore
+	oracleFrameTimeout, oracleQuietBefore, absorbQuietBefore = 200*time.Millisecond, 20*time.Millisecond, 40*time.Millisecond
+	t.Cleanup(func() {
+		oracleFrameTimeout, oracleQuietBefore, absorbQuietBefore = oldTimeout, oldQuiet, oldAbsorbQuiet
+	})
 
 	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())

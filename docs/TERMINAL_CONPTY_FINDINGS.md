@@ -1011,3 +1011,55 @@ Two of the new tests were wrong before the code was: one overwrote its own
 earlier rows and one did not exceed the guard it was testing. Both blamed
 the code, briefly. Recorded because that is the failure mode of writing the
 test after deciding what the answer is.
+
+
+### 6.22. Found: ConPTY's output is a delta against the repaint we dropped
+
+Second field run of the review build: bug 1 did not reproduce; bug 2 -- a
+resize during `dir` corrupting the Terminal Log -- did, badly. The session's
+own `REFLOW_SUMMARY` said the absorber was doing what it was built to do (50
+child resizes, 38 repaints absorbed). The raw stream said why that is the
+problem. Right after a resize, mid-listing, ConPTY sent:
+
+    ...640 808 Windows.Graphics.\r\n ESC[20;53H .dll\r\n
+    ...2 314 240 Windows.Graphics.\r\n ESC[20;53H .Printing.3D.dll\r\n
+
+The tail of every wrapped line is placed with an **absolute cursor move** to
+the row below at the column where ConPTY's own buffer had it. That is not
+garbage; it is a *delta*. ConPTY's renderer assumes the terminal shows the
+frame it last sent -- the resize repaint -- and thereafter sends only what
+changed. Drop that frame and every following byte lands relative to a screen
+f4 never displayed. The indented tails and merged lines on the photos are
+exactly that, one delta at a time, and then extruded into the log.
+
+Idle, there are no deltas: ConPTY sends nothing after the repaint until the
+next command, and dropping the frame costs nothing (6.15, 6.16 stand). Busy,
+the repaint is ConPTY's correction of everything in flight and **must land**.
+
+**Fix.** A resize repaint is absorbed only when the shell is idle, judged two
+ways because each alone has a blind spot: no output has gone to the display
+for `absorbQuietBefore` (200 ms) -- a command that pauses would fool it --
+and the PTY reports no child process -- cached for a second, so the first
+second of a command can slip past it. Both are needed; the residual window is
+a command that pauses for more than 200 ms inside its first second. The
+absorbed-frame count in the log now sits beside the count of frames applied
+because the shell was busy.
+
+Reproduced first: `TestRepaintIsAppliedWhileACommandIsPrinting` feeds the
+field bytes -- the repaint, then the `CRLF ESC[r;cH tail` continuation -- and
+requires the tail to land where the shell put it and the repaint's rows to be
+on screen once; `TestRepaintIsAbsorbedWhenIdle` is the mirror.
+
+**What this says about the design**, recorded because it changes §2 of the
+research: absorbing a frame is safe exactly when nothing depends on it having
+been shown. That is the idle case and only the idle case. The general form
+of the fix -- resize f4's grid *when ConPTY's frame for that size arrives*,
+so that the grid always matches the size the stream is laid out for -- is O15
+and would remove the residual window; it is not in this change.
+
+Also from this run: the `REFLOW_FRAME ... diverted=` field was computed
+before `route` decided, so it read `false` for frames that were then
+absorbed, and the oracle's own wide/narrow pass frames appeared as undiverted
+`STALE`. The oracle captured them correctly (its report says so two lines
+later); the log line was wrong, and is removed in favour of the absorber's
+own count.

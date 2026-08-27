@@ -5334,6 +5334,14 @@ func isEnvironmentVariableChar(c byte) bool {
 // lands rows at the wrong width and blanks the rest, and looks exactly like
 // lost history. The XTWINOPS report (ledger P14) is the only thing that says
 // which size a frame belongs to, and until now nothing read it.
+// ptyBusyForReflow is the child-process side of "is the shell busy", safe
+// from the read loop: the PTY guards it with its own mutex and caches the
+// answer for a second.
+func (pf *PanelsFrame) ptyBusyForReflow() bool {
+	pty := pf.localPTY()
+	return pty != nil && pty.IsBusy()
+}
+
 // reflowSessionSummary is what a bug report needs from an f4 log without
 // anyone reading the stream: how the mode was configured, how much ConPTY
 // was resized, how many repaints were recognised and dropped, and whether
@@ -5345,7 +5353,7 @@ func (pf *PanelsFrame) reflowSessionSummary(why string) {
 		return
 	}
 	o.mu.Lock()
-	resizes, absorbed, owed, passes := o.resizesSeen, o.absorbedFrames, o.pendingRepaints, o.passesRun
+	resizes, absorbed, owed, passes, busy := o.resizesSeen, o.absorbedFrames, o.pendingRepaints, o.passesRun, o.absorbSkippedBusy
 	mode := o.mode
 	o.mu.Unlock()
 	tv := pf.termView
@@ -5356,8 +5364,8 @@ func (pf *PanelsFrame) reflowSessionSummary(why string) {
 		chars = tv.historyCellsLocked() + tv.viewportCellsLocked()
 		tv.mu.Unlock()
 	}
-	vtui.DebugLog("REFLOW_SUMMARY (%s): mode=%s; %d child resizes, %d repaints absorbed, %d owed; %d oracle passes; history %d rows, %d chars",
-		why, mode, resizes, absorbed, owed, passes, histRows, chars)
+	vtui.DebugLog("REFLOW_SUMMARY (%s): mode=%s; %d child resizes, %d repaints absorbed, %d applied (shell busy), %d owed; %d oracle passes; history %d rows, %d chars",
+		why, mode, resizes, absorbed, busy, owed, passes, histRows, chars)
 }
 
 func (pf *PanelsFrame) noteConptyFrame(data []byte) {
@@ -5366,12 +5374,10 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 		// A repaint for an unchanged size carries no XTWINOPS report at
 		// all: it opens with ESC[?25l ESC[H and rewrites every row. It is a
 		// frame nonetheless, and the one that wiped the screen in 6.16.
-		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil &&
-			!pf.reflowOracle.absorbArmed() {
-			// A same-size repaint that reached the display: the 6.16 bug
-			// itself, and it carries no size report to recognise it by.
+		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil {
+			// A repaint with no size report: the 6.16 shape.
 			vw, vh := pf.termView.Size()
-			vtui.DebugLog("REFLOW_FRAME: same-size repaint reached the display, view %dx%d bytes=%d erases=%d",
+			vtui.DebugLog("REFLOW_FRAME: size-less repaint, view %dx%d bytes=%d erases=%d",
 				vw, vh, len(data), bytes.Count(data, []byte("\x1b[K")))
 		}
 		return
@@ -5395,14 +5401,12 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 	if cols != vw || rows != vh {
 		match = "STALE"
 	}
-	diverted := pf.reflowOracle != nil && pf.reflowOracle.absorbArmed()
-	if diverted && match == "ok" {
-		// The normal case: a repaint for the current size, kept off the
-		// display. Both bugs in 6.15 and 6.16 were frames that were *not*
-		// diverted, so those are what a log needs to show.
+	if match == "ok" {
+		// The normal case. Whether it was absorbed or applied is the
+		// absorber's own count, logged there; this line only names the
+		// frames that declare a size the view no longer has.
 		return
 	}
-	vtui.DebugLog("REFLOW_FRAME: declares %dx%d, view is %dx%d (%s) diverted=%v bytes=%d erases=%d",
-		cols, rows, vw, vh, match, diverted, len(data),
-		bytes.Count(data, []byte("\x1b[K")))
+	vtui.DebugLog("REFLOW_FRAME: declares %dx%d, view is %dx%d (%s) bytes=%d erases=%d",
+		cols, rows, vw, vh, match, len(data), bytes.Count(data, []byte("\x1b[K")))
 }
