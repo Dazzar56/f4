@@ -227,7 +227,7 @@ func identifyArchiveFormat(ctx context.Context, localPath, displayName string) (
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if displayName == "" {
 		displayName = filepath.Base(localPath)
 	}

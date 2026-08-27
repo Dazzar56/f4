@@ -2,7 +2,7 @@ package archive
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"os"
@@ -17,14 +17,19 @@ import (
 func TestArchiveVFS_MultiVolumeRar(t *testing.T) {
 	sourceDir := archivesRarFixtureDir(t)
 	tmp := t.TempDir()
-	for _, name := range []string{"test.part01.rar", "test.part02.rar"} {
-		data, err := os.ReadFile(filepath.Join(sourceDir, name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(tmp, name), data, 0600); err != nil {
-			t.Fatal(err)
-		}
+	part01, err := os.ReadFile(filepath.Join(sourceDir, "test.part01.rar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "test.part01.rar"), part01, 0600); err != nil {
+		t.Fatal(err)
+	}
+	part02, err := os.ReadFile(filepath.Join(sourceDir, "test.part02.rar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "test.part02.rar"), part02, 0600); err != nil {
+		t.Fatal(err)
 	}
 
 	v, err := NewArchiveVFS(vfs.NewOSVFS(tmp), "test.part01.rar")
@@ -53,8 +58,8 @@ func TestArchiveVFS_MultiVolumeRar(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("Read: %v", readErr)
 	}
-	hash := sha1.Sum(data)
-	if got := hex.EncodeToString(hash[:]); got != "4da7f88f69b44a3fdb705667019a65f4c6e058a3" {
+	hash := sha256.Sum256(data)
+	if got := hex.EncodeToString(hash[:]); got != "b1040e9bde2125471abc00773c7c589c32ee879354dd188a919988f70b84ea19" {
 		t.Fatalf("RAR entry SHA-1 = %s, want the complete multi-volume payload", got)
 	}
 
@@ -69,7 +74,7 @@ func TestArchiveVFS_MultiVolumeRar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if copyHash := sha1.Sum(copyData); hex.EncodeToString(copyHash[:]) != "4da7f88f69b44a3fdb705667019a65f4c6e058a3" {
+	if copyHash := sha256.Sum256(copyData); hex.EncodeToString(copyHash[:]) != "b1040e9bde2125471abc00773c7c589c32ee879354dd188a919988f70b84ea19" {
 		t.Fatalf("CopyBulk payload differs from the complete multi-volume entry")
 	}
 }
