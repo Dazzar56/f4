@@ -645,3 +645,48 @@ the logical-line count never falls.
 What it does not do: rows already extruded to the PieceTable before this change
 are still unreachable by the re-wrap. That remains the third option in 6.11 and
 is not needed for the reported symptom.
+
+
+### 6.13. The cap was real but not the whole of it: the round trip itself loses
+
+The logical-line bound of 6.12 did what it promised: evictions fell from 349
+passes' worth to **five** in a whole session, and the pinned-at-the-cap
+signature is gone (`history 2000 -> 2001`, `1917 -> 1901`: it now moves in both
+directions instead of grinding down). The user-visible symptom did not change.
+
+The decay continues without any eviction to explain it. Across 472 passes:
+
+    (107781 cells, 2025 logical lines)
+    (106247 cells, 1995 logical lines)
+    (100764 cells, 1883 logical lines)
+     (89352 cells, 1658 logical lines)
+     (74986 cells, 1457 logical lines)
+
+and every one of those passes reports `lost: 0 skipped rows, 0 trimmed cells,
+0 past cap`. The numbers are the *input* to the re-wrap -- what
+`unwrapLocked` collected -- so the content is already smaller when the pass
+begins. Each pass hands the next one less than it received.
+
+That places the loss inside the unwrap -> re-wrap round trip, not in eviction,
+and it is now the only place left: nothing is dropped at the boundary, nothing
+is trimmed, nothing is skipped, and the history bound no longer bites. Two
+mechanisms fit the shape and both are cheap to test:
+
+- **Lines merging rather than disappearing.** The logical-line count falls
+  faster than the cells (28% against 30% here, but early passes lose lines with
+  almost no cells), which is what joining two lines into one looks like. A
+  wrap flag set where a line really ended would do it, and every narrowing pass
+  creates more full-width rows for the `ESC[K` hint to guess about (P13: the
+  guess is wrong once in W lines, and a drag re-runs the guess hundreds of
+  times over the same text).
+- **Trailing blanks treated as padding.** `significantWidthLocked` trims to the
+  last non-blank cell, and `significantTrim` counts only non-blank cells past
+  it -- so trimming real trailing spaces reports as zero loss. A5 already
+  records that trailing spaces on a soft-wrapped row are content, not padding.
+
+**Next step, and it needs no field run.** A pure round-trip test:
+`unwrapLocked` then re-wrap at the *same* width must be the identity -- same
+logical lines, same cells, same wrap flags -- and then the same over a sequence
+of widths. The field log has said everything it can; this is now a unit-test
+question, and the two hypotheses above are exactly what such a test
+distinguishes on its first run.
