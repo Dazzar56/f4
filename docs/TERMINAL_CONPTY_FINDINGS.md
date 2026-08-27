@@ -575,3 +575,53 @@ real content below it; `significantWidthLocked` trimming cells that a wrapped
 row still needs; and the interaction with the 2000-row cap when the re-wrap
 produces more rows than it consumed. None of these is confirmed -- the
 measurement to make is the round-trip test, not another field run.
+
+
+### 6.11. The loss is the history cap, and it is paid in content
+
+The full instrumentation answers §6.10 and rules out four of the five suspects
+at once. Across 349 passes in the field log, **every** pass reports:
+
+    lost: 0 skipped rows, 0 trimmed cells, 0 past cap
+
+Nothing is truncated below `lastRow`, nothing is trimmed by
+`significantWidthLocked`, and the re-wrap's own overflow push never hits the
+cap. Those three hypotheses are dead.
+
+What is unmistakable is the content itself, in the same lines. Following one
+drag from wide to narrow:
+
+    120x29 -> 119x29 ... 107973 cells, 2029 logical lines; out 2029 rows, 2000 to history
+     97x27 ->  92x26 ... 107464 cells, 2019 logical lines; out 2035 rows, 2009 to history
+     41x23 ->  37x21 ...  54757 cells,  997 logical lines; out 2068 rows, 2047 to history
+
+**The cell count halves.** Not the rows -- the characters. And the mechanism is
+visible right next to it: `GridHistory` is pinned at its 2000-row cap while
+narrowing keeps producing *more* rows than it consumed (2068 out of 2029 in),
+so every pass evicts its oldest rows to make room. `REFLOW_DROP:` names them,
+and they are exactly what a user would expect to be at the top of a scrollback:
+
+    extruding "Microsoft Windows [Version 10.0.22000.2538]" to the PieceTable
+
+Eviction is normal for a bounded scrollback. What makes it destructive here is
+that the re-wrap reads *only* `GridHistory`, so a row extruded to the
+PieceTable can never be re-wrapped again -- and a narrow width inflates the row
+count enough to evict on every pass. A drag is hundreds of passes. Widen again
+and the rows that would have unwrapped back into the viewport are no longer
+anywhere the re-wrap can see them.
+
+One correction to the instrumentation, so the next reader is not misled: the
+`0 past cap` in the summary and the `REFLOW_DROP:` lines are not in conflict.
+`unwrapLocked` drains `GridHistory` to empty at the start of a pass, so the
+eviction is attributed to the other cap site (`ScrollUp`, `terminal_view.go`
+line ~332), which has no counter. **That counter is the one measurement still
+missing**, and it is a two-line change, not another field run.
+
+**Where this leaves the fix.** The bug is not in the wrapping arithmetic; it is
+that a bounded row cap is the wrong bound for a buffer whose row count depends
+on the current width. Three directions, cheapest first, none of them measured
+yet: bound the history in *logical lines* or cells rather than rows, so
+narrowing cannot evict; raise the cap enough that a drag cannot exhaust it and
+accept the memory; or let the re-wrap read back from the PieceTable, which is
+the only option that also fixes rows already extruded. The first is the smallest
+and matches what the counter shows.
