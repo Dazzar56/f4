@@ -504,17 +504,21 @@ func (o *reflowOracle) route(data []byte) *AnsiParser {
 		return p
 	}
 	if time.Now().Before(o.absorbArmedUntil) && bytes.HasPrefix(data, frameOpen) {
-		tv := o.pf.termView
-		if tv == nil {
-			return nil
-		}
-		scratch := NewTerminalView(tv.Width, tv.Height)
+		// The frame is dropped, so nothing needs to be laid out and the
+		// scratch view can be any size: reading the display's size here
+		// raced with Resize writing it (the display's mutex is not held on
+		// this path, and must not be -- it is the read loop).
+		scratch := NewTerminalView(absorbScratchCols, absorbScratchRows)
 		p := NewAnsiParser(scratch, nil)
 		if bytes.Contains(data, frameClose) {
-			// Whole frame in one chunk, the common case.
+			// Whole frame in one chunk, the common case. Parsed here and
+			// now, on the read loop: data is the loop's reusable buffer,
+			// and handing it to another goroutine raced with the next
+			// Read overwriting it.
 			o.absorbedFrames++
 			o.absorbArmedUntil = time.Time{}
-			go func() { p.Process(data); scratch.Close() }()
+			p.Process(data)
+			scratch.Close()
 			return discardParser
 		}
 		o.absorbing = p
@@ -524,24 +528,17 @@ func (o *reflowOracle) route(data []byte) *AnsiParser {
 	return nil
 }
 
-// discardParser swallows what is handed to it; used when the frame was
-// already parsed and closed above.
-var discardParser = NewAnsiParser(NewTerminalView(1, 1), nil)
+// absorbScratchCols/Rows size the throwaway view an absorbed frame is parsed
+// into. Wide enough that no ordinary frame wraps in it -- a wrapped scratch
+// would cost time, not correctness -- and nothing more.
+const (
+	absorbScratchCols = 512
+	absorbScratchRows = 128
+)
 
-// divert is route for the tests and the oracle pass: whether a sink currently
-// owns the stream.
-func (o *reflowOracle) divert() *AnsiParser {
-	if o == nil {
-		return nil
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.lastByte = time.Now()
-	if o.sink != nil {
-		return o.sink
-	}
-	return o.absorbing
-}
+// discardParser marks a chunk the caller must drop without parsing: the frame
+// was already parsed and closed inside route.
+var discardParser = NewAnsiParser(NewTerminalView(1, 1), nil)
 
 // absorbArmed reports whether a resize repaint would currently be absorbed.
 func (o *reflowOracle) absorbArmed() bool {
