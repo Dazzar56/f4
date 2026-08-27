@@ -690,3 +690,66 @@ logical lines, same cells, same wrap flags -- and then the same over a sequence
 of widths. The field log has said everything it can; this is now a unit-test
 question, and the two hypotheses above are exactly what such a test
 distinguishes on its first run.
+
+
+### 6.14. State of the scrollback investigation, and what is not trustworthy in it
+
+Written after five field runs, because the conclusions in 6.10-6.13 were drawn
+partly from instrumentation that could not see what it claimed to. A reader
+arriving here should know which findings survive and which were retracted
+before spending another run.
+
+**What is established.**
+
+- The re-wrap is lossless in isolation. `reflowLocked` was tested across width
+  changes, height changes, both together, a full mouse-drag sequence, repeated
+  identical sizes, one-column steps and with the `ESC[K` hint both on and off;
+  no case loses a logical line or changes one
+  (`TestReflowLosesNothingAcrossEveryResizeShape`).
+- The row cap was a real cause and is fixed. Bounding `GridHistory` in logical
+  lines instead of rows dropped evictions from 349 a session to five, and the
+  history no longer grinds down against the bound (6.12).
+- ConPTY's repaint is not overwriting the recovered rows: the absorber fires
+  and the symptom is unchanged (6.9, first log after it).
+- The oracle stamps correctly and almost never runs: twice in a session, never
+  during a resize drag (6.7). The `ESC[K` hint, not the oracle, is what carries
+  the history in practice (O12).
+
+**What was retracted, and why it matters.**
+
+- "All five loss counters read zero, so the loss is inside the round trip"
+  (6.13) is **not supported**. Two of those counters could not observe their
+  own subject: `significantTrim` counted non-blank cells past a boundary that
+  is blank by definition, and `REFLOW_RESIZE` was emitted from `ResetBuffer`
+  instead of the non-re-wrap branch of `Resize`, so every `history 0` line in
+  the logs describes a scratch view of the oracle or the absorber, not the
+  display. Both are fixed; the conclusion is withdrawn pending a run with the
+  corrected counters.
+- The falling logical-line count is **not** by itself evidence of loss. A wrap
+  flag left set merges two lines with every character intact, and the row count
+  is pinned to the history bound by construction. Only the non-blank character
+  total, added in the same patch, falls solely when content is destroyed.
+
+**What is unmeasured and should be measured before anything else.**
+
+1. **A baseline.** Nobody has established that the loss predates this session.
+   `oracle` became the Windows default, the repaint absorber was added, and the
+   history bound changed from rows to logical lines -- all recently. One run
+   with `F4_WIN_REFLOW=off` and one with `hint`, compared against the default,
+   costs no code and either clears those changes or indicts them. The `REFLOW:`
+   line now names each of them so the logs can be told apart.
+2. **What the absorber swallows.** Its window is up to 250 ms and a drag opens
+   it on every width change -- 174 times in one run -- so the windows overlap
+   and the stream can be diverted for the length of the drag. The claim that
+   ordinary output cannot be swallowed rested on a test that only checked that
+   the diversion closed. It now logs the byte count and whether the bytes were
+   a delimited repaint at all; a line saying they were not is a confirmed bug
+   in this session's own code.
+3. **Trailing spaces on wrapped rows** (A5): `blanksTrimmed` now counts them.
+
+**Method note, recorded because it cost more than the bug so far.** Each of
+five field runs answered one question and raised the next, because the
+instrumentation was extended one number at a time. The counters added last are
+deliberately the full set the remaining hypotheses need, and two of them exist
+only because a counter that cannot observe its subject is worse than none: it
+produces a zero that reads as evidence.
