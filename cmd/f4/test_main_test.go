@@ -77,8 +77,13 @@ func TestMain(m *testing.M) {
 
 	// Toast behavior is still exercised through vtui's real asynchronous
 	// setup and expiry paths, but unit tests do not need production-length
-	// display times.
-	toastDurationOverride = func(time.Duration) time.Duration { return time.Millisecond }
+	// display times. Keep a small observable window: tests may observe another
+	// effect of the same UI task (for example, clipboard contents) before they
+	// pump the nested toast task, and a 1 ms toast can expire in that gap.
+	toastDurationOverride = func(time.Duration) time.Duration {
+		const minimumObservableToastDuration = 100 * time.Millisecond
+		return minimumObservableToastDuration
+	}
 
 	// The machine's clipboard is global, slow to reach (pbcopy/xclip) and
 	// shared with whatever else the CI runner is doing; tests keep clipboard
