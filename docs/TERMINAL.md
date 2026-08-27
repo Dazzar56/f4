@@ -286,3 +286,13 @@ Read this list before concluding that something is broken.
 *   **Rule 2 of section 5 applies to the cursor as well.** A fresh terminal
     starts with the cursor at `(0, height-1)`, so a picture printed before
     anything else is placed on the bottom row and scrolls the screen.
+
+## Windows: the reflow switch
+
+`[Terminal] WindowsReflow = auto | off | hint | oracle` in the config, with
+`F4_WIN_REFLOW` in the environment taking precedence. `auto` is the oracle.
+`off` returns the terminal to Horizontal Preservation and asks nothing of
+ConPTY beyond what every build since 1809 has done; use it on a build where
+the `REFLOW_*` log lines show one of the measured behaviours failing. The
+research behind the default, and what each mode assumes, is in
+`CONPTY_RESEARCH.md`.

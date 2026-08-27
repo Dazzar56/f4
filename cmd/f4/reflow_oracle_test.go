@@ -113,6 +113,43 @@ func (f *fakeConPTY) prompt(text string) {
 	f.out <- []byte(fmt.Sprintf("\x1b[%d;1H", row) + "\x1b]133;A\x1b\\" + text + "\x1b]133;B\x1b\\")
 }
 
+// printUnterminated is the live-stream shape of P11: ConPTY writes the whole
+// line in one run with no terminator, lets the terminal's autowrap break it
+// (a CRLF-only reading of these bytes saw one 140-column row), and then
+// repositions with an absolute CUP. The hint learns the wrap from the
+// autowrap itself -- the row was full when the next character arrived --
+// which is why it needs no terminator at all. An earlier version of this
+// fake put a CUP between the rows, which is the one shape that defeats
+// autowrap and is not what ConPTY does.
+func (f *fakeConPTY) printUnterminated(line string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var sb strings.Builder
+	row := f.viewRowsLocked() + 1
+	f.lines = append(f.lines, line)
+	rows := wrapAt(line, f.cols)
+	fmt.Fprintf(&sb, "\x1b[%d;1H", row)
+	sb.WriteString(line)
+	if last := rows[len(rows)-1]; len([]rune(last)) < f.cols {
+		sb.WriteString("\x1b[K")
+	}
+	fmt.Fprintf(&sb, "\x1b[%d;1H", row+len(rows))
+	f.trimToHeightLocked()
+	f.out <- []byte(sb.String())
+}
+
+// title is the console title as a busy signal (P18, P19): ConPTY forwards
+// cmd's title change as OSC 0, and the running-command form is
+// "Administrator: cmd.exe - <command>" while the idle form has no suffix.
+// The oracle uses the idle form as its "no child is running" gate.
+func (f *fakeConPTY) title(command string) {
+	t := "Administrator: C:\\WINDOWS\\system32\\cmd.exe"
+	if command != "" {
+		t += " - " + command
+	}
+	f.out <- []byte("\x1b]0;" + t + "\x07")
+}
+
 func (f *fakeConPTY) trimToHeightLocked() {
 	for f.viewRowsLocked() > f.rows && len(f.lines) > 0 {
 		f.lines = f.lines[1:]
@@ -862,5 +899,29 @@ func TestAbsorbExpires(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	if o.route([]byte("\x1b[?25l\x1b[H\x1b[?25h")) != nil {
 		t.Fatal("a frame after the window must reach the display")
+	}
+}
+
+func TestWindowsReflowConfigSwitch(t *testing.T) {
+	cases := []struct {
+		env, config string
+		want        winReflowMode
+	}{
+		{"", "", winReflowOracle},          // the Windows default
+		{"", "auto", winReflowOracle},      // spelled out
+		{"", "off", winReflowOff},          // the conservative switch
+		{"", "hint", winReflowHint},        // hint only
+		{"", "nonsense", winReflowOff},     // unknown is off, never a guess
+		{"oracle", "off", winReflowOracle}, // the environment wins
+		{"off", "oracle", winReflowOff},    // in both directions
+	}
+	for _, c := range cases {
+		if got := winReflowModeFrom(c.env, c.config, true); got != c.want {
+			t.Errorf("env=%q config=%q: got %v, want %v", c.env, c.config, got, c.want)
+		}
+	}
+	// Not Windows: nothing turns the Windows reflow on.
+	if got := winReflowModeFrom("", "oracle", false); got != winReflowOff {
+		t.Errorf("config must not enable the Windows reflow elsewhere: %v", got)
 	}
 }

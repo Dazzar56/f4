@@ -259,6 +259,30 @@ func probeReflow(w *writer) {
 	p.resize(baseW, baseH)
 	p.drain(400*time.Millisecond, 3*time.Second)
 
+	// (1b) Which resizes repaint, and which repaints say their size. Both
+	// answers decided the scrollback bug on 22000 and both were guessed
+	// wrong first: a height-only change repaints (6.15), and a call for the
+	// size ConPTY already has repaints too, without the size report (6.16).
+	// A build that behaves differently here is exactly what the ledger's
+	// portability question is about.
+	w.sub("which resizes repaint: height-only, then the same size again")
+	report := func(label string, frame []byte) {
+		sized := strings.Contains(string(frame), "\x1b[8;")
+		delimited := frameHidden(frame) && frameShown(frame)
+		w.printf("%s: %d bytes, delimited frame=%v, carries ESC[8;rows;cols t=%v\n",
+			label, len(frame), delimited, sized)
+		w.summary("repaint."+label+".frame", yesno(delimited))
+		w.summary("repaint."+label+".size_report", yesno(sized))
+	}
+	p.resize(baseW, baseH-2)
+	f1, _, _ := p.drainTimed(500*time.Millisecond, 4*time.Second)
+	report("height_only", f1)
+	p.resize(baseW, baseH-2)
+	f2, _, _ := p.drainTimed(500*time.Millisecond, 4*time.Second)
+	report("same_size", f2)
+	p.resize(baseW, baseH)
+	p.drain(400*time.Millisecond, 3*time.Second)
+
 	// (2) The oracle: borrow a very wide pseudoconsole for a moment.
 	w.sub(fmt.Sprintf("oracle: one wrapped line, then resize to %d columns", oracleW))
 	p.line("echo " + overLine)

@@ -1,0 +1,198 @@
+# ConPTY and line structure: the research, the algorithm it justifies, and how it held up
+
+This is the one-document version of a question that took two Windows builds,
+three probes, eight field runs and nine documents to answer: **how does a
+terminal running inside a ConPTY tell a line that wrapped from a line that
+ended, when ConPTY does not say?** Every step below states what was asked,
+how it was asked, what the answer was, and how that answer is now pinned in
+the test mocks so the code cannot drift from it silently. The last section
+is the part that matters for anyone who inherits this: which of these facts
+the reflow depends on, how it fails if one of them changes, and the switch
+that turns it off.
+
+The detailed ledgers this summarizes: `TERMINAL_LEDGER.md` (every finding,
+numbered), `TERMINAL_CONPTY_FINDINGS.md` (the raw evidence and the chase),
+`TERMINAL_REFLOW.md` (the algorithm as implemented), `WINCON.md` and
+`WINCON_805_HANDOVER.md` (the picture overlay, which turned out to share a
+root cause). Finding numbers (P6, A5, W8, ...) refer to the ledger.
+
+## 0. The problem
+
+f4 hosts `cmd.exe` in a pseudoconsole and renders its output itself. When the
+window is resized, long lines should re-wrap the way they do in any modern
+terminal. On Unix that is bookkeeping: the pty delivers bytes, the terminal
+wraps them, and the terminal knows which of its rows are continuations. On
+Windows the pseudoconsole (ConPTY) sits between the shell and f4 and *renders
+the screen itself* into a VT stream, so what f4 receives is not the shell's
+output but a description of a screen -- rows, cursor moves, erases -- and the
+one thing that description does not carry is whether a row is the end of a
+line or the middle of one.
+
+The user-visible failure was simple: resize the window and history either
+stays wrapped at the old width or vanishes.
+
+## 1. What ConPTY does (measured, two builds)
+
+Each step was a scenario in `tools/conptyprobe` (a Windows binary that
+creates its own pseudoconsole, drives `cmd.exe` inside it, and records every
+byte), run by the maintainer on 10.0.19045 and 10.0.22000.2538. The probe's
+log is the evidence; the finding is what the log proved.
+
+| Step | What we checked | How | What we found | Pinned in the mock as |
+|---|---|---|---|---|
+| 1 | Does ConPTY mark a soft wrap at all? | Print a line longer than the width; record the live stream. | No. On 19045 the wrap point carries a **hard CRLF** (P6). Full rows are padded to width; a short row is followed by `ESC[K`, a full one is not. | `fakeConPTY.print`: full rows padded, CRLF, `ESC[K` only after a short row. `TestFakeConPTYLiveStreamBreaksWithHardCRLF`. |
+| 2 | Is that universal? | Same on 22000; read the bytes with a cursor model, not a CRLF split. | No. Within one build the live stream **sometimes has no terminator at all**: the line is written whole across the boundary, the terminal's autowrap breaks it, and ConPTY repositions with an absolute CUP afterwards (P11). A CRLF-only reading saw a 140-column row. | `fakeConPTY.printUnterminated`. `TestFakeConPTYUnterminatedLiveStream`, and `TestHintReadsBothLiveShapesAlike` proves the hint gives the same answer on both shapes. |
+| 3 | What does a resize repaint look like? | `ResizePseudoConsole`, drain the frame. | A full-viewport repaint bracketed by `ESC[?25l` ... `ESC[?25h` (P7). On 19045 wrapped lines are written as rows joined by CRLF; on 22000 the logical line is written **whole** and autowrap places it, only the last row ends in CRLF (P12). On 22000 the frame opens with the XTWINOPS size report `ESC[8;rows;cols t` (P14). | `conptyBehaviour` per build: `repaintBreaksWrappedLines`, `sizeReport`. `TestFakeConPTYRepaintShapeMatchesTheBuild`, `TestFakeConPTYRepaintsOnEveryResizeCall`. |
+| 4 | Is the `ESC[K` clause reliable? | Print a hard-broken line *exactly* the width. | It arrives as a full row + CRLF with no `ESC[K` -- indistinguishable from a wrap (P13). The hint is wrong once in W lines, and only in that direction (a hard break read as a wrap). | `TestFakeConPTYExactWidthLineIsAmbiguous`. |
+| 5 | Does ConPTY keep scrollback we could ask for? | 30 lines into a 12-row console, then widen; look for scrolled-off lines in the repaint. | **No** (P16). The repaint covers the viewport and nothing above it. Whatever scrolled off is gone from ConPTY's side; only f4 has it. | `fakeConPTY.trimToHeightLocked`. `TestFakeConPTYKeepsNoScrollback`. |
+| 6 | Do the documented flags change any of this? | `RESIZE_QUIRK` (0x2) and passthrough (0x8) vs 0, byte-for-byte diff. | Accepted, no effect on either build (P8-P10). | Not modelled: nothing in f4 depends on them. |
+| 7 | Can we *make* ConPTY tell us the line structure? | Widen the pseudoconsole to a very large width for one frame; read the repaint. | Yes: the wide repaint carries every wrapped line **rejoined** (P15), and the narrow frame after restoring the width shows where each line breaks. Two frames, one answer per row. This is the oracle. | `TestFakeConPTYWideResizeRejoins`; the oracle tests in `reflow_oracle_test.go` run the whole exchange against the fake. |
+| 8 | When is it safe to borrow the console for that? | Watch the title ConPTY forwards. | `cmd.exe` sets the title to `... cmd.exe - <command>` while a command runs and drops the suffix when idle (P18, P19). That is the "no child is running" gate the oracle waits for. | `fakeConPTY.title`. `TestFakeConPTYTitleBusySignal`. |
+| 9 | Which resizes repaint? | Height-only resize; resize to the size ConPTY already has. | **Every** `ResizePseudoConsole` call repaints (6.15), including a call for an identical size (6.16) -- and that one carries **no** size report. Both were guessed wrong first and cost the field runs of §3. | `fakeConPTY.SetSize` repaints on every call; same size ⇒ no `ESC[8;`. `TestFakeConPTYRepaintsOnEveryResizeCall`. The probe now measures this directly (section 3, "which resizes repaint"). |
+
+The line that connects all nine: **ConPTY describes a screen, not a
+document**. It will repaint the screen it holds, at whatever size it is asked,
+faithfully -- and it holds nothing else.
+
+## 2. The algorithm, and which fact each part rests on
+
+Given the above, the design has three parts, in the order they were adopted.
+
+**The hint (rests on steps 1, 2, 4).** While reading the live stream, a row
+that is full to the width and is *not* followed by `ESC[K` is marked as a
+wrap; the terminal's own autowrap marks the no-terminator shape the same way.
+This is cheap, runs on every row, and is wrong once per W lines in one known
+direction (P13). It is what carries the history in practice (W8, O12).
+
+**The oracle (rests on steps 3, 5, 7, 8).** At a settled prompt with no
+command running, borrow the console: resize it very wide, read the rejoined
+repaint, restore, read the narrow one, and stamp wrap flags into
+`GridHistory` only for rows that align exactly with both frames and the
+local journal. Every stamp is checked before it can change history, and a
+pass that cannot prove the two frames describe the same text stamps nothing
+("display changed during the pass"). Measured on 22000: 25 boundaries in one
+pass, none stale, and **zero disagreements with the hint** wherever it could
+check (W8).
+
+**Ownership of the viewport during a resize (rests on steps 5 and 9).** This
+is the part that was missing, and the reason the feature looked broken for
+seven field runs after it worked. f4 re-wraps its own grid from history when
+the width changes; ConPTY then repaints its screen -- which has no history --
+and that repaint used to land on top, replacing recovered rows with blanks.
+Two rules fix it: tell ConPTY nothing when the size did not change (so it
+sends nothing), and treat the repaint that follows a resize as *the repaint
+for that resize* and keep it off the display. The absorber is armed by a
+resize, takes only a chunk that opens a frame (`ESC[?25l`), and only until
+the frame closes, so ordinary output arriving in the window cannot be
+swallowed (O13; `TestAbsorbNeverTakesOrdinaryOutput`).
+
+A fourth fact turned out to be load-bearing for the history itself, not for
+ConPTY: the history must be bounded in **logical lines**, not rows, because
+the same text is more rows at a narrower width, and a row cap evicts on every
+narrowing step (6.11, 6.12; `TestGridHistoryBoundIsWidthIndependent`).
+
+## 3. What the field runs taught, in the order they happened
+
+This is recorded because the *method* cost more than the bug, and the next
+person to chase something similar should not repeat it.
+
+1. The oracle was reported not to work. It worked; the runner's verdict
+   treated a safely-rejected pass as a failure (6.6).
+2. The scrollback was reported not to come back. The run was in `probe`
+   mode, which re-wraps nothing by design, and the log did not say so. The
+   mode line now names every switch it sets (6.7).
+3. In the default mode, the log showed 197 repaint frames landing after f4's
+   re-wrap. First cause found: the repaint overwrites (6.8). Absorbing it
+   changed nothing on screen.
+4. Instrumentation inside the re-wrap, one number per run, for four runs.
+   Two of the counters could not observe their own subject and returned
+   zeros that read as evidence (6.14). The re-wrap was innocent throughout:
+   `TestReflowLosesNothingAcrossEveryResizeShape` now says so in one second.
+5. The history cap was found and fixed (6.11, 6.12). Still no change on
+   screen.
+6. Logging *around* the re-wrap, all at once: which view, what ConPTY was
+   told, what it sent back with its declared size checked, what was drawn.
+   The next log showed characters preserved inside every pass and lost only
+   between passes (6.15).
+7. Cause two: height-only steps let the frame through (absorber gated on
+   width). Fixed. Still no change.
+8. Cause three, twelve lines of log: three resize events for a size the view
+   already had, each still calling `ResizePseudoConsole`, each answered by a
+   repaint **without a size report** that nothing recognised (6.16). Fixed.
+   Confirmed working.
+
+Two things would have shortened this to one run: asking how the symptom was
+reproduced (a corner drag interleaves width, height and same-size steps, so
+every hypothesis was tested against a log where the innocent path ran
+constantly); and the end-to-end test that now exists,
+`TestCornerDragKeepsTheScrollback`, which drives the real resize path against
+a fake that repaints on every call, on both builds.
+
+## 4. How robust is this, and what is the fallback
+
+**What the reflow assumes about ConPTY**, and what happens if each assumption
+breaks on some build:
+
+| Assumption | If it changes | Consequence | Detected by |
+|---|---|---|---|
+| A resize repaint is bracketed by `ESC[?25l`/`ESC[?25h` (P7). | A build stops hiding the cursor around the frame. | The absorber takes nothing; the frame lands after f4's re-wrap and overwrites it -- the 6.8 symptom, visible, not destructive. | `REFLOW_FRAME ... diverted=false` in the log. |
+| A full row without `ESC[K` is a wrap (P6). | A build starts erasing after full rows too. | The hint marks nothing; history re-wraps as if every row ended a line. Wrong shape, no loss. | `REFLOW_ORACLE ... where hint and oracle disagree` becomes nonzero. |
+| The wide repaint rejoins lines (P15). | A build clamps the width or keeps wrapping. | The oracle aligns nothing and stamps nothing -- by design it cannot stamp what it cannot prove. The hint carries on alone. | `REFLOW_ORACLE ... nothing stamped` on every pass. |
+| The title carries the busy suffix (P18). | A shell or locale without it. | The oracle never finds a safe moment and never runs. Hint only. | No `REFLOW_ORACLE` lines at all. |
+| ConPTY keeps no scrollback (P16). | A build starts keeping it. | Harmless: f4 keeps its own and ignores what the repaint has above the viewport. | -- |
+
+The pattern is deliberate: every part of the reflow fails *toward the hint*,
+and the hint fails toward "no re-wrap", never toward lost text. Content loss
+requires something outside these assumptions -- which is exactly what
+happened, and why the `chars` figure in `REFLOW_WRAP` exists.
+
+**Backward compatibility.** Microsoft's history with ConPTY is the relevant
+prior: the 19045 → 22000 change (P12, CRLF-joined rows becoming
+autowrap-placed whole lines) did not break the design because the design
+reads a cursor model rather than terminators. The size report (P14) appeared
+between builds and the reflow does not depend on it. The behaviours it does
+depend on -- the frame brackets, `ESC[K` after a short row, no scrollback --
+are how ConPTY has rendered since 1809 and are what Windows Terminal itself
+relies on. A change there would be visible in every terminal on Windows, not
+only in f4.
+
+**Earlier and later builds.** Nothing below 19045 has been measured. ConPTY
+exists from 1809 and its renderer is the same code lineage, but "same
+lineage" is a hope, not a finding. 24H2/25H2 are equally unmeasured. For both,
+the probe is the instrument and the ledger's O4 is the open item; the
+`conptyBehaviour` table in the mock is where a third build's answers go.
+
+**The conservative switch.** `[Terminal] WindowsReflow = off` in the config
+(or `F4_WIN_REFLOW=off` in the environment, which wins) returns the Windows
+terminal to Horizontal Preservation: no hint, no oracle, no absorber, the
+resize repaint applied as ConPTY sends it. That asks nothing of ConPTY beyond
+what every build has done, and is the right answer on a build where the
+`REFLOW_*` log lines show any of the assumptions above failing. `hint` is the
+middle setting: no oracle passes, no console borrowed, wrap guesses only.
+
+## 5. The same root cause, next door
+
+The picture overlay for classic conhost (#805) was investigated in parallel
+and turned out to fail for a reason of the same shape: something f4 did not
+own was repainting or freezing on top of its output. There it was the console
+window's input queue, coupled to f4's by a cross-process child window (F7,
+measured in the field as a frozen console, F22), and the fix was the same
+kind of fix -- stop depending on the other process: a top-level layered
+window with no parent and no owner, only ever *read* from the console (F23).
+Under Windows Terminal the picture was never being erased at all; the
+terminal was simply not being asked whether it could draw (F13, F14; fixed by
+reading the window class and DA1). `WINCON.md` has the full account.
+
+## 6. What is still open
+
+- Portability to builds other than 19045 and 22000 (O4). The probes in the
+  issue threads are current: `f4probe.zip` (this document's section 1,
+  automated, now including the same-size and height-only resize steps) and
+  `f4imgprobe.zip` (the overlay and sixel questions, eight answers from a
+  person).
+- Reading the XTWINOPS size report to tie a late frame to its resize (O9).
+  Two `STALE` frames were seen in one run; with the absorber covering every
+  resize they no longer reach the display, but they say the size ConPTY lays
+  out for can lag f4's by a step.
+- The tracker of the new overlay under minimize, occlusion and foreground
+  changes has not been exercised on a live f4 (Q6, Q7).

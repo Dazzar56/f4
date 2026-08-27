@@ -130,3 +130,57 @@ func TestFakeConPTYLiveStreamBreaksWithHardCRLF(t *testing.T) {
 		t.Fatalf("live stream shape (P6): %q", live)
 	}
 }
+
+func TestFakeConPTYUnterminatedLiveStream(t *testing.T) {
+	// P11: rows of a wrapped line separated by absolute CUP, no CRLF at all.
+	f := newFakeConPTYFor(conpty22000, 10, 4)
+	f.printUnterminated(strings.Repeat("W", 15))
+	live := string(<-f.out)
+	if strings.Contains(live, "\r\n") {
+		t.Fatalf("P11: no line terminator between the rows: %q", live)
+	}
+	if !strings.Contains(live, "\x1b[1;1H"+strings.Repeat("W", 15)+"\x1b[K\x1b[3;1H") {
+		t.Fatalf("P11: the line written whole across the boundary, then an absolute CUP: %q", live)
+	}
+}
+
+func TestFakeConPTYTitleBusySignal(t *testing.T) {
+	// P18/P19: the title carries " - <command>" while a command runs and
+	// nothing after the executable when idle.
+	f := newFakeConPTYFor(conpty22000, 40, 4)
+	f.title("dir")
+	busy := string(<-f.out)
+	f.title("")
+	idle := string(<-f.out)
+	if !strings.HasPrefix(busy, "\x1b]0;") || !strings.Contains(busy, "cmd.exe - dir") {
+		t.Fatalf("busy title: %q", busy)
+	}
+	if strings.Contains(idle, " - ") || !strings.HasSuffix(idle, "cmd.exe\x07") {
+		t.Fatalf("idle title: %q", idle)
+	}
+}
+
+// The hint must give the same answer on both live shapes (P6 and P11): a
+// full row with no ESC[K is a wrap whether CRLF or CUP follows it.
+func TestHintReadsBothLiveShapesAlike(t *testing.T) {
+	for name, feed := range map[string]func(f *fakeConPTY){
+		"CRLF (P6)": func(f *fakeConPTY) { f.print(strings.Repeat("H", 15)) },
+		"CUP (P11)": func(f *fakeConPTY) { f.printUnterminated(strings.Repeat("H", 15)) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeConPTYFor(conpty22000, 10, 4)
+			tv := NewTerminalView(10, 4)
+			defer tv.Close()
+			tv.HintWrap = true
+			p := NewAnsiParser(tv, nil)
+			feed(f)
+			p.Process(<-f.out)
+			if !tv.WrapFlags[0] {
+				t.Fatalf("%s: the full first row must be marked as wrapped", name)
+			}
+			if tv.WrapFlags[1] {
+				t.Fatalf("%s: the short last row must not be", name)
+			}
+		})
+	}
+}

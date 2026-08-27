@@ -50,11 +50,37 @@ const (
 	winReflowProbe
 )
 
-// winReflowModeFromEnv reads F4_WIN_REFLOW. The safe oracle is the Windows
-// default: every stamp is checked against both ConPTY frames and the local
-// journal before it can change history. Explicit off remains the escape hatch.
+// winReflowModeFromEnv picks the Windows reflow mode: F4_WIN_REFLOW in the
+// environment first, then [Terminal] WindowsReflow in the config, then the
+// oracle, which is the Windows default. Every stamp the oracle makes is
+// checked against both ConPTY frames and the local journal before it can
+// change history.
+//
+// The config key is the conservative switch. Everything the reflow rests on
+// was measured on two builds, 19045 and 22000 (docs/CONPTY_RESEARCH.md); on
+// a build where ConPTY behaves differently, "off" returns the terminal to
+// Horizontal Preservation, which asks nothing of ConPTY beyond what every
+// build has done since 1809. The environment variable stays above it so a
+// field run can override a config without editing it.
 func winReflowModeFromEnv() winReflowMode {
-	return parseWinReflowMode(os.Getenv("F4_WIN_REFLOW"), runtime.GOOS == "windows")
+	return winReflowModeFrom(os.Getenv("F4_WIN_REFLOW"), AppConfig.WindowsReflow, runtime.GOOS == "windows")
+}
+
+func winReflowModeFrom(env, config string, windows bool) winReflowMode {
+	if strings.TrimSpace(env) != "" {
+		return parseWinReflowMode(env, windows)
+	}
+	if !windows {
+		// The key is Windows-only by name and by meaning; the environment
+		// variable above can still force a mode on for tests elsewhere.
+		return winReflowOff
+	}
+	switch strings.ToLower(strings.TrimSpace(config)) {
+	case "", "auto", "default":
+		return parseWinReflowMode("", windows)
+	default:
+		return parseWinReflowMode(config, windows)
+	}
 }
 
 func parseWinReflowMode(value string, windows bool) winReflowMode {
