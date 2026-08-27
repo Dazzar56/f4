@@ -1,0 +1,294 @@
+# Issue #805 — картинки в консольном f4 на Windows: что установлено, что нет, что делать
+
+Дата: 2026-08-27. Исследование по коду f4 (`0eda4343`), vtui (`4bdf763`),
+исходникам microsoft/terminal (main) и логу `debug.log` из тикета.
+Формат: сначала факты с источниками, потом открытые вопросы, потом
+инструкция исполнителю (для модели послабее — шаги маленькие, проверяемые),
+в конце — памятка для пользователей по сбору информации.
+
+## 1. Установлено точно
+
+**F1. В тикете три разных ситуации, и у них разные причины.**
+- (a) Windows Terminal, f4 запущен *напрямую* (ярлык на `f4.exe`, Win11 с WT
+  как терминалом по умолчанию) — картинки нет / «мелькает и накрывается».
+- (b) Windows Terminal через `wt.exe f4.exe` — работает (Zeroes1, tarlabnor).
+- (c) Классический conhost (cmd.exe в своём окне, Win10) — чёрный прямоугольник,
+  клин, 17 % CPU; на свежих сборках — «картинка на мгновение мелькает и исчезает».
+
+**F2. Под Windows Terminal `GetConsoleWindow()` возвращает *видимое* окно.**
+Это псевдо-окно ConPTY: класс `PseudoConsoleWindow`, `WS_POPUP`,
+`WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE`, размер 0×0, владелец — окно WT
+(через `GWLP_HWNDPARENT`). Когда вкладка видна, OpenConsole делает ему
+`ShowWindow(SW_SHOWNOACTIVATE)`, когда скрыта — `SW_MINIMIZE`; в обоих
+случаях `IsWindowVisible` = TRUE (WS_VISIBLE не снимается).
+Источник: `src/interactivity/base/InteractivityFactory.cpp`
+(`CreatePseudoWindow`, `SetVisibility`), GH#12515, GH#13066.
+**Следствие: `wincon.ConsoleWindow()` (проверка `IsWindowVisible`) считает WT
+«настоящей консолью». Утверждение в `WINCON.md` §1 («под WT окно никогда не
+показывается, IsWindowVisible false») — неверно.**
+
+**F3. При запуске через «терминал по умолчанию» WT *не* ставит `WT_SESSION`.**
+Окружение процесса задаёт тот, кто его запустил (Explorer); WT подключается
+позже через handoff и в чужой environment ничего не пишет. Открытый запрос:
+microsoft/terminal#13006. Через `wt.exe f4.exe` переменная есть.
+**Следствие для (a):** нет `WT_SESSION` → `DetectGraphicsProtocol` даёт
+`GraphicsNone` → `InstallConsoleOverlay` → `ConsoleWindow()` доверяет
+псевдо-окну (F2) → оверлей создаётся как child окна 0×0 → `ClientSize()`
+= 0×0 → каждый кадр уходит в `hide("nothing on the client area")`.
+Картинка «поддерживается» (протокол External), но рисовать её некуда;
+вьюер держит под неё пустую область. Это ровно случай tarlabnor.
+
+**F4. vtui умеет спросить терминал напрямую (DA1), но f4 этим не пользуется.**
+`vtui.ProbeGraphicsProtocols()` (`graphics_probe.go`, Windows-реализация в
+`graphics_probe_windows.go`) шлёт `ESC [ c` и ищет параметр `4` (sixel).
+`git log -S ProbeGraphicsProtocols` в f4 — пусто: вызова нет ни на одной
+платформе. Актуальный код terminal отвечает `?61;4;6;7;14;21;22;23;24;28;32;42[;52]c`
+(`adaptDispatch.cpp: DeviceAttributes`), т.е. WT (при любом способе запуска)
+и OpenConsole/новый conhost объявляют sixel; старый conhost Win10 — нет.
+
+**F5. Кодировщик sixel в vtui уже готов к WT без `WT_SESSION`.**
+`isWindowsSixelHost` (`graphics_sixel.go:284`): `WT_SESSION` *или*
+`GOOS==windows && !WezTerm` → слои по 255 цветов и виртуальная клетка 10×20.
+Значит для (a) достаточно правильно выбрать протокол; vtui менять не нужно.
+
+**F6. Окно conhost рисует *поверх* своих child-окон.** Стили окна консоли:
+`WS_OVERLAPPEDWINDOW|WS_HSCROLL|WS_VSCROLL`, ex: `WS_EX_WINDOWEDGE|WS_EX_ACCEPTFILES|
+WS_EX_APPWINDOW|WS_EX_LAYERED` (`src/interactivity/win32/window.cpp`,
+`CONSOLE_WINDOW_FLAGS`). **`WS_CLIPCHILDREN` нет.** Любая перерисовка conhost
+(текст f4, мигание курсора) затирает пиксели нашего child-окна, и никто его
+после этого не инвалидирует. Это и есть «мелькает и исчезает» в (c):
+окно показали и нарисовали (после d801c6d — в одном пробуждении), следующий
+BitBlt консоли его закрасил.
+
+**F7. Cross-process parent/child *и* owner/owned окна сцепляют очереди ввода
+(implicit AttachThreadInput), транзитивно.** Raymond Chen, 2013-04-12
+(«Is it legal to have a cross-process parent/child or owner/owned window
+relationship?») и 2011-03-31. Значит «сделать оверлей owned-окном консоли»
+не спасает — только окно *без* parent и *без* owner.
+
+**F8. Лог Zeroes1 (Win10 19045, conhost, сборка ac048ed 2026-08-25 14:49):**
+```
+16:22:24.741 WINCON: overlay ready over the console window   (cell 12x28)
+16:22:45.021 IMAGE_GEOM: console=120x30 ... img=1100x578 place=0,1 120x28
+16:22:45.070 WINCON: frame 1440x784 at 0,28, 1 piece(s)
+16:22:45.070 WINCON: 20.3s frames=2 new=1 scale=32ms/32ms window=7ms
+             pump=0 move=0 rgn=0 inval=0 paint=0 blank=0 gaveup=1(no placements)
+16:22:45.076 FM: renderPhase() ...   <- последняя строка лога, дальше 30 с тишины
+```
+Масштабирование 32 мс — не оно. Запрос ушёл на pump-поток, и через ~5 мс
+f4 встал целиком в следующем `renderPhase` (до первого WINCON-лога кадра, т.е.
+скорее всего на записи кадра в консоль). Это картина взаимной блокировки
+conhost ↔ pump-поток (F7) при первом `SetWindowPos(SWP_SHOWWINDOW)`/`WM_PAINT`
+child-окна, при которой conhost перестаёт обслуживать и вывод, и ввод f4.
+`pump=0` в строке — снимок на момент flush, сам по себе не доказательство;
+доказательство — обрыв лога.
+
+**F9. Побочное:** `cmd/f4/window_icon_windows.go` делает синхронный
+`SendMessageW(WM_SETICON)` в окно консоли из произвольной горутины —
+ещё одна точка, где f4 повиснет, если conhost заклинило. Под WT это
+уходит в псевдо-окно и безвредно.
+
+**F10. Манифест f4.exe объявляет `permonitorv2`** (`rsrc_windows_*.syso`) —
+координаты окон в физических пикселях, пересчётов DPI не нужно.
+
+**F11. Новый ConPTY (VtIo, terminal main) пропускает вывод клиента в терминал
+насквозь; VT-рендерер (`src/renderer/vt`) удалён.** Поэтому sixel из f4
+доходит до WT. Оборотная сторона: под другими ConPTY-хостами (VS Code и т.п.)
+ответ на DA1 может по-прежнему обещать sixel — это уже сегодняшнее поведение
+для `wt.exe`/`WT_SESSION`, новой проблемой не является, но записать стоит.
+
+**F12. PictureView для Far Manager** — по памяти: тоже child-окно поверх окна
+консоли + GDI, работает только в conhost, ConEmu для него специально
+подменяет `GetConsoleWindow` хуком (ConEmu Whats_New: «функция GetConsoleWindow
+перехватывается… враппер для старых версий PicView больше не нужен»).
+Исходники в этой сессии не прочитаны (см. Q5) — как он переживает
+перерисовки консоли (F6), не проверено.
+
+## 2. Что не установлено (проверить)
+
+- **Q1.** Какой именно вызов на pump-потоке клинит conhost в (c) и клинит ли
+  вообще conhost, а не сам f4. Нужны стеки потоков `f4.exe` и `conhost.exe`
+  в момент зависания (Process Explorer → Threads → Stack, или
+  `procdump -ma`), либо счётчик «pump занят с …» в строке статистики (шаг 4).
+- **Q2.** Чьи 17 % CPU — `f4.exe` или `conhost.exe` (Task Manager, столбец процесса).
+- **Q3.** Что именно «мелькало» у tarlabnor в (a): ожидаем в логе
+  `WINCON: overlay ready` и затем `nothing on the client area`. Нужен
+  `VTUI_DEBUG=1` лог при запуске *напрямую* под WT.
+- **Q4.** Ответ на DA1 у conhost Win10 (ожидаем `ESC[?1;0c`) и у inbox-conhost
+  Win11 24H2/25H2 (если там `4` — он сам рисует sixel через GDI
+  `PaintImageSlice`, и оверлей на Win11-conhost не нужен вовсе).
+- **Q5.** Прочитать исходники PictureView (как делает child, как борется с F6,
+  в каком потоке крутит окно).
+- **Q6.** Достаточно ли для z-order приклеивать оверлей «сразу над консолью»
+  через `GetWindow(GW_HWNDPREV)`, или проще прятать его, когда консоль не
+  foreground. Проверяется только руками на Win10/Win11.
+- **Q7.** Даёт ли `hide("no placements")` моргание при промежуточных кадрах без
+  placement (в статистике F8 `gaveup=1(no placements)`); пока считается нормой.
+
+## 3. Инструкция исполнителю (патч f4, по шагам)
+
+Общее: Go, только `syscall.NewLazyDLL`/`golang.org/x/sys/windows`, как в
+`internal/wincon/overlay_windows.go`. Никаких CGO. Логика без syscalls —
+в файлах без build-tag с тестами, как `overlay_state.go`/`geometry.go`.
+Каждый шаг — отдельный коммит, `go vet ./...` и `go test ./internal/wincon/
+./cmd/f4/ -run 'Console|Overlay|Graphics'` зелёные на Linux.
+
+### Шаг 1. Не доверять псевдо-окну ConPTY (чинит случай (a) наполовину)
+
+Файл `internal/wincon/overlay_windows.go`, функция `ConsoleWindow()`:
+1. Добавить `procGetClassNameW = user32.NewProc("GetClassNameW")`.
+2. После `GetConsoleWindow` прочитать имя класса (буфер 64 uint16).
+3. Решение вынести в чистую функцию в `geometry.go`:
+   ```go
+   func classifyConsoleWindow(class string, visible bool) Source {
+       switch class {
+       case "PseudoConsoleWindow": return SourcePseudo // новое значение
+       case "ConsoleWindowClass":  if visible { return SourceConsole }; return SourceHidden
+       }
+       return SourceHidden // незнакомый класс не заслуживает доверия
+   }
+   ```
+   `SourcePseudo.Trusted()` = false, `String()` = "a ConPTY pseudo console
+   window (Windows Terminal or another terminal on the far side of a pty)".
+4. Тесты в `wincon_test.go`: три класса × visible true/false.
+5. В `sharedConsoleOverlay` лог уже есть (`WINCON: not drawing over %v`);
+   добавить в него имя класса: `WINCON: console window class=%q visible=%v`.
+Проверка: под WT при прямом запуске в логе `not drawing over a ConPTY
+pseudo console window`, оверлей не создаётся.
+
+### Шаг 2. Спросить терминал через DA1, если окружение молчит (вторая половина (a))
+
+Файл `cmd/f4/session_windows.go`, в `ManageSessions` **после**
+`PrepareTerminal` (VT-вывод уже включён) и **до** `InstallConsoleOverlay`
+и `vtinput.NewReader`:
+```go
+probeGraphicsIfUnknown(scr)
+```
+Новая функция (файл `cmd/f4/graphics_probe_windows.go`, tag windows;
+чистую часть решения — «зондировать ли» — в файл без тега с тестом):
+- условия: `scr.Graphics().Protocol() == vtui.GraphicsNone`,
+  бэкенд VT (`SelectedTTYBackend` не `winapi`/`win32`),
+  `os.Getenv("VTUI_GRAPHICS") == ""` (явный выбор пользователя не трогать);
+- вызов `prots := vtui.ProbeGraphicsProtocols()`; если `len(prots) > 0` →
+  `scr.Graphics().SetProtocol(prots[0])` и
+  `vtui.DebugLog("GRAPHICS: the terminal answered DA1 with sixel; using %v", prots[0])`;
+  иначе `vtui.DebugLog("GRAPHICS: DA1 did not declare sixel")`.
+- `InstallConsoleOverlay` после этого сам вернётся рано (протокол ≠ None).
+Ожидаемое поведение: (a) → sixel (как в (b)); Win10 conhost → протокол
+остаётся None → оверлей (шаг 1 разрешает: класс `ConsoleWindowClass`).
+Побочный эффект F11 записать в `IMAGES_PLAN.md` как принятое решение.
+Опционально в vtui: `da1Sixel` логировать сырой ответ под `VTUI_DEBUG`
+(закрывает Q4 логами пользователей).
+
+### Шаг 3. Переделать оверлей conhost: не child, а отдельное layered-окно (чинит (c))
+
+Почему: F6 (затирание) и F7/F8 (сцепка очередей и клин) — оба следствия
+child-отношения с окном чужого процесса. Окно без parent и owner не имеет
+ни того, ни другого.
+
+Спецификация нового `overlay_windows.go` (состояние `overlay_state.go` и
+геометрия `geometry.go` остаются; `Place/Draw/Hide/SetBounds/Visible/
+ClientSize/Close/Stats` — тот же API для `image_console_overlay.go`):
+1. **Создание** на pump-потоке: `CreateWindowExW(WS_EX_LAYERED|WS_EX_TRANSPARENT|
+   WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE, class, nil, WS_POPUP, 0,0,0,0,
+   parent=0, menu=0, inst, 0)`. Константы: `WS_POPUP=0x80000000`,
+   `WS_EX_LAYERED=0x80000`, `WS_EX_TRANSPARENT=0x20`, `WS_EX_TOOLWINDOW=0x80`,
+   `WS_EX_NOACTIVATE=0x08000000`. HWND консоли хранить только как «цель
+   слежения» (`target`), никогда не передавать в parent/owner.
+   `WS_EX_TRANSPARENT` заменяет `HTTRANSPARENT` (мышь идёт в консоль);
+   `WM_NCHITTEST`/`WM_ERASEBKGND`/`WM_PAINT` больше не нужны — layered-окно
+   с `UpdateLayeredWindow` не получает WM_PAINT.
+2. **Показ кадра** (`apply`, pump-поток): из RGBA-буфера кадра сделать
+   32-bpp DIB (`CreateDIBSection`, `biHeight = -h` — сверху вниз,
+   `BI_RGB`), переложить в **premultiplied BGRA**
+   (`b*a/255, g*a/255, r*a/255, a`), выбрать в `CreateCompatibleDC(0)`,
+   затем `UpdateLayeredWindow(hwnd, 0, &POINT{screenX,screenY}, &SIZE{w,h},
+   hdcMem, &POINT{0,0}, 0, &BLENDFUNCTION{AC_SRC_OVER=0, 0, 255, AC_SRC_ALPHA=1},
+   ULW_ALPHA=2)`. Позиция, размер и пиксели — один вызов, поэтому правило
+   «двигать только в том пробуждении, где рисуем» выполняется само собой,
+   а «чёрный прямоугольник до первого paint» невозможен. После первого
+   успешного `UpdateLayeredWindow` — `ShowWindow(hwnd, SW_SHOWNOACTIVATE=4)`.
+   Освободить DC/битмап после вызова. Экранные координаты кадра:
+   `GetClientRect(target)` + `ClientToScreen(target, &POINT{0,0})`
+   (оба не шлют сообщений).
+3. **Регион/`SetBounds`** больше не нужен: промежутки между миниатюрами —
+   просто alpha=0 в буфере (`buf` в `RenderExternal` уже нулевой там, где
+   ничего не нарисовано). `SetBounds` оставить как no-op, возвращающий true,
+   чтобы вызывающая сторона не менялась; `regionActive` можно удалить.
+4. **Слежение за консолью** (pump-поток, `SetTimer(hwnd, 1, 33, 0)` →
+   `WM_TIMER=0x0113`): на каждом тике, если окно должно быть показано:
+   - `!IsWindow(target)` → `Close()` (консоль умерла);
+   - `IsIconic(target) || !IsWindowVisible(target)` → `ShowWindow(SW_HIDE=0)`
+     до следующей смены;
+   - новый `ClientToScreen`/`GetClientRect` → если сдвинулось —
+     `UpdateLayeredWindow(hwnd, 0, &pt, nil, 0, nil, 0, nil, 0)` (только позиция);
+     если изменился размер клиентской области — просто ждать: f4 сам пришлёт
+     новый кадр по изменению размера консоли (`FM_RESIZE`);
+   - z-order: `prev := GetWindow(target, GW_HWNDPREV=3)`; если `prev != hwnd`:
+     `after := prev`; если `prev == 0` или у `prev` есть `WS_EX_TOPMOST=8`
+     (`GetWindowLongPtrW(prev, GWL_EXSTYLE=-20)`) → `after = HWND_TOP (0)`;
+     `SetWindowPos(hwnd, after, 0,0,0,0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE
+     = 0x2|0x1|0x10)`. Так оверлей всегда ровно над консолью и под всем, что
+     подняли выше неё. Если Q6 покажет проблемы — запасной вариант: показывать
+     только пока `GetForegroundWindow() == target`, иначе прятать.
+   - Улучшение (после того как таймер заработал): `SetWinEventHook(
+     EVENT_SYSTEM_FOREGROUND=0x0003 … EVENT_OBJECT_LOCATIONCHANGE=0x800B,
+     0, callback, pid консоли (`GetWindowThreadProcessId`), 0,
+     WINEVENT_OUTOFCONTEXT=0|WINEVENT_SKIPOWNPROCESS=2)` на pump-потоке —
+     тот же код пересчёта, но без задержки в 33 мс при перетаскивании окна.
+     Хук доставляется через message loop потока, установившего его, ничего
+     в conhost не внедряет. Снять `UnhookWinEvent` в `Close`.
+5. **Инвариант «никто не ждёт pump-поток»** остаётся, но теперь его нарушить
+   сложнее: у окна нет чужого parent/owner, а все вызовы к окну консоли —
+   только читающие (`GetClientRect`, `ClientToScreen`, `IsIconic`,
+   `IsWindowVisible`, `GetWindow`, `GetWindowLongPtrW`, `GetForegroundWindow`).
+   Запрет на `SendMessage`/`SetWindowPos`/`ShowWindow` с чужим HWND —
+   записать в шапку файла и в `WINCON.md`.
+6. `wincon.New()` больше не может зависнуть на `CreateWindowExW` (нет сцепки
+   очередей); таймаут 5 с оставить как страховку.
+7. Тесты: премультипликация и упаковка BGRA — чистая функция
+   `premultiplyBGRA(dst, src []byte, w, h, stride)` в файле без тега +
+   тест (прозрачный, непрозрачный, полупрозрачный пиксель); решение
+   «что делать на тике» — чистая функция `trackStep(state, observed) ops`
+   с тестами (минимизирована / сдвинулась / умерла / prev==hwnd / prev topmost).
+8. `WINCON.md` §1–2 переписать: §1 — как отличаем (класс окна + DA1), §2 —
+   почему не child и не owned (F6, F7 со ссылками на Raymond Chen).
+
+### Шаг 4. Диагностика, которой не хватило
+
+- В `internal/wincon/stats.go` добавить `busySince` (atomic int64, unix-нс):
+  ставится в начале `apply`, обнуляется в конце. В строке `WINCON: 1.0s …`
+  (`image_console_stats.go`) печатать `pump=busy 1234ms` если не ноль. Тогда
+  «pump-поток застрял в вызове X» виден из лога, а не только из стеков (Q1).
+- В `window_icon_windows.go` (F9): не звать `SendMessageW` для окна класса
+  `PseudoConsoleWindow` и заменить на `SendMessageTimeoutW(…, SMTO_ABORTIFHUNG|
+  SMTO_BLOCK, 1000)` для `ConsoleWindowClass`.
+
+## 4. Памятка пользователю: как собрать информацию по картинкам в консольном f4
+
+1. Скажите, **где** запущен f4 (это три разных механизма):
+   - классическое окно консоли (заголовок `cmd.exe`/`f4.exe`, нет вкладок);
+   - Windows Terminal, запущенный командой `wt.exe f4.exe` или из его вкладки;
+   - Windows Terminal, но f4 запущен ярлыком прямо на `f4.exe` (Win11 с WT
+     «терминалом по умолчанию») — так тоже бывает, и это отдельный случай.
+   Проверка: внутри f4 нажмите Ctrl+O и выполните `echo %WT_SESSION%`.
+   Пусто — переменной нет, напишите это.
+2. Версии: `ver` (сборка Windows), версия WT (Settings → About), сборка f4
+   (Help → About или строка `F4 STARTUP` в логе).
+3. Запуск с логом:
+   ```
+   set VTUI_DEBUG=1
+   f4.exe
+   ```
+   откройте по F3 файл, на котором воспроизводится, подождите 10–15 с, выйдите
+   (или снимите процесс). Приложите `debug.log` целиком и размер файла
+   (пиксели и байты).
+4. Если зависло: в Диспетчере задач посмотрите, **какой процесс** ест CPU —
+   `f4.exe`, `conhost.exe`, `OpenConsole.exe` или `WindowsTerminal.exe`.
+   Если умеете — Process Explorer → f4.exe → Properties → Threads → стек
+   самого «горячего» потока, то же для `conhost.exe`.
+5. Контрольный прогон: в `config.ini`, секция `[Images]`, строка `Overlay=0`
+   (старое имя `X11Overlay=0` тоже действует). Сообщите, изменилось ли
+   поведение (ожидается «[ Image graphics not supported ]» в конхосте Win10).
+6. Скриншот всей области экрана, а не только окна: видно, где именно
+   появляется/пропадает картинка.
