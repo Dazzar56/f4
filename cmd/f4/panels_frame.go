@@ -323,8 +323,10 @@ type PanelsFrame struct {
 	commandLineFocused bool
 
 	lastPtyPath string
-	lastPtyVFS  vfs.VFS
-	closed      bool
+	// childPtyW/H is the size ConPTY was last told; see handleResize.
+	childPtyW, childPtyH int
+	lastPtyVFS           vfs.VFS
+	closed               bool
 
 	shellMode         ShellMode
 	hostConsoleActive bool
@@ -1054,6 +1056,9 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 }
 
 func (pf *PanelsFrame) initPTY() {
+	// A new child knows nothing about sizes; the next handleResize must
+	// tell it, whatever the previous child had been told.
+	pf.childPtyW, pf.childPtyH = 0, 0
 	// Always initialize the parser to prevent nil dereference
 	pf.parser = NewAnsiParser(pf.termView, nil)
 	pf.parser.replyTo = pf.activeReplyPTY
@@ -1343,18 +1348,33 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// authoritative there too.
 			sizeChanged := pf.termView.Width != w || pf.termView.Height != termH
 			pf.termView.Resize(w, termH)
-			if sizeChanged {
+			// The size ConPTY was last told is tracked separately from the
+			// view's, because the two diverge at the moment that matters: a
+			// resize event whose size the view already has still used to
+			// reach ResizePseudoConsole below, and ConPTY repaints on every
+			// call -- even for an identical size, and then without the
+			// XTWINOPS report, so the frame was neither absorbed (the gate
+			// saw no change) nor recognised. The field log shows three such
+			// same-size events in 10ms followed by a frame that wiped a full
+			// screen down to three rows (6.16). Telling ConPTY nothing when
+			// nothing changed removes the frame at its source; absorbing on
+			// every call that does reach ConPTY covers the rest.
+			childChanged := pf.childPtyW != w || pf.childPtyH != termH
+			if sizeChanged || childChanged {
 				pf.reflowOracle.absorbResizeRepaint()
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
-			// The other half of every resize: what ConPTY was told. A frame
-			// that later declares a different size (REFLOW_FRAME STALE) is
-			// only explicable next to this line.
-			vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, host mode, overlay rows %d)", w, h, w, termH, cw, ch, n)
-			setPtySize(pty, w, termH, cw, ch)
-			for _, remotePty := range pf.remotePtys {
-				setPtySize(remotePty, w, termH, cw, ch)
+			if childChanged {
+				pf.childPtyW, pf.childPtyH = w, termH
+				// The other half of every resize: what ConPTY was told. A frame
+				// that later declares a different size (REFLOW_FRAME STALE) is
+				// only explicable next to this line.
+				vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, host mode, overlay rows %d)", w, h, w, termH, cw, ch, n)
+				setPtySize(pty, w, termH, cw, ch)
+				for _, remotePty := range pf.remotePtys {
+					setPtySize(remotePty, w, termH, cw, ch)
+				}
 			}
 			pf.ptyMutex.Unlock()
 		}
@@ -1387,15 +1407,30 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			// authoritative there too.
 			sizeChanged := pf.termView.Width != w || pf.termView.Height != termH
 			pf.termView.Resize(w, termH)
-			if sizeChanged {
+			// The size ConPTY was last told is tracked separately from the
+			// view's, because the two diverge at the moment that matters: a
+			// resize event whose size the view already has still used to
+			// reach ResizePseudoConsole below, and ConPTY repaints on every
+			// call -- even for an identical size, and then without the
+			// XTWINOPS report, so the frame was neither absorbed (the gate
+			// saw no change) nor recognised. The field log shows three such
+			// same-size events in 10ms followed by a frame that wiped a full
+			// screen down to three rows (6.16). Telling ConPTY nothing when
+			// nothing changed removes the frame at its source; absorbing on
+			// every call that does reach ConPTY covers the rest.
+			childChanged := pf.childPtyW != w || pf.childPtyH != termH
+			if sizeChanged || childChanged {
 				pf.reflowOracle.absorbResizeRepaint()
 			}
 			pf.ptyMutex.Lock()
 			cw, ch := pf.termView.CellSize()
-			vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, rows %d..%d)", w, h, w, termH, cw, ch, contentY1, termY2)
-			setPtySize(pty, w, termH, cw, ch)
-			for _, remotePty := range pf.remotePtys {
-				setPtySize(remotePty, w, termH, cw, ch)
+			if childChanged {
+				pf.childPtyW, pf.childPtyH = w, termH
+				vtui.DebugLog("REFLOW_PTY: outer %dx%d -> child %dx%d (cell %dx%d, rows %d..%d)", w, h, w, termH, cw, ch, contentY1, termY2)
+				setPtySize(pty, w, termH, cw, ch)
+				for _, remotePty := range pf.remotePtys {
+					setPtySize(remotePty, w, termH, cw, ch)
+				}
 			}
 			pf.ptyMutex.Unlock()
 		}
@@ -5272,6 +5307,15 @@ func isEnvironmentVariableChar(c byte) bool {
 func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 	i := bytes.Index(data, []byte("\x1b[8;"))
 	if i < 0 {
+		// A repaint for an unchanged size carries no XTWINOPS report at
+		// all: it opens with ESC[?25l ESC[H and rewrites every row. It is a
+		// frame nonetheless, and the one that wiped the screen in 6.16.
+		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil {
+			vtui.DebugLog("REFLOW_FRAME[%p]: no size report (same-size repaint), view is %dx%d diverted=%v bytes=%d erases=%d",
+				pf.termView, pf.termView.Width, pf.termView.Height,
+				pf.reflowOracle != nil && pf.reflowOracle.divert() != nil, len(data),
+				bytes.Count(data, []byte("\x1b[K")))
+		}
 		return
 	}
 	end := bytes.IndexByte(data[i:], 't')

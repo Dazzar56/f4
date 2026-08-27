@@ -795,3 +795,40 @@ offset 0-2 with a full history. The two `STALE` frames are recorded and not
 explained; with the absorber covering every resize they no longer reach the
 display, but they say the size ConPTY lays out for can lag f4's by a step,
 which is exactly what reading the XTWINOPS report (O9) is for.
+
+
+### 6.16. Found again, one layer under: same-size resize events provoke a repaint with no size report
+
+The absorb-on-any-resize fix of 6.15 diverted 175 of 179 frames and changed
+nothing on screen. The log names the four that got through, and the last one is
+the whole symptom in twelve lines:
+
+    REFLOW_SHOW: 86x32 gravity offset 0, rows with text 31, history 1836   <- full screen
+    FM_RESIZE: 86x34 -> child 86x32   (three times in 10 ms, all the same size)
+    PTY_WIN_TRACE: Read 246 bytes: ESC[?25l ESC[H ... ESC[K ...            <- no ESC[8;..t
+    REFLOW_SHOW: 86x32 gravity offset 28, rows with text 3, history 1836   <- wiped
+
+Three resize events arrived whose size the view already had. `Resize` returned
+early, the absorber's gate saw no change, and `setPtySize` was called anyway --
+and **ConPTY repaints on every `ResizePseudoConsole` call, including an
+identical size, and that repaint carries no XTWINOPS report.** So the frame was
+not absorbed, not recognised by `REFLOW_FRAME` (which looked for `ESC[8;`), and
+landed: `ESC[H`, the three rows ConPTY still held, `ESC[K` on every row. A full
+screen became three rows with the history intact underneath, which is the
+black area exactly.
+
+Same-size events are not rare: a corner drag delivers them whenever the mouse
+moves without crossing a cell boundary in one axis.
+
+**Fix.** The size ConPTY was last told is tracked apart from the view's
+(`childPtyW/H`, reset when a new child starts). `ResizePseudoConsole` is called
+only when that changes, which removes the frame at its source; and the absorber
+opens on every call that does reach ConPTY, whether or not the view changed.
+`REFLOW_FRAME` now also logs frames that open with `ESC[?25l ESC[H` and carry
+no size report, so the next log cannot hide one.
+
+This is the second cause found in the gaps between re-wrap passes; 6.15 was
+the first. Both are the same shape -- a ConPTY repaint reaching the display
+that f4's own state had already superseded -- and both are why O9 matters: a
+frame that says which size it describes can be matched to the resize that
+caused it, and a frame that says nothing is at least recognisable as a frame.
