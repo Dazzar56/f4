@@ -1373,6 +1373,16 @@ type reflowStats struct {
 	blanksTrimmed   int // blank cells cut from wrapped rows: A5 says these are content
 }
 
+// Size reports the grid's size under the view's mutex. The read loop needs
+// it for log lines and must not hold the mutex across parsing, and Resize on
+// the UI goroutine writes the fields it reads: an unlocked read there is a
+// data race the detector catches on every corner-drag test.
+func (tv *TerminalView) Size() (int, int) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	return tv.Width, tv.Height
+}
+
 func (tv *TerminalView) Resize(w, h int) {
 	if tv.Width == w && tv.Height == h {
 		return

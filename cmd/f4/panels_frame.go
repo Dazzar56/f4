@@ -5314,9 +5314,9 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 			!pf.reflowOracle.absorbArmed() {
 			// A same-size repaint that reached the display: the 6.16 bug
 			// itself, and it carries no size report to recognise it by.
+			vw, vh := pf.termView.Size()
 			vtui.DebugLog("REFLOW_FRAME: same-size repaint reached the display, view %dx%d bytes=%d erases=%d",
-				pf.termView.Width, pf.termView.Height, len(data),
-				bytes.Count(data, []byte("\x1b[K")))
+				vw, vh, len(data), bytes.Count(data, []byte("\x1b[K")))
 		}
 		return
 	}
@@ -5332,8 +5332,11 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 	if tv == nil {
 		return
 	}
+	// Under the view's mutex: Resize on the UI goroutine writes these
+	// while this read loop reads them.
+	vw, vh := tv.Size()
 	match := "ok"
-	if cols != tv.Width || rows != tv.Height {
+	if cols != vw || rows != vh {
 		match = "STALE"
 	}
 	diverted := pf.reflowOracle != nil && pf.reflowOracle.absorbArmed()
@@ -5344,6 +5347,6 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 		return
 	}
 	vtui.DebugLog("REFLOW_FRAME: declares %dx%d, view is %dx%d (%s) diverted=%v bytes=%d erases=%d",
-		cols, rows, tv.Width, tv.Height, match, diverted, len(data),
+		cols, rows, vw, vh, match, diverted, len(data),
 		bytes.Count(data, []byte("\x1b[K")))
 }
