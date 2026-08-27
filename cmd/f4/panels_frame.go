@@ -5310,10 +5310,12 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 		// A repaint for an unchanged size carries no XTWINOPS report at
 		// all: it opens with ESC[?25l ESC[H and rewrites every row. It is a
 		// frame nonetheless, and the one that wiped the screen in 6.16.
-		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil {
-			vtui.DebugLog("REFLOW_FRAME[%p]: no size report (same-size repaint), view is %dx%d diverted=%v bytes=%d erases=%d",
-				pf.termView, pf.termView.Width, pf.termView.Height,
-				pf.reflowOracle != nil && pf.reflowOracle.divert() != nil, len(data),
+		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil &&
+			(pf.reflowOracle == nil || pf.reflowOracle.divert() == nil) {
+			// A same-size repaint that reached the display: the 6.16 bug
+			// itself, and it carries no size report to recognise it by.
+			vtui.DebugLog("REFLOW_FRAME: same-size repaint reached the display, view %dx%d bytes=%d erases=%d",
+				pf.termView.Width, pf.termView.Height, len(data),
 				bytes.Count(data, []byte("\x1b[K")))
 		}
 		return
@@ -5335,7 +5337,13 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 		match = "STALE"
 	}
 	diverted := pf.reflowOracle != nil && pf.reflowOracle.divert() != nil
-	vtui.DebugLog("REFLOW_FRAME[%p]: declares %dx%d, view is %dx%d (%s) diverted=%v bytes=%d erases=%d clears=%d",
-		tv, cols, rows, tv.Width, tv.Height, match, diverted, len(data),
-		bytes.Count(data, []byte("\x1b[K")), bytes.Count(data, []byte("\x1b[2J")))
+	if diverted && match == "ok" {
+		// The normal case: a repaint for the current size, kept off the
+		// display. Both bugs in 6.15 and 6.16 were frames that were *not*
+		// diverted, so those are what a log needs to show.
+		return
+	}
+	vtui.DebugLog("REFLOW_FRAME: declares %dx%d, view is %dx%d (%s) diverted=%v bytes=%d erases=%d",
+		cols, rows, tv.Width, tv.Height, match, diverted, len(data),
+		bytes.Count(data, []byte("\x1b[K")))
 }

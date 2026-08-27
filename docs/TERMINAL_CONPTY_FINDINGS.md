@@ -832,3 +832,53 @@ the first. Both are the same shape -- a ConPTY repaint reaching the display
 that f4's own state had already superseded -- and both are why O9 matters: a
 frame that says which size it describes can be matched to the resize that
 caused it, and a frame that says nothing is at least recognisable as a frame.
+
+
+### 6.17. Resolved, and what the whole chase actually turned on
+
+Confirmed working in the field after 6.16. The scrollback survives a corner
+drag: the history comes back on a widen, no flash-and-replace, no black area.
+
+**The two causes, both outside the re-wrap.** Every hypothesis in 6.10-6.13
+looked inside `reflowLocked`, and the re-wrap was innocent throughout -- the
+field logs report `chars +0` on every one of 130+ passes, and the test matrix
+in 6.14 finds no loss across any resize shape. The damage was done in the gaps
+between passes, by ConPTY repaints reaching a display whose state had already
+superseded them:
+
+1. **Height-only steps** (6.15). The absorber was gated on a width change; a
+   corner drag delivers width, height and combined steps interleaved, so the
+   height ones let a frame through on nearly every drag.
+2. **Same-size resize events** (6.16). `ResizePseudoConsole` was called even
+   when the size had not changed, and ConPTY repaints on every call -- for an
+   identical size, without an XTWINOPS report. Neither the absorber's gate nor
+   the frame detector recognised it, and it rewrote the screen with the three
+   rows ConPTY still held.
+
+**Fixes that stand.** Absorb on any resize; track the size ConPTY was last told
+and call `ResizePseudoConsole` only when it changes; recognise size-less
+frames. Plus, from earlier in the chase and independently correct: the history
+is bounded in logical lines rather than rows (6.12), so narrowing no longer
+evicts, and the mode line names every switch it sets (6.7).
+
+**What this cost, and why.** Seven field runs. The chase went wrong in three
+ways worth keeping:
+
+- *Instrumentation added one number at a time.* Each run answered one question
+  and raised the next. The run that finally solved it was the one that logged
+  everything around the re-wrap at once.
+- *Two counters could not observe their own subject* and returned zeros that
+  read as evidence (6.14). A counter that cannot fail is worse than none.
+- *The reproduction was never characterised.* The tester dragged a corner every
+  time, which is a stream of width, height and same-size steps; every
+  hypothesis was tested against a log in which the innocent path ran
+  constantly and the guilty one ran in the gaps. Asking *how* the symptom was
+  produced, once, would have been worth several runs.
+
+**Logging kept, and why.** `REFLOW_WRAP` (character delta per pass; losses only
+when nonzero), `REFLOW_RESIZE` (only when the non-re-wrap path moves rows),
+`REFLOW_FRAME` (only frames that were *not* diverted, or that declare a stale
+size -- both bugs were exactly that), `REFLOW_SHOW` (only a mostly blank screen
+over a non-empty history), `REFLOW_PTY` (only a real child resize, now rare),
+and the absorber only when it swallowed something undelimited. `REFLOW_ENTER`
+is removed: it answered which view and which gate, and both are settled.

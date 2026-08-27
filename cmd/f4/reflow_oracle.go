@@ -533,9 +533,14 @@ func (o *reflowOracle) absorbResizeRepaint() {
 		text := scratch.historyCellsLocked() + scratch.viewportCellsLocked()
 		rows := scratch.rowsWithTextLocked()
 		scratch.Close()
-		oracleReport("absorbed %d bytes over %v (delimited=%v): %d rows, %d characters kept off the display",
-			absorbedBytes, time.Since(absorbStart).Round(time.Millisecond), delimited, rows, text)
 		if !delimited {
+			// Only the bad case is worth a line. A delimited frame kept off
+			// the display is the mechanism working, and a drag produces
+			// nearly two hundred of them.
+			_ = rows
+			_ = text
+			oracleReport("absorbed %d bytes over %v", absorbedBytes,
+				time.Since(absorbStart).Round(time.Millisecond))
 			// No ESC[?25h arrived, so this was not a bracketed repaint at
 			// all. Whatever those bytes were, they were ordinary output and
 			// the display never saw them.
