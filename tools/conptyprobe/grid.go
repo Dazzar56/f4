@@ -375,20 +375,3 @@ func AnalyzeLine(g *Grid, marker string) LineVerdict {
 	}
 	return v
 }
-
-func endsList(g *Grid, marker string) string {
-	var out []string
-	for _, r := range g.Rows() {
-		if strings.Contains(r.Text, marker) {
-			e := r.EndedBy
-			if e == EndNone {
-				e = "-"
-			}
-			out = append(out, e)
-		}
-	}
-	if len(out) == 0 {
-		return "(marker not found)"
-	}
-	return strings.Join(out, ",")
-}

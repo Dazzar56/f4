@@ -211,11 +211,3 @@ func (s *overlayState) take() overlayOps {
 	}
 	return ops
 }
-
-// currentRect is the placement most recently asked for, in console client
-// coordinates. The pump thread reads it when it composes a frame.
-func (s *overlayState) currentRect() Rect {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.wantRect
-}

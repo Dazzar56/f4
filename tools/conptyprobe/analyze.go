@@ -48,24 +48,3 @@ func clipRunes(s string, n int) string {
 	}
 	return string(r[:n]) + "..."
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func yesno(b bool) string {
-	if b {
-		return "yes"
-	}
-	return "no"
-}

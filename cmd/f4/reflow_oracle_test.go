@@ -26,8 +26,29 @@ import (
 //   - no scrollback: lines that no longer fit the height fall off the top.
 //
 // It is a PtyBackend, so it can sit where the real one sits.
+// conptyBehaviour is what one Windows build's ConPTY was measured to do. Two
+// builds are known (docs/TERMINAL_LEDGER.md, "Two Windows builds have been
+// probed end to end"); a third is one more value here.
+type conptyBehaviour struct {
+	name string
+	// repaintBreaksWrappedLines: the resize repaint writes a wrapped line as
+	// rows joined by hard CRLF (19045, P6) rather than whole and let the
+	// terminal's autowrap place it (22000, P12).
+	repaintBreaksWrappedLines bool
+	// sizeReport: the resize repaint opens with ESC[8;rows;cols t (P14).
+	// Measured on 22000; not present in the 19045 log.
+	sizeReport bool
+}
+
+var (
+	conpty19045  = conptyBehaviour{name: "19045", repaintBreaksWrappedLines: true, sizeReport: false}
+	conpty22000  = conptyBehaviour{name: "22000", repaintBreaksWrappedLines: false, sizeReport: true}
+	conptyBuilds = []conptyBehaviour{conpty19045, conpty22000}
+)
+
 type fakeConPTY struct {
 	mu     sync.Mutex
+	b      conptyBehaviour
 	cols   int
 	rows   int
 	lines  []string // logical lines, oldest first
@@ -36,10 +57,17 @@ type fakeConPTY struct {
 	// resizes records every SetSize call, for tests that check the oracle
 	// restored the geometry.
 	resizes []int
+	// repaints counts frames sent for SetSize calls, same-size ones
+	// included (6.16).
+	repaints int
 }
 
 func newFakeConPTY(cols, rows int) *fakeConPTY {
-	return &fakeConPTY{cols: cols, rows: rows, out: make(chan []byte, 64)}
+	return newFakeConPTYFor(conpty22000, cols, rows)
+}
+
+func newFakeConPTYFor(b conptyBehaviour, cols, rows int) *fakeConPTY {
+	return &fakeConPTY{b: b, cols: cols, rows: rows, out: make(chan []byte, 64)}
 }
 
 // print is a program writing text; each element is one logical line, sent
@@ -99,21 +127,27 @@ func (f *fakeConPTY) viewRowsLocked() int {
 	return n
 }
 
-// SetSize is ResizePseudoConsole. A width change repaints (P7); a
-// height-only change does not, which is also what the probe showed.
+// SetSize is ResizePseudoConsole. Every call repaints the whole viewport
+// (P7) -- a height-only change too (6.15), and a call with the size it
+// already has (6.16), which is the one case that comes back *without* the
+// size report. An earlier version of this fake sent nothing for a height-only
+// change; the field runs that cost were the ones described in 6.15.
 func (f *fakeConPTY) SetSize(cols, rows int) {
 	f.mu.Lock()
 	f.resizes = append(f.resizes, cols)
-	if cols == f.cols {
-		f.rows = rows
-		f.mu.Unlock()
-		return
-	}
+	same := cols == f.cols && rows == f.rows
 	f.cols, f.rows = cols, rows
 	f.trimToHeightLocked()
-	frame := f.repaintLocked()
+	frame := f.repaintLocked(!same)
+	f.repaints++
 	f.mu.Unlock()
 	f.out <- []byte(frame)
+}
+
+func (f *fakeConPTY) snapshotRepaints() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.repaints
 }
 
 func (f *fakeConPTY) snapshotResizes() []int {
@@ -122,19 +156,51 @@ func (f *fakeConPTY) snapshotResizes() []int {
 	return append([]int(nil), f.resizes...)
 }
 
-func (f *fakeConPTY) repaintLocked() string {
-	var rows []string
-	for _, line := range f.lines {
-		rows = append(rows, wrapAt(line, f.cols)...)
-	}
+// repaintLocked is the frame ConPTY sends after a resize: cursor hidden, the
+// size report when the build sends one and the size changed, home, every row
+// of the viewport, cursor restored and shown (P7, P14).
+//
+// The one thing the two builds do differently is how a wrapped line is laid
+// out. 19045 writes each row and a hard CRLF between them, so the frame looks
+// like the live stream (P6). 22000 writes the logical line whole and lets the
+// terminal's autowrap place it; only the last row ends in CRLF (P12). On
+// either build a short row is followed by ESC[K and a full row is not, and a
+// hard-broken line exactly the width arrives as a full row plus CRLF with no
+// ESC[K -- the one-in-W ambiguity of the hint (P13).
+func (f *fakeConPTY) repaintLocked(sizeChanged bool) string {
 	var sb strings.Builder
-	sb.WriteString("\x1b[?25l\x1b[H")
-	for y := 0; y < f.rows; y++ {
-		if y < len(rows) {
-			sb.WriteString(rows[y])
+	sb.WriteString("\x1b[?25l")
+	if f.b.sizeReport && sizeChanged {
+		fmt.Fprintf(&sb, "\x1b[8;%d;%dt", f.rows, f.cols)
+	}
+	sb.WriteString("\x1b[H")
+	var rows []string
+	written := 0
+	for _, line := range f.lines {
+		parts := wrapAt(line, f.cols)
+		rows = append(rows, parts...)
+		for i, row := range parts {
+			last := i == len(parts)-1
+			full := len([]rune(row)) == f.cols
+			sb.WriteString(row)
+			if !full {
+				sb.WriteString("\x1b[K")
+			}
+			written++
+			if written >= f.rows {
+				break
+			}
+			if last || f.b.repaintBreaksWrappedLines {
+				sb.WriteString("\r\n")
+			}
 		}
+		if written >= f.rows {
+			break
+		}
+	}
+	for ; written < f.rows; written++ {
 		sb.WriteString("\x1b[K")
-		if y < f.rows-1 {
+		if written < f.rows-1 {
 			sb.WriteString("\r\n")
 		}
 	}
@@ -684,71 +750,117 @@ func TestWinReflowLogLinesNameTheSwitchesNotJustTheMode(t *testing.T) {
 }
 
 func TestAbsorbResizeRepaintOnlyInOracleMode(t *testing.T) {
+	frame := []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h")
 	for _, mode := range []winReflowMode{winReflowOff, winReflowHint, winReflowProbe} {
 		pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 		o := newReflowOracle(pf, mode)
 		o.absorbResizeRepaint()
-		if o.divert() != nil {
+		if o.route(frame) != nil {
 			t.Errorf("%v: the repaint must reach the display in this mode", mode)
 		}
 		pf.termView.Close()
 	}
 }
 
+// The corner-drag bug of 6.15/6.16: after any resize the next repaint frame
+// must not reach the display, whatever the resize changed.
 func TestAbsorbResizeRepaintKeepsTheFrameOffTheDisplay(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
 
 	o.absorbResizeRepaint()
-	sink := o.divert()
+	frame := []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h")
+	sink := o.route(frame)
 	if sink == nil {
-		t.Fatal("a width change in oracle mode must divert the repaint")
+		t.Fatal("an armed absorber must take a repaint frame")
 	}
-
-	// Feed a frame shaped like the field logs: XTWINOPS, home, a row, and the
-	// cursor-visible terminator that ends it.
-	sink.Process([]byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h"))
+	if sink != discardParser {
+		sink.Process(frame)
+	}
 	if got := pf.termView.RowTexts()[0]; strings.Contains(got, "ConPTY") {
 		t.Fatalf("the frame reached the display: %q", got)
 	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for o.divert() != nil {
-		if time.Now().After(deadline) {
-			t.Fatal("the diversion never closed; ordinary output would be swallowed")
-		}
-		time.Sleep(5 * time.Millisecond)
+	// One frame per resize: the next chunk, frame or not, is for the display.
+	if o.route(frame) != nil {
+		t.Fatal("a second frame after one resize must reach the display")
 	}
 }
 
-func TestAbsorbResizeRepaintNeverStealsFromAPass(t *testing.T) {
+// A frame with no size report -- what a same-size ResizePseudoConsole
+// produces (6.16) -- is still a frame and is still absorbed.
+func TestAbsorbTakesASizelessRepaint(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
-	o.mu.Lock()
-	o.running = true // a pass is in flight
-	o.mu.Unlock()
-
 	o.absorbResizeRepaint()
-	o.mu.Lock()
-	sink := o.sink
-	o.mu.Unlock()
-	if sink != nil {
-		t.Fatal("absorb replaced the sink of a running oracle pass")
+	if o.route([]byte("\x1b[?25l\x1bHthree rows\x1b[K\r\n\x1b[K\x1b[?25h")) == nil {
+		t.Fatal("a same-size repaint must be absorbed like any other")
 	}
 }
 
-func TestHandleResizeAbsorbsOnHeightOnlyChange(t *testing.T) {
-	// The corner-drag bug: a height-only step let ConPTY's repaint land and
-	// erase rows the view had just refilled from history.
+// O13: ordinary output arriving inside the absorb window must reach the
+// display. The first absorber diverted the whole stream for 250ms and lost a
+// startup prompt that way.
+func TestAbsorbNeverTakesOrdinaryOutput(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
-	pf.reflowOracle = newReflowOracle(pf, winReflowOracle)
-	pf.termView.ReflowOnResize = true
-	pf.termView.Resize(80, 20)
-	pf.reflowOracle.absorbResizeRepaint()
-	if pf.reflowOracle.divert() == nil {
-		t.Fatal("a height-only resize must divert the repaint that follows it")
+	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
+	for _, chunk := range []string{"C:\\>", "\x1b]133;A\x1b\\prompt\x1b]133;B\x1b\\", "dir output\r\n", "\x1b[2Jcleared"} {
+		if o.route([]byte(chunk)) != nil {
+			t.Fatalf("ordinary output %q was taken by the absorber", chunk)
+		}
+	}
+	// And the arming survives that output, so the frame that follows is
+	// still recognised.
+	if o.route([]byte("\x1b[?25l\x1b[H\x1b[K\x1b[?25h")) == nil {
+		t.Fatal("the frame after ordinary output must still be absorbed")
+	}
+}
+
+// A frame split across two reads is taken to its close and no further.
+func TestAbsorbFollowsASplitFrameToItsClose(t *testing.T) {
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
+	if o.route([]byte("\x1b[?25l\x1b[8;24;80t\x1b[Hfirst half")) == nil {
+		t.Fatal("the opening chunk must be taken")
+	}
+	if o.route([]byte("second half\x1b[K\x1b[?25h")) == nil {
+		t.Fatal("the closing chunk must be taken")
+	}
+	if o.route([]byte("after the frame")) != nil {
+		t.Fatal("output after the close must reach the display")
+	}
+}
+
+func TestAbsorbNeverStealsFromAPass(t *testing.T) {
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+	pass := NewAnsiParser(NewTerminalView(80, 24), nil)
+	o.mu.Lock()
+	o.running, o.sink = true, pass
+	o.mu.Unlock()
+	o.absorbResizeRepaint()
+	if got := o.route([]byte("\x1b[?25l\x1b[H\x1b[?25h")); got != pass {
+		t.Fatal("a running oracle pass must keep the stream")
+	}
+}
+
+// The absorber expires: a frame long after the resize is ordinary output.
+func TestAbsorbExpires(t *testing.T) {
+	old := absorbWindow
+	absorbWindow = 10 * time.Millisecond
+	t.Cleanup(func() { absorbWindow = old })
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
+	time.Sleep(30 * time.Millisecond)
+	if o.route([]byte("\x1b[?25l\x1b[H\x1b[?25h")) != nil {
+		t.Fatal("a frame after the window must reach the display")
 	}
 }

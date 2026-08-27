@@ -13,9 +13,27 @@ func TestWindowsEnvironmentBlockOverridesAndRemoves(t *testing.T) {
 		[]string{"Path=old", "WT_SESSION=old", "KEEP=yes"},
 		map[string]string{"PATH": "new", "WT_SESSION": "", "F4_WIN_REFLOW": "probe"},
 	)
-	text := syscall.UTF16ToString(b)
+	// The block is NUL-separated and double-NUL terminated; UTF16ToString
+	// stops at the first NUL, so it must be split into entries first.
+	var entries []string
+	start := 0
+	for i, u := range b {
+		if u == 0 {
+			if i > start {
+				entries = append(entries, syscall.UTF16ToString(b[start:i]))
+			}
+			start = i + 1
+		}
+	}
+	text := strings.Join(entries, "\n")
 	for _, want := range []string{"F4_WIN_REFLOW=probe", "KEEP=yes", "PATH=new"} {
-		if !strings.Contains(text, want+"\x00") && !strings.HasSuffix(text, want) {
+		found := false
+		for _, e := range entries {
+			if e == want {
+				found = true
+			}
+		}
+		if !found {
 			t.Fatalf("environment block %q lacks %q", text, want)
 		}
 	}

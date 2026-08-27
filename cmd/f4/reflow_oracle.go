@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"runtime"
@@ -114,38 +115,16 @@ type reflowOracle struct {
 	sink *AnsiParser
 	// frameDone is signalled by the scratch view on ESC[?25h.
 	frameDone chan struct{}
-	// absorbCount accumulates the bytes the current diversion has swallowed.
-	absorbCount *int
-	lastByte    time.Time
+	// absorbArmedUntil is when a resize stops explaining a repaint frame;
+	// absorbing is the scratch parser of a frame being taken across chunks.
+	absorbArmedUntil time.Time
+	absorbing        *AnsiParser
+	absorbedFrames   int
+	lastByte         time.Time
 }
 
 func newReflowOracle(pf *PanelsFrame, mode winReflowMode) *reflowOracle {
 	return &reflowOracle{pf: pf, mode: mode}
-}
-
-// divert returns the parser that should receive PTY bytes right now: the
-// scratch parser during a pass, nil otherwise. The read loop consults it.
-func (o *reflowOracle) divert() *AnsiParser {
-	if o == nil {
-		return nil
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.lastByte = time.Now()
-	return o.sink
-}
-
-// noteAbsorbed records how much the diversion took. Called by the read loop
-// with the size of every chunk it hands to the scratch parser.
-func (o *reflowOracle) noteAbsorbed(n int) {
-	if o == nil {
-		return
-	}
-	o.mu.Lock()
-	if o.absorbCount != nil {
-		*o.absorbCount += n
-	}
-	o.mu.Unlock()
 }
 
 // noteOutput records that the shell produced output; a pass never starts
@@ -451,36 +430,37 @@ func winReflowLogLines(mode winReflowMode) []string {
 	return lines
 }
 
-// absorbWindow bounds how long a resize repaint may be kept off the display.
-// A drag delivers a frame every few milliseconds, so this only has to cover
-// one frame; anything still arriving after it is ordinary output and must be
-// shown.
+// absorbWindow is how long after a resize a repaint frame is still taken to
+// be the repaint for that resize. A drag delivers one every few milliseconds;
+// this only has to outlive the gap between ResizePseudoConsole and its frame.
 var absorbWindow = 250 * time.Millisecond
 
-// absorbResizeRepaint keeps ConPTY's own repaint away from the display for one
-// frame after f4 has resized its grid -- any resize: the height-only path
-// refills the viewport from GridHistory and is as authoritative as the re-wrap.
+// absorbResizeRepaint arms the absorber: for absorbWindow after a resize, the
+// next ConPTY repaint frame is parsed into a scratch view and dropped instead
+// of being applied to the display.
 //
-// The two of them disagree about what the viewport should contain, and f4 is
-// the one with the evidence. ConPTY keeps no scrollback (P16): its buffer is
-// the viewport and nothing else, so its repaint carries only the rows that fit
-// the *new* size and blank space for the rest. f4 has the whole session in
-// GridHistory and has just re-wrapped it to the new width. Letting the repaint
-// land afterwards replaces recovered rows with ConPTY's shorter view -- which
-// is what the field logs show: 197 repaints across 444 resize events, a
-// correct history flashing and being overwritten, and, after a shrink and
-// re-expand, blank rows painted over history that is still intact
-// (docs/TERMINAL_CONPTY_FINDINGS.md 6.8).
+// Why drop it. f4 and ConPTY disagree about what the viewport should hold
+// after a resize, and f4 is the one with the evidence: ConPTY keeps no
+// scrollback (P16), so its repaint carries only the rows that fit the new
+// size and blanks for the rest, while f4 has the session in GridHistory and
+// has just re-laid it out. Letting the frame land replaced recovered rows
+// with ConPTY's shorter view -- measured in the field as history flashing and
+// being overwritten, and as blank rows over an intact history
+// (docs/TERMINAL_CONPTY_FINDINGS.md 6.8, 6.15, 6.16). Nothing is lost by
+// dropping the frame: every row in it reached f4 once, as ordinary output.
 //
-// So on a width change the frame is parsed into a scratch view and dropped.
-// Nothing is lost by dropping it: every row it carries already reached f4 once,
-// as ordinary output, before it scrolled. This is the "accept the repaint,
-// do not fight it" rule of 3.3 in its first and smallest form -- the display
-// simply stops being the place it is accepted into.
+// Why arm rather than divert. The first version of this diverted the whole
+// stream for the window, and a startup prompt that happened to arrive inside
+// it never reached the display (O13). A frame is recognisable -- it opens
+// with ESC[?25l and closes with ESC[?25h, on every build measured (P7, P14)
+// -- so only a chunk that opens a frame is taken, and only until the frame
+// closes. Ordinary output arriving in the window goes to the display as it
+// always did. Swallowing it is no longer a matter of timing; it cannot
+// happen.
 //
-// Only in oracle mode, where ReflowOnResize gives f4's own re-wrap ownership of
-// the viewport. In every other mode ConPTY's repaint is the only thing keeping
-// the screen right, and it must land.
+// Only in oracle mode, where ReflowOnResize gives f4's own layout ownership
+// of the viewport. In every other mode ConPTY's repaint is what keeps the
+// screen right, and it must land.
 func (o *reflowOracle) absorbResizeRepaint() {
 	if o == nil || o.mode != winReflowOracle {
 		return
@@ -490,61 +470,85 @@ func (o *reflowOracle) absorbResizeRepaint() {
 		return
 	}
 	o.mu.Lock()
-	if o.running || o.sink != nil {
-		// A pass owns the stream already, or an earlier absorb is still
-		// open; either way the frame is not going to the display.
-		o.mu.Unlock()
-		return
-	}
-	// Count what the diversion swallows. This window is up to 250ms and a
-	// resize drag opens it on every width change -- 174 times in one field
-	// run -- so the windows overlap and almost the whole stream can go here
-	// for the length of the drag. The commit that added this claimed ordinary
-	// output could not be swallowed; the test behind that claim only checked
-	// that the diversion closed, never that content arriving inside it
-	// reached the display. If the shell prints during a drag, this is where
-	// it goes, and until now nothing said so.
-	absorbedBytes := 0
-	absorbStart := time.Now()
-	scratch := NewTerminalView(tv.Width, tv.Height)
-	done := make(chan struct{}, 1)
-	scratch.OnCursorShown = func() {
-		select {
-		case done <- struct{}{}:
-		default:
-		}
-	}
-	o.running = true
-	o.sink = NewAnsiParser(scratch, nil)
-	o.absorbCount = &absorbedBytes
+	o.absorbArmedUntil = time.Now().Add(absorbWindow)
 	o.mu.Unlock()
+}
 
-	go func() {
-		delimited := false
-		select {
-		case <-done: // ESC[?25h: the frame ended
-			delimited = true
-		case <-time.After(absorbWindow):
+// frameOpen and frameClose bracket a ConPTY repaint (P7).
+var (
+	frameOpen  = []byte("\x1b[?25l")
+	frameClose = []byte("\x1b[?25h")
+)
+
+// route decides where one chunk from the PTY goes: the scratch parser of a
+// running oracle pass, the absorber if this chunk opens (or continues) a
+// resize repaint while the absorber is armed, or nil for the display.
+func (o *reflowOracle) route(data []byte) *AnsiParser {
+	if o == nil {
+		return nil
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.lastByte = time.Now()
+	if o.sink != nil {
+		// An oracle pass owns the stream.
+		return o.sink
+	}
+	if o.absorbing != nil {
+		// Inside a frame being absorbed: take it through to the close.
+		p := o.absorbing
+		if bytes.Contains(data, frameClose) {
+			o.absorbing = nil
+			o.absorbedFrames++
 		}
-		o.mu.Lock()
-		o.sink = nil
-		o.running = false
-		o.mu.Unlock()
-		text := scratch.historyCellsLocked() + scratch.viewportCellsLocked()
-		rows := scratch.rowsWithTextLocked()
-		scratch.Close()
-		if !delimited {
-			// Only the bad case is worth a line. A delimited frame kept off
-			// the display is the mechanism working, and a drag produces
-			// nearly two hundred of them.
-			_ = rows
-			_ = text
-			oracleReport("absorbed %d bytes over %v", absorbedBytes,
-				time.Since(absorbStart).Round(time.Millisecond))
-			// No ESC[?25h arrived, so this was not a bracketed repaint at
-			// all. Whatever those bytes were, they were ordinary output and
-			// the display never saw them.
-			oracleReport("the absorbed bytes were NOT a delimited repaint frame; this is swallowed output, not a discarded frame")
+		return p
+	}
+	if time.Now().Before(o.absorbArmedUntil) && bytes.HasPrefix(data, frameOpen) {
+		tv := o.pf.termView
+		if tv == nil {
+			return nil
 		}
-	}()
+		scratch := NewTerminalView(tv.Width, tv.Height)
+		p := NewAnsiParser(scratch, nil)
+		if bytes.Contains(data, frameClose) {
+			// Whole frame in one chunk, the common case.
+			o.absorbedFrames++
+			o.absorbArmedUntil = time.Time{}
+			go func() { p.Process(data); scratch.Close() }()
+			return discardParser
+		}
+		o.absorbing = p
+		o.absorbArmedUntil = time.Time{}
+		return p
+	}
+	return nil
+}
+
+// discardParser swallows what is handed to it; used when the frame was
+// already parsed and closed above.
+var discardParser = NewAnsiParser(NewTerminalView(1, 1), nil)
+
+// divert is route for the tests and the oracle pass: whether a sink currently
+// owns the stream.
+func (o *reflowOracle) divert() *AnsiParser {
+	if o == nil {
+		return nil
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.lastByte = time.Now()
+	if o.sink != nil {
+		return o.sink
+	}
+	return o.absorbing
+}
+
+// absorbArmed reports whether a resize repaint would currently be absorbed.
+func (o *reflowOracle) absorbArmed() bool {
+	if o == nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return time.Now().Before(o.absorbArmedUntil) || o.absorbing != nil
 }

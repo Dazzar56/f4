@@ -166,17 +166,17 @@ func probeF4Matrix(w *writer) {
 			mode:       mode,
 			startupLen: len(startup),
 			screenLen:  len(screen),
-			nestedOut:  string(nestedOut),
 			debugLog:   d,
 			logReadErr: readErr != nil,
 			resizeOK:   resizeOK,
 		}
 		verdict, oraclePasses, oracleStamped, oracleRejected := f4MatrixVerdict(obs)
-		modeConfirmed := f4MatrixModeConfirmed(mode, d)
-		oracleSeen := f4MatrixOracleSeen(d)
+		modeConfirmed := strings.Contains(d, "REFLOW: F4_WIN_REFLOW="+mode)
+		oracleSeen := strings.Contains(d, "REFLOW_ORACLE:")
 		oracleCompleted := oracleStamped > 0
-		syncSeen := f4MatrixSyncSeen(d)
-		nestedSeen := f4MatrixNestedSeen(string(nestedOut), d)
+		syncSeen := strings.Contains(d, "ANSI_PARSER: Excising background Windows CD sync")
+		nestedSeen := strings.Contains(string(nestedOut), "F4PROBE_NESTED_ENTER_OK") ||
+			strings.Contains(d, "F4PROBE_NESTED_ENTER_OK")
 
 		w.printf("startup=%d command=%d total-screen=%d duration=%v exited=%v code=%#x\n",
 			len(startup), len(commandOut), len(screen), time.Since(started).Round(time.Millisecond), !alive, code)

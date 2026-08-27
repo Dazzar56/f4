@@ -1162,13 +1162,13 @@ func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
 	pf.ptyMutex.Unlock()
 
 	pf.noteConptyFrame(data)
-	if sink := pf.reflowOracle.divert(); sink != nil {
-		// A reflow oracle pass is in flight: these bytes are the repaint
-		// ConPTY sends for the oracle's resizes, meant for its scratch view
-		// and never for the display.
-		o := pf.reflowOracle
-		o.noteAbsorbed(len(data))
-		sink.Process(data)
+	if sink := pf.reflowOracle.route(data); sink != nil {
+		// Either an oracle pass owns the stream, or this chunk is the
+		// repaint ConPTY sent for a resize f4 has already laid out itself.
+		// Neither is for the display.
+		if sink != discardParser {
+			sink.Process(data)
+		}
 		return
 	}
 	if !shouldProcess {
@@ -5311,7 +5311,7 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 		// all: it opens with ESC[?25l ESC[H and rewrites every row. It is a
 		// frame nonetheless, and the one that wiped the screen in 6.16.
 		if bytes.HasPrefix(data, []byte("\x1b[?25l\x1b[H")) && pf.termView != nil &&
-			(pf.reflowOracle == nil || pf.reflowOracle.divert() == nil) {
+			!pf.reflowOracle.absorbArmed() {
 			// A same-size repaint that reached the display: the 6.16 bug
 			// itself, and it carries no size report to recognise it by.
 			vtui.DebugLog("REFLOW_FRAME: same-size repaint reached the display, view %dx%d bytes=%d erases=%d",
@@ -5336,7 +5336,7 @@ func (pf *PanelsFrame) noteConptyFrame(data []byte) {
 	if cols != tv.Width || rows != tv.Height {
 		match = "STALE"
 	}
-	diverted := pf.reflowOracle != nil && pf.reflowOracle.divert() != nil
+	diverted := pf.reflowOracle != nil && pf.reflowOracle.absorbArmed()
 	if diverted && match == "ok" {
 		// The normal case: a repaint for the current size, kept off the
 		// display. Both bugs in 6.15 and 6.16 were frames that were *not*

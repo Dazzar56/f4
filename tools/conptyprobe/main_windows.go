@@ -90,3 +90,11 @@ func runProbe(opts probeOptions) {
 	fmt.Printf("Written: %s -- please attach it and all f4probe-f4-*.log files.\n", logPath)
 
 }
+
+// yesno renders a verdict the way every summary line does.
+func yesno(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}

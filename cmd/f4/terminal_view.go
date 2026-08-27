@@ -1331,8 +1331,6 @@ var terminalReflowEnabled = runtime.GOOS != "windows"
 // update its row boundaries. Older rows are extruded into the PieceTable,
 // where a soft wrap is already encoded by the absence of a newline. Keeping a
 // hard bound also makes a full-history reflow cheap enough for every resize.
-const maxGridHistoryRows = 2000
-
 // maxGridHistoryLines bounds the history in *logical* lines, and
 // maxGridHistoryRowsHard bounds the physical rows only to keep memory finite.
 //
@@ -1778,7 +1776,7 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 	}
 
 	// Pull the complete editable history tail back into the relayout. This is
-	// bounded by maxGridHistoryRows. Rows older than it are already logical
+	// bounded by maxGridHistoryLines. Rows older than it are already logical
 	// text in the PieceTable and its WrapEngine receives the new width above.
 	// Reflowing only the viewport seam used to strand old rows at their former
 	// width; worse, a line crossing that cutoff could not be joined as a whole.

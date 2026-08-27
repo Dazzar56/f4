@@ -12,7 +12,6 @@ type f4MatrixObservations struct {
 	mode       string
 	startupLen int
 	screenLen  int
-	nestedOut  string
 	debugLog   string
 	logReadErr bool
 	resizeOK   bool
@@ -43,21 +42,4 @@ func f4MatrixVerdict(o f4MatrixObservations) (verdict string, passes, stamped, r
 		verdict = "incomplete"
 	}
 	return verdict, passes, stamped, rejected
-}
-
-func f4MatrixModeConfirmed(mode, debugLog string) bool {
-	return strings.Contains(debugLog, "REFLOW: F4_WIN_REFLOW="+mode)
-}
-
-func f4MatrixOracleSeen(debugLog string) bool {
-	return strings.Contains(debugLog, "REFLOW_ORACLE:")
-}
-
-func f4MatrixSyncSeen(debugLog string) bool {
-	return strings.Contains(debugLog, "ANSI_PARSER: Excising background Windows CD sync")
-}
-
-func f4MatrixNestedSeen(nestedOut, debugLog string) bool {
-	return strings.Contains(nestedOut, "F4PROBE_NESTED_ENTER_OK") ||
-		strings.Contains(debugLog, "F4PROBE_NESTED_ENTER_OK")
 }

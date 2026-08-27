@@ -9,6 +9,7 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"golang.org/x/text/unicode/norm"
 	"io"
 	"os"
 	"path/filepath"
@@ -4855,7 +4856,11 @@ func TestEditorView_ZeroAndDoubleWidthConsistency(t *testing.T) {
 		t.Errorf("Expected exactly 4 cells rendered (1 for the combining cluster, 2 for CJK, 1 for 'b'), got %d", len(cells))
 	}
 
-	if got := vtui.CellString(cells[0].Char); got != "a\u0301" {
+	// The cell must hold the whole grapheme. Whether vtui stores it
+	// decomposed (a + U+0301) or precomposed (U+00E1) is its business, and
+	// it changed once already; the test asks for the grapheme, not the
+	// encoding.
+	if got := vtui.CellString(cells[0].Char); norm.NFC.String(got) != norm.NFC.String("a\u0301") {
 		t.Errorf("Expected cells[0] to be the combining cluster, got %q", got)
 	}
 	if cells[1].Char != '世' {
