@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -380,6 +381,22 @@ func (pf *PanelsFrame) leaveHostConsole() {
 	pf.hostConsoleActive = false
 	pf.hostConsoleMu.Unlock()
 	pf.syncAutoCompleteSuppression()
+
+	// A host-console application can receive a mouse-down record without a
+	// matching release reaching f4 (notably through native Windows console
+	// input). FrameManager keeps routing all later mouse events to the frame
+	// that handled that down event until it sees a release. Queue a neutral
+	// release while returning control to the panels so a stale capture cannot
+	// block the menu bar or modal dialogs.
+	if vtui.FrameManager != nil {
+		vtui.FrameManager.PostEvent(vtinput.InputEvent{
+			Type:        vtinput.MouseEventType,
+			MouseX:      -1,
+			MouseY:      -1,
+			KeyDown:     false,
+			ButtonState: 0,
+		})
+	}
 
 	// Protective reset sequence to clean up any terminal modes left by child applications
 	var resetSeq strings.Builder
