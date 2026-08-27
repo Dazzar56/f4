@@ -263,3 +263,46 @@ only the half-lines that wrap into the top row.
 The general shape of both: a reflow is not only a function of the visible grid.
 It has to know which line breaks are real, and it has to be free to reach into
 the history for the rest of a line — in either direction.
+
+## The resize repaint, and why f4 drops it
+
+f4 re-wraps its own grid from `GridHistory` when the width changes. ConPTY
+then repaints *its* screen -- which has no history and only the rows that fit
+the new size -- and if that repaint lands afterwards it replaces the recovered
+rows with blanks. So on Windows, in `oracle` mode, the repaint is parsed into
+a scratch view and dropped. Nothing is lost by dropping it: every row it
+carries reached f4 once already, as output, before it scrolled (P16).
+
+A chunk is that repaint when **all three** hold:
+
+1. **Shape.** It opens with `ESC[?25l`, then the size report
+   `ESC[8;rows;cols t` where the build sends one (P14), then a move to home
+   (`ESC[H` or `ESC[1;1H`) -- a repaint redraws from the top. Command output
+   positions at the row it is about to write, below home. Recognising a
+   repaint by *timing*, or by the cursor hide alone, ate the middle of a `dir`
+   listing, because ConPTY hides the cursor around every batch it writes
+   (findings 6.18).
+2. **ConPTY owes one.** One repaint is owed per `ResizePseudoConsole` call and
+   paid by the next matching frame. A count, not a clock: a repaint trailing
+   its resize by a second is still taken, and a program that repaints from
+   home unprompted is not (6.19). The count is clamped at four.
+3. **Not the alternate screen.** A full-screen program -- f4 running inside
+   f4's terminal, an editor, a pager -- repaints from home exactly like a
+   resize. On the alternate screen f4 does not re-wrap at all, so ConPTY's
+   repaint is the only thing keeping that screen right and must land.
+
+The frame is taken whole or not at all, and held across reads until its
+`ESC[?25h`, so a split delivery is absorbed to the end and no further.
+
+## What the log says
+
+`REFLOW:` at startup names the mode and the switches it set.
+`REFLOW_ABSORB:` covers the first few absorbs of a burst and every fiftieth
+after. `REFLOW_SUMMARY:` on shutdown and every fiftieth child resize gives
+the mode, the resize and repaint counts, the repaints still owed, the oracle
+passes, and the history's size in rows and characters. The detailed lines --
+`REFLOW_WRAP`, `REFLOW_RESIZE`, `REFLOW_FRAME`, `REFLOW_SHOW` -- fire only
+when something is unusual: a pass that destroyed characters, a resize path
+that moved rows without re-wrapping, a frame that was not diverted or that
+declared a stale size, and a screen drawn mostly blank over a non-empty
+history.

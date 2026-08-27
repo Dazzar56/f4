@@ -50,9 +50,14 @@ log is the evidence; the finding is what the log proved.
 | 8 | When is it safe to borrow the console for that? | Watch the title ConPTY forwards. | `cmd.exe` sets the title to `... cmd.exe - <command>` while a command runs and drops the suffix when idle (P18, P19). That is the "no child is running" gate the oracle waits for. | `fakeConPTY.title`. `TestFakeConPTYTitleBusySignal`. |
 | 9 | Which resizes repaint, and how does a repaint differ from output? | Height-only resize; resize to the size ConPTY already has; compare the bytes with a command batch. | **Every** `ResizePseudoConsole` call repaints (6.15), including a call for an identical size (6.16) -- and that one carries **no** size report. Both were guessed wrong first and cost the field runs of §3. | `fakeConPTY.SetSize` repaints on every call; same size ⇒ no `ESC[8;`; a repaint goes to home after the hide, a command batch (`printBatch`) positions below it. `TestFakeConPTYRepaintsOnEveryResizeCall`, `TestAbsorbNeverTakesCommandOutput`. The probe measures all three (`repaint.*.frame/size_report/starts_at_home`). |
 
-The line that connects all nine: **ConPTY describes a screen, not a
+| 10 | Can a repaint be told from a program redrawing its own screen? | Compare a resize repaint with `cls`, and with a full-screen program (f4 inside f4) taking the alternate screen. | **Not by looking at it.** Both open with the hide and go home; the shape is necessary and not sufficient. What separates them is context f4 already has: ConPTY owes exactly one repaint per `ResizePseudoConsole` call, and a full-screen program is on the alternate screen, where f4 does not re-wrap at all (6.19). | `TestNestedFullScreenProgramKeepsItsFrames`, `TestClsStyleRepaintIsNotDroppedWithoutAResize`. |
+
+The line that connects all ten: **ConPTY describes a screen, not a
 document**. It will repaint the screen it holds, at whatever size it is asked,
-faithfully -- and it holds nothing else.
+faithfully -- and it holds nothing else. Every hard part of this work followed
+from that one sentence: the line structure has to be inferred or provoked,
+the history has to be f4's own, and a repaint that arrives has to be judged
+by what f4 asked for rather than by what it looks like.
 
 ## 2. The algorithm, and which fact each part rests on
 
@@ -130,6 +135,12 @@ person to chase something similar should not repeat it.
    on timing and on the cursor hide, which every ConPTY batch carries. Both
    were reproduced on the mocks *before* the fix, and the fix recognises a
    repaint by its shape (6.18).
+10. That shape rule was necessary and not sufficient: a program clearing the
+   screen and repainting from home matches it, and one such program is f4
+   inside f4's own terminal. Two conditions fixed it -- a repaint is dropped
+   only when ConPTY owes one, and never on the alternate screen (6.19).
+   Written after a reviewer pushed back on the claim that full-screen
+   programs were out of scope. They are not, and the claim was wrong.
 
 Two things would have shortened this to one run: asking how the symptom was
 reproduced (a corner drag interleaves width, height and same-size steps, so
@@ -150,6 +161,7 @@ breaks on some build:
 | The wide repaint rejoins lines (P15). | A build clamps the width or keeps wrapping. | The oracle aligns nothing and stamps nothing -- by design it cannot stamp what it cannot prove. The hint carries on alone. | `REFLOW_ORACLE ... nothing stamped` on every pass. |
 | The title carries the busy suffix (P18). | A shell or locale without it. | The oracle never finds a safe moment and never runs. Hint only. | No `REFLOW_ORACLE` lines at all. |
 | ConPTY keeps no scrollback (P16). | A build starts keeping it. | Harmless: f4 keeps its own and ignores what the repaint has above the viewport. | -- |
+| Exactly one repaint per `ResizePseudoConsole` call (6.19). | A build answers a resize with silence, or with two frames. | Silence: the owed count lingers and one later home-repaint is misread -- one visible frame, clamped so it cannot accumulate. Two frames: the second lands after f4's re-wrap and overwrites it, the 6.8 symptom. | `REFLOW_SUMMARY ... repaints owed` staying above zero. |
 
 The pattern is deliberate: every part of the reflow fails *toward the hint*,
 and the hint fails toward "no re-wrap", never toward lost text. Content loss
@@ -171,6 +183,17 @@ exists from 1809 and its renderer is the same code lineage, but "same
 lineage" is a hope, not a finding. 24H2/25H2 are equally unmeasured. For both,
 the probe is the instrument and the ledger's O4 is the open item; the
 `conptyBehaviour` table in the mock is where a third build's answers go.
+
+**What a user's log shows without any of this.** Three lines, budgeted so a
+drag costs a handful rather than hundreds: `REFLOW:` at startup names the mode
+and every switch it set; `REFLOW_ABSORB:` reports the first few repaints of a
+burst and every fiftieth after, with the resize and owed counts;
+`REFLOW_SUMMARY:` on shutdown and every fiftieth child resize gives mode,
+resizes, repaints absorbed and owed, oracle passes, and the history's rows and
+characters. Between them they answer, from a `--debug` log alone, every
+question each field round trip in §3 was spent on: whether the feature was on,
+whether ConPTY was resized, whether its repaints were recognised, whether the
+oracle ever ran, and whether the history is still there (6.20).
 
 **The conservative switch.** `[Terminal] WindowsReflow = off` in the config
 (or `F4_WIN_REFLOW=off` in the environment, which wins) returns the Windows
@@ -206,3 +229,9 @@ reading the window class and DA1). `WINCON.md` has the full account.
   out for can lag f4's by a step.
 - The tracker of the new overlay under minimize, occlusion and foreground
   changes has not been exercised on a live f4 (Q6, Q7).
+- One deliberate misreading remains, recorded rather than fixed: a `cls`
+  issued in the same breath as a resize can have its repaint counted as the
+  one ConPTY owed. It costs one visible, recoverable frame and never output.
+- Whether a build exists whose resize repaint does not start at home. The
+  probe now records `repaint.*.starts_at_home` precisely so this can be
+  answered without another round trip.
