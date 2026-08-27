@@ -114,6 +114,8 @@ type reflowOracle struct {
 	sink *AnsiParser
 	// frameDone is signalled by the scratch view on ESC[?25h.
 	frameDone chan struct{}
+	// absorbCount accumulates the bytes the current diversion has swallowed.
+	absorbCount *int
 	lastByte  time.Time
 }
 
@@ -131,6 +133,19 @@ func (o *reflowOracle) divert() *AnsiParser {
 	defer o.mu.Unlock()
 	o.lastByte = time.Now()
 	return o.sink
+}
+
+// noteAbsorbed records how much the diversion took. Called by the read loop
+// with the size of every chunk it hands to the scratch parser.
+func (o *reflowOracle) noteAbsorbed(n int) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	if o.absorbCount != nil {
+		*o.absorbCount += n
+	}
+	o.mu.Unlock()
 }
 
 // noteOutput records that the shell produced output; a pass never starts
@@ -420,9 +435,14 @@ func winReflowLogLines(mode winReflowMode) []string {
 	hint := mode != winReflowOff
 	rewrap := mode == winReflowOracle
 	oracle := mode == winReflowOracle || mode == winReflowProbe
+	// absorb_repaint is named here because it is a behaviour change of this
+	// session, not a long-standing one, and a field run that compares modes
+	// needs to know which of them had it. The same goes for the history bound:
+	// it used to be a row count and is now a logical-line count, and a log
+	// from before that change looks identical without this line.
 	lines := []string{fmt.Sprintf(
-		"REFLOW: F4_WIN_REFLOW=%s hint_wrap=%v rewrap_on_resize=%v oracle_passes=%v",
-		mode, hint, rewrap, oracle)}
+		"REFLOW: F4_WIN_REFLOW=%s hint_wrap=%v rewrap_on_resize=%v oracle_passes=%v absorb_repaint=%v history_bound=%d logical lines (hard ceiling %d rows)",
+		mode, hint, rewrap, oracle, rewrap, maxGridHistoryLines, maxGridHistoryRowsHard)}
 	if !rewrap {
 		lines = append(lines, "REFLOW: this mode does not re-wrap on resize, so the "+
 			"scrollback will not be re-joined however the window is dragged "+
@@ -475,6 +495,16 @@ func (o *reflowOracle) absorbResizeRepaint() {
 		o.mu.Unlock()
 		return
 	}
+	// Count what the diversion swallows. This window is up to 250ms and a
+	// resize drag opens it on every width change -- 174 times in one field
+	// run -- so the windows overlap and almost the whole stream can go here
+	// for the length of the drag. The commit that added this claimed ordinary
+	// output could not be swallowed; the test behind that claim only checked
+	// that the diversion closed, never that content arriving inside it
+	// reached the display. If the shell prints during a drag, this is where
+	// it goes, and until now nothing said so.
+	absorbedBytes := 0
+	absorbStart := time.Now()
 	scratch := NewTerminalView(tv.Width, tv.Height)
 	done := make(chan struct{}, 1)
 	scratch.OnCursorShown = func() {
@@ -485,18 +515,30 @@ func (o *reflowOracle) absorbResizeRepaint() {
 	}
 	o.running = true
 	o.sink = NewAnsiParser(scratch, nil)
+	o.absorbCount = &absorbedBytes
 	o.mu.Unlock()
 
 	go func() {
+		delimited := false
 		select {
 		case <-done: // ESC[?25h: the frame ended
+			delimited = true
 		case <-time.After(absorbWindow):
 		}
 		o.mu.Lock()
 		o.sink = nil
 		o.running = false
 		o.mu.Unlock()
+		text := scratch.historyCellsLocked() + scratch.viewportCellsLocked()
+		rows := scratch.rowsWithTextLocked()
 		scratch.Close()
-		oracleReport("absorbed one resize repaint; the display keeps f4's re-wrapped history")
+		oracleReport("absorbed %d bytes over %v (delimited=%v): %d rows, %d characters kept off the display",
+			absorbedBytes, time.Since(absorbStart).Round(time.Millisecond), delimited, rows, text)
+		if !delimited {
+			// No ESC[?25h arrived, so this was not a bracketed repaint at
+			// all. Whatever those bytes were, they were ordinary output and
+			// the display never saw them.
+			oracleReport("the absorbed bytes were NOT a delimited repaint frame; this is swallowed output, not a discarded frame")
+		}
 	}()
 }

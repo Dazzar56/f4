@@ -659,7 +659,9 @@ func TestWinReflowLogLinesNameTheSwitchesNotJustTheMode(t *testing.T) {
 	if len(oracle) != 1 {
 		t.Fatalf("oracle mode should not warn: %q", oracle)
 	}
-	if !strings.Contains(oracle[0], "rewrap_on_resize=true") ||
+	if !strings.Contains(oracle[0], "absorb_repaint=true") ||
+		!strings.Contains(oracle[0], "history_bound=") ||
+		!strings.Contains(oracle[0], "rewrap_on_resize=true") ||
 		!strings.Contains(oracle[0], "hint_wrap=true") ||
 		!strings.Contains(oracle[0], "oracle_passes=true") {
 		t.Fatalf("oracle line does not name its switches: %q", oracle[0])

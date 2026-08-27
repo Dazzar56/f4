@@ -1159,6 +1159,8 @@ func (pf *PanelsFrame) consumeLocalOutput(p PtyBackend, data []byte) {
 		// A reflow oracle pass is in flight: these bytes are the repaint
 		// ConPTY sends for the oracle's resizes, meant for its scratch view
 		// and never for the display.
+		o := pf.reflowOracle
+		o.noteAbsorbed(len(data))
 		sink.Process(data)
 		return
 	}

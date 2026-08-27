@@ -252,15 +252,6 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.SixelDisplayMode = false
 
 	// Создание сеток (Grid)
-	// The path taken when the re-wrap is off, or when only the height
-	// changed. It moves rows between the viewport and history by hand, which
-	// is a second place a row can go missing, so it reports the same way --
-	// otherwise ruling it out costs another field run.
-	defer func() {
-		vtui.DebugLog("REFLOW_RESIZE: no re-wrap; %dx%d -> %dx%d; history %d; rows with text %d",
-			tv.Width, tv.Height, w, h, len(tv.GridHistory), tv.rowsWithTextLocked())
-	}()
-
 	makeBuf := func() [][]vtui.CharInfo {
 		b := make([][]vtui.CharInfo, h)
 		for i := range b {
@@ -1373,7 +1364,8 @@ type reflowStats struct {
 	cellsTrimmed    int // cells dropped by significantWidthLocked
 	rowsOut         int // rows produced by the re-wrap
 	pushedToHistory int // rows that did not fit the viewport
-	droppedPastCap  int // rows extruded past maxGridHistoryRows: unrecoverable
+	droppedPastCap  int // rows extruded past the history bound: unrecoverable
+	blanksTrimmed   int // blank cells cut from wrapped rows: A5 says these are content
 }
 
 func (tv *TerminalView) Resize(w, h int) {
@@ -1394,6 +1386,19 @@ func (tv *TerminalView) Resize(w, h int) {
 		tv.reflowLocked(w, h)
 		return
 	}
+	// The branch that does *not* re-wrap: either the re-wrap is off, or only
+	// the height changed. It moves rows between the viewport and history by
+	// hand, which is a second place a row can go missing. The previous
+	// version of this log line was placed in ResetBuffer by mistake -- both
+	// functions contain a `makeBuf :=` line -- so it reported the scratch
+	// views the oracle and the absorber create (history 0, no rows) and said
+	// nothing at all about this path. Every "history 0" line in the field
+	// logs so far is that mistake, not a wiped display.
+	defer func() {
+		vtui.DebugLog("REFLOW_RESIZE: no re-wrap; %dx%d -> %dx%d; history %d rows / %d cells; viewport %d cells",
+			tv.Width, tv.Height, w, h, len(tv.GridHistory),
+			tv.historyCellsLocked(), tv.viewportCellsLocked())
+	}()
 
 	makeBuf := func() [][]vtui.CharInfo {
 		b := make([][]vtui.CharInfo, h)
@@ -1638,6 +1643,62 @@ func clipRowText(row []vtui.CharInfo) string {
 	return strings.TrimRight(string(b), " ")
 }
 
+// historyCellsLocked and viewportCellsLocked count every non-blank character
+// in the buffer, ignoring how it is divided into rows or logical lines.
+//
+// Both exist because the metrics used so far could not tell loss from
+// repacking. The logical-line count falls when two lines are joined by a
+// stuck wrap flag even though every character survives, and the row count is
+// pinned to the history bound by construction. A character total falls only
+// when characters are actually destroyed, which is the question.
+func (tv *TerminalView) historyCellsLocked() int {
+	n := 0
+	for _, row := range tv.GridHistory {
+		n += nonBlankCells(row)
+	}
+	return n
+}
+
+func (tv *TerminalView) viewportCellsLocked() int {
+	n := 0
+	for y := 0; y < tv.Height && y < len(tv.Lines); y++ {
+		n += nonBlankCells(tv.Lines[y])
+	}
+	return n
+}
+
+func nonBlankCells(row []vtui.CharInfo) int {
+	n := 0
+	for _, c := range row {
+		if c.Char != ' ' && c.Char != 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// blanksTrimmed reports how many *blank* cells sit past the significant width
+// -- the ones significantWidthLocked throws away.
+//
+// significantTrim, next to it, counts only non-blank cells there, so on the
+// loss it was written to detect it always answered zero: the trim cuts to the
+// last non-blank cell, and everything past it is by definition blank. Trailing
+// spaces on a soft-wrapped row are content, not padding (ledger A5) -- the
+// column alignment of `ls -la` is made of them -- so this is a real loss that
+// reported as none.
+func blanksTrimmed(row []vtui.CharInfo, width int, wrapped bool) int {
+	if !wrapped {
+		return 0
+	}
+	n := 0
+	for x := width; x < len(row); x++ {
+		if row[x].Char == ' ' || row[x].Char == 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // significantTrim reports how many cells past the significant width still held
 // something other than a blank -- the cells a re-wrap throws away.
 func significantTrim(row []vtui.CharInfo, width int) int {
@@ -1707,6 +1768,7 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 		cells := make([]vtui.CharInfo, width)
 		copy(cells, tv.Lines[y][:width])
 		tv.reflow.cellsTrimmed += significantTrim(tv.Lines[y], width)
+		tv.reflow.blanksTrimmed += blanksTrimmed(tv.Lines[y], width, wrapped)
 		tv.reflow.viewportRowsIn++
 		rows = append(rows, sourceRow{cells: cells, wrapped: wrapped, cursorX: cursorX})
 	}
@@ -1724,6 +1786,7 @@ func (tv *TerminalView) unwrapLocked(h int) []logicalLine {
 		cells := make([]vtui.CharInfo, width)
 		copy(cells, row[:width])
 		tv.reflow.cellsTrimmed += significantTrim(row, width)
+		tv.reflow.blanksTrimmed += blanksTrimmed(row, width, wrapped)
 		tv.reflow.historyRowsIn++
 		rows = append([]sourceRow{{cells: cells, wrapped: wrapped, cursorX: -1}}, rows...)
 		tv.GridHistory = tv.GridHistory[:last]
@@ -1759,6 +1822,7 @@ func (tv *TerminalView) reflowLocked(w, h int) {
 	// fault -- whether unwrapLocked collected the history at all, and whether
 	// the re-wrap then put the rows on the screen or pushed them back out.
 	fromW, fromH, histBefore := tv.Width, tv.Height, len(tv.GridHistory)
+	charsBefore := tv.historyCellsLocked() + tv.viewportCellsLocked()
 	tv.reflow = reflowStats{}
 	lines := tv.unwrapLocked(h)
 	cellsIn := 0
@@ -1767,11 +1831,20 @@ func (tv *TerminalView) reflowLocked(w, h int) {
 	}
 	defer func() {
 		st := tv.reflow
-		vtui.DebugLog("REFLOW_WRAP: %dx%d -> %dx%d; history %d -> %d; in: viewport %d + history %d rows (%d cells, %d logical lines); out: %d rows, %d to history; lost: %d skipped rows, %d trimmed cells, %d past cap",
-			fromW, fromH, w, h, histBefore, len(tv.GridHistory),
+		charsAfter := tv.historyCellsLocked() + tv.viewportCellsLocked()
+		// Characters first: it is the only figure here that falls solely when
+		// content is destroyed. Rows are bounded by construction and logical
+		// lines fall when two are merged by a stuck wrap flag, with every
+		// character intact.
+		vtui.DebugLog("REFLOW_WRAP: %dx%d -> %dx%d; chars %d -> %d (%+d); history %d -> %d rows; in: viewport %d + history %d rows (%d cells, %d logical lines); out: %d rows, %d to history; lost: %d skipped rows, %d trimmed non-blanks, %d trimmed blanks, %d past cap",
+			fromW, fromH, w, h, charsBefore, charsAfter, charsAfter-charsBefore,
+			histBefore, len(tv.GridHistory),
 			st.viewportRowsIn, st.historyRowsIn, cellsIn, len(lines),
 			st.rowsOut, st.pushedToHistory,
-			st.viewportSkipped, st.cellsTrimmed, st.droppedPastCap)
+			st.viewportSkipped, st.cellsTrimmed, st.blanksTrimmed, st.droppedPastCap)
+		if charsAfter < charsBefore {
+			vtui.DebugLog("REFLOW_WRAP: this pass destroyed %d characters", charsBefore-charsAfter)
+		}
 		if st.droppedPastCap > 0 {
 			vtui.DebugLog("REFLOW_WRAP: %d rows left GridHistory for the PieceTable in this pass and cannot be re-wrapped again (cap %d)",
 				st.droppedPastCap, maxGridHistoryRows)
