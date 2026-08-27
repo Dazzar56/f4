@@ -48,7 +48,7 @@ log is the evidence; the finding is what the log proved.
 | 6 | Do the documented flags change any of this? | `RESIZE_QUIRK` (0x2) and passthrough (0x8) vs 0, byte-for-byte diff. | Accepted, no effect on either build (P8-P10). | Not modelled: nothing in f4 depends on them. |
 | 7 | Can we *make* ConPTY tell us the line structure? | Widen the pseudoconsole to a very large width for one frame; read the repaint. | Yes: the wide repaint carries every wrapped line **rejoined** (P15), and the narrow frame after restoring the width shows where each line breaks. Two frames, one answer per row. This is the oracle. | `TestFakeConPTYWideResizeRejoins`; the oracle tests in `reflow_oracle_test.go` run the whole exchange against the fake. |
 | 8 | When is it safe to borrow the console for that? | Watch the title ConPTY forwards. | `cmd.exe` sets the title to `... cmd.exe - <command>` while a command runs and drops the suffix when idle (P18, P19). That is the "no child is running" gate the oracle waits for. | `fakeConPTY.title`. `TestFakeConPTYTitleBusySignal`. |
-| 9 | Which resizes repaint? | Height-only resize; resize to the size ConPTY already has. | **Every** `ResizePseudoConsole` call repaints (6.15), including a call for an identical size (6.16) -- and that one carries **no** size report. Both were guessed wrong first and cost the field runs of §3. | `fakeConPTY.SetSize` repaints on every call; same size ⇒ no `ESC[8;`. `TestFakeConPTYRepaintsOnEveryResizeCall`. The probe now measures this directly (section 3, "which resizes repaint"). |
+| 9 | Which resizes repaint, and how does a repaint differ from output? | Height-only resize; resize to the size ConPTY already has; compare the bytes with a command batch. | **Every** `ResizePseudoConsole` call repaints (6.15), including a call for an identical size (6.16) -- and that one carries **no** size report. Both were guessed wrong first and cost the field runs of §3. | `fakeConPTY.SetSize` repaints on every call; same size ⇒ no `ESC[8;`; a repaint goes to home after the hide, a command batch (`printBatch`) positions below it. `TestFakeConPTYRepaintsOnEveryResizeCall`, `TestAbsorbNeverTakesCommandOutput`. The probe measures all three (`repaint.*.frame/size_report/starts_at_home`). |
 
 The line that connects all nine: **ConPTY describes a screen, not a
 document**. It will repaint the screen it holds, at whatever size it is asked,
@@ -74,17 +74,21 @@ pass that cannot prove the two frames describe the same text stamps nothing
 pass, none stale, and **zero disagreements with the hint** wherever it could
 check (W8).
 
-**Ownership of the viewport during a resize (rests on steps 5 and 9).** This
-is the part that was missing, and the reason the feature looked broken for
-seven field runs after it worked. f4 re-wraps its own grid from history when
-the width changes; ConPTY then repaints its screen -- which has no history --
-and that repaint used to land on top, replacing recovered rows with blanks.
-Two rules fix it: tell ConPTY nothing when the size did not change (so it
-sends nothing), and treat the repaint that follows a resize as *the repaint
-for that resize* and keep it off the display. The absorber is armed by a
-resize, takes only a chunk that opens a frame (`ESC[?25l`), and only until
-the frame closes, so ordinary output arriving in the window cannot be
-swallowed (O13; `TestAbsorbNeverTakesOrdinaryOutput`).
+**Ownership of the viewport during a resize (rests on steps 3, 5 and 9).**
+This is the part that was missing, and the reason the feature looked broken
+for seven field runs after it worked. f4 re-wraps its own grid from history
+when the width changes; ConPTY then repaints its screen -- which has no
+history -- and that repaint used to land on top, replacing recovered rows
+with blanks. Two rules fix it: tell ConPTY nothing when the size did not
+change (so it sends nothing), and drop ConPTY's resize repaint, recognised by
+its shape and not by its timing: the cursor hide, then the size report where
+the build sends one, then the move to **home** -- a repaint redraws from the
+top, a batch of command output positions below home. Recognising it by
+timing, or by the cursor hide alone, took real output during a `dir` and lost
+it (6.18): ConPTY hides the cursor around every batch it writes. The shape
+rule cannot take output (`TestResizeDuringCommandDoesNotEatOutput`,
+`TestLongScrollingDirWithResizesLosesNothing`) and takes a late or split
+repaint just the same (`TestLateResizeRepaintIsStillAbsorbed`).
 
 A fourth fact turned out to be load-bearing for the history itself, not for
 ConPTY: the history must be bounded in **logical lines**, not rows, because
@@ -120,6 +124,12 @@ person to chase something similar should not repeat it.
    already had, each still calling `ResizePseudoConsole`, each answered by a
    repaint **without a size report** that nothing recognised (6.16). Fixed.
    Confirmed working.
+9. Careful testing of that build found two more: a late repaint landing
+   (only a few rows shown until the next resize) and -- the one that matters
+   -- a resize during `dir` eating the listing. Both were the absorber keyed
+   on timing and on the cursor hide, which every ConPTY batch carries. Both
+   were reproduced on the mocks *before* the fix, and the fix recognises a
+   repaint by its shape (6.18).
 
 Two things would have shortened this to one run: asking how the symptom was
 reproduced (a corner drag interleaves width, height and same-size steps, so
@@ -135,7 +145,7 @@ breaks on some build:
 
 | Assumption | If it changes | Consequence | Detected by |
 |---|---|---|---|
-| A resize repaint is bracketed by `ESC[?25l`/`ESC[?25h` (P7). | A build stops hiding the cursor around the frame. | The absorber takes nothing; the frame lands after f4's re-wrap and overwrites it -- the 6.8 symptom, visible, not destructive. | `REFLOW_FRAME ... diverted=false` in the log. |
+| A resize repaint opens with the cursor hide, [size report], then home (P7, P14, 6.18). | A build repaints from somewhere other than home, or stops hiding the cursor. | The absorber takes nothing; the frame lands after f4's re-wrap and overwrites it -- the 6.8 symptom, visible, not destructive. It can never take output: nothing that is not a repaint matches the shape. | `REFLOW_FRAME ... diverted=false` in the log; `repaint.*.starts_at_home=no` in the probe. |
 | A full row without `ESC[K` is a wrap (P6). | A build starts erasing after full rows too. | The hint marks nothing; history re-wraps as if every row ended a line. Wrong shape, no loss. | `REFLOW_ORACLE ... where hint and oracle disagree` becomes nonzero. |
 | The wide repaint rejoins lines (P15). | A build clamps the width or keeps wrapping. | The oracle aligns nothing and stamps nothing -- by design it cannot stamp what it cannot prove. The hint carries on alone. | `REFLOW_ORACLE ... nothing stamped` on every pass. |
 | The title carries the busy suffix (P18). | A shell or locale without it. | The oracle never finds a safe moment and never runs. Hint only. | No `REFLOW_ORACLE` lines at all. |

@@ -267,12 +267,28 @@ func probeReflow(w *writer) {
 	// portability question is about.
 	w.sub("which resizes repaint: height-only, then the same size again")
 	report := func(label string, frame []byte) {
-		sized := strings.Contains(string(frame), "\x1b[8;")
+		fs := string(frame)
+		sized := strings.Contains(fs, "\x1b[8;")
 		delimited := frameHidden(frame) && frameShown(frame)
-		w.printf("%s: %d bytes, delimited frame=%v, carries ESC[8;rows;cols t=%v\n",
-			label, len(frame), delimited, sized)
+		// The absorber's signature: after the cursor hide (and the size
+		// report, where the build sends one) the repaint goes home. Command
+		// output positions below home. A build that repaints from elsewhere
+		// breaks that rule, and this line is where it would show.
+		after := fs
+		if i := strings.Index(after, "\x1b[?25l"); i >= 0 {
+			after = after[i+6:]
+		}
+		if strings.HasPrefix(after, "\x1b[8;") {
+			if j := strings.IndexByte(after, 't'); j >= 0 {
+				after = after[j+1:]
+			}
+		}
+		home := strings.HasPrefix(after, "\x1b[H") || strings.HasPrefix(after, "\x1b[1;1H")
+		w.printf("%s: %d bytes, delimited frame=%v, carries ESC[8;rows;cols t=%v, goes home first=%v\n",
+			label, len(frame), delimited, sized, home)
 		w.summary("repaint."+label+".frame", yesno(delimited))
 		w.summary("repaint."+label+".size_report", yesno(sized))
+		w.summary("repaint."+label+".starts_at_home", yesno(home))
 	}
 	p.resize(baseW, baseH-2)
 	f1, _, _ := p.drainTimed(500*time.Millisecond, 4*time.Second)

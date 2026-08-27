@@ -882,3 +882,56 @@ size -- both bugs were exactly that), `REFLOW_SHOW` (only a mostly blank screen
 over a non-empty history), `REFLOW_PTY` (only a real child resize, now rare),
 and the absorber only when it swallowed something undelimited. `REFLOW_ENTER`
 is removed: it answered which view and which gate, and both are settled.
+
+
+### 6.18. Two field bugs after 6.16: the absorber was keyed on the wrong thing
+
+Reported after careful testing of the 6.16 build: (1) occasionally, after a
+resize, only a few bottom rows show and the history does not come back until
+the next resize; (2) a resize *during* a long `dir` blanks the middle of the
+listing in the Terminal Log -- data loss.
+
+Both were reproduced on the mocks before anything was changed
+(`reflow_repro_test.go`), which is the order this section should have
+followed from the start. Bug 2 failed on both builds at once; bug 1 needed
+the fake to deliver its repaint late.
+
+**One cause, two faces.** The absorber recognised a resize repaint by *when*
+it arrived (within 250 ms of a resize) and *how it opened* (`ESC[?25l`).
+Neither is a property of a repaint. ConPTY hides the cursor around **every**
+batch it writes, so while a command prints every chunk opens that way, and
+after a resize the absorber took real output -- bug 2. And a repaint under
+load trails its resize by more than any fixed window, so it arrived unarmed
+and landed on the display, leaving the few rows ConPTY still held -- bug 1.
+
+**What a resize repaint has that output does not**, measured on both builds
+(`TestShowShapes` in the session; the probe now records it as
+`repaint.*.starts_at_home`): after the hide, and after the size report where
+the build sends one (P14), it positions at **home** -- it is redrawing the
+screen from the top. A command batch positions at the row it is about to
+write, below home, because it appends under what is already there.
+
+**Fix.** The absorber has no window and no arming. A chunk is a resize
+repaint if it opens with the hide, then optionally `ESC[8;rows;cols t`,
+then `ESC[H` (or `ESC[1;1H`); such a frame is dropped whenever it arrives --
+late, split across reads, stale. Everything else is output and goes to the
+display, immediately after a resize or not. The tests that pin this:
+`TestResizeDuringCommandDoesNotEatOutput`,
+`TestLongScrollingDirWithResizesLosesNothing` (the photo scenario: a
+listing longer than the screen, resizes interleaved, every filename still
+present), `TestLateResizeRepaintIsStillAbsorbed`, and the earlier drag test.
+
+**The one thing this misreads**, recorded deliberately: a program that clears
+the screen and repaints from home (`cls`, a full-screen TUI) opens the same
+way, and its first frame would be dropped. That costs a visible, recoverable
+frame and never output; a full-screen program inside f4's command panel is
+not a supported case; and a `dir` never repaints from home. On a build whose
+resize repaints do *not* start at home the absorber never fires, the repaint
+lands after f4's re-wrap and the screen is wrong until the next resize --
+visible and recoverable, and exactly what the probe's new `starts_at_home`
+line is for.
+
+**Method.** The tests came first this time. Bug 2 was reproduced on the
+mocks in one run, the fix was written against the failing test, and the
+strongest version of the scenario was added before the field was asked to
+confirm anything.

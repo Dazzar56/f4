@@ -59,7 +59,9 @@ type fakeConPTY struct {
 	resizes []int
 	// repaints counts frames sent for SetSize calls, same-size ones
 	// included (6.16).
-	repaints int
+	repaints    int
+	splitFrames bool
+	frameDelay  time.Duration
 }
 
 func newFakeConPTY(cols, rows int) *fakeConPTY {
@@ -177,8 +179,43 @@ func (f *fakeConPTY) SetSize(cols, rows int) {
 	f.trimToHeightLocked()
 	frame := f.repaintLocked(!same)
 	f.repaints++
+	split := f.splitFrames
+	delay := f.frameDelay
 	f.mu.Unlock()
+	if delay > 0 {
+		// Under load ConPTY's repaint can trail the resize by longer than any
+		// fixed window; a drag at the same time makes it certain. An absorber
+		// keyed on time let such a frame land (field bug 1, 6.18).
+		go func() {
+			time.Sleep(delay)
+			f.out <- []byte(frame)
+		}()
+		return
+	}
+	if split && len(frame) > 8 {
+		// ConPTY can deliver a repaint in more than one read; a drag makes it
+		// likely. Split after the bracket-open so the absorber must hold the
+		// frame open across reads (P7, 6.16 aftermath).
+		cut := len(frame) / 2
+		f.out <- []byte(frame[:cut])
+		f.out <- []byte(frame[cut:])
+		return
+	}
 	f.out <- []byte(frame)
+}
+
+// setFrameDelay makes SetSize deliver each repaint after a delay.
+func (f *fakeConPTY) setFrameDelay(d time.Duration) {
+	f.mu.Lock()
+	f.frameDelay = d
+	f.mu.Unlock()
+}
+
+// setSplitFrames makes SetSize deliver each repaint in two reads.
+func (f *fakeConPTY) setSplitFrames(v bool) {
+	f.mu.Lock()
+	f.splitFrames = v
+	f.mu.Unlock()
 }
 
 func (f *fakeConPTY) snapshotRepaints() int {
@@ -799,60 +836,60 @@ func TestAbsorbResizeRepaintOnlyInOracleMode(t *testing.T) {
 	}
 }
 
-// The corner-drag bug of 6.15/6.16: after any resize the next repaint frame
-// must not reach the display, whatever the resize changed.
-func TestAbsorbResizeRepaintKeepsTheFrameOffTheDisplay(t *testing.T) {
+// A resize repaint is recognised by its size report and dropped whenever it
+// arrives -- no time window, no dependence on which resize it answers.
+func TestAbsorbTakesEveryFrameWithASizeReport(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
-
-	o.absorbResizeRepaint()
 	frame := []byte("\x1b[?25l\x1b[8;24;80t\x1b[Hrow from ConPTY\x1b[K\x1b[?25h")
-	sink := o.route(frame)
-	if sink == nil {
-		t.Fatal("an armed absorber must take a repaint frame")
-	}
-	if sink != discardParser {
-		sink.Process(frame)
-	}
-	if got := pf.termView.RowTexts()[0]; strings.Contains(got, "ConPTY") {
-		t.Fatalf("the frame reached the display: %q", got)
-	}
-	// One frame per resize: the next chunk, frame or not, is for the display.
-	if o.route(frame) != nil {
-		t.Fatal("a second frame after one resize must reach the display")
-	}
-}
-
-// A frame with no size report -- what a same-size ResizePseudoConsole
-// produces (6.16) -- is still a frame and is still absorbed.
-func TestAbsorbTakesASizelessRepaint(t *testing.T) {
-	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
-	defer pf.termView.Close()
-	o := newReflowOracle(pf, winReflowOracle)
-	o.absorbResizeRepaint()
-	if o.route([]byte("\x1b[?25l\x1bHthree rows\x1b[K\r\n\x1b[K\x1b[?25h")) == nil {
-		t.Fatal("a same-size repaint must be absorbed like any other")
-	}
-}
-
-// O13: ordinary output arriving inside the absorb window must reach the
-// display. The first absorber diverted the whole stream for 250ms and lost a
-// startup prompt that way.
-func TestAbsorbNeverTakesOrdinaryOutput(t *testing.T) {
-	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
-	defer pf.termView.Close()
-	o := newReflowOracle(pf, winReflowOracle)
-	o.absorbResizeRepaint()
-	for _, chunk := range []string{"C:\\>", "\x1b]133;A\x1b\\prompt\x1b]133;B\x1b\\", "dir output\r\n", "\x1b[2Jcleared"} {
-		if o.route([]byte(chunk)) != nil {
-			t.Fatalf("ordinary output %q was taken by the absorber", chunk)
+	for i := 0; i < 3; i++ {
+		sink := o.route(frame)
+		if sink == nil {
+			t.Fatalf("frame %d with a size report must be absorbed", i)
+		}
+		if sink != discardParser {
+			sink.Process(frame)
 		}
 	}
-	// And the arming survives that output, so the frame that follows is
-	// still recognised.
-	if o.route([]byte("\x1b[?25l\x1b[H\x1b[K\x1b[?25h")) == nil {
-		t.Fatal("the frame after ordinary output must still be absorbed")
+	if got := pf.termView.RowTexts()[0]; strings.Contains(got, "ConPTY") {
+		t.Fatalf("a frame reached the display: %q", got)
+	}
+	// A stale one -- declaring a size the view no longer has -- too.
+	if o.route([]byte("\x1b[?25l\x1b[8;20;60t\x1b[H\x1b[K\x1b[?25h")) == nil {
+		t.Fatal("a stale resize repaint must be absorbed as well")
+	}
+}
+
+// The Terminal Log corruption of 6.18: while a command prints, every ConPTY
+// batch opens with the cursor hide. None of it is a resize repaint and none
+// of it may be dropped -- even immediately after a resize.
+func TestAbsorbNeverTakesCommandOutput(t *testing.T) {
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+	o.absorbResizeRepaint()
+	batches := []string{
+		"\x1b[?25l\x1b[12;1H04.04.2024  16:15         3 821 568 NetworkMobileSettings.dll\x1b[K\r\n\x1b[?25h",
+		"\x1b[?25l\x1b[3;1H05.06.2021  14:05            54 056 NetworkProxyCsp.dll\x1b[K\x1b[?25h",
+		"\x1b[?25l\x1b[13;1H\x1b[2Kcleared\x1b[?25h",
+		"C:\\>", "\x1b]133;A\x1b\\prompt\x1b]133;B\x1b\\", "\x1b[2Jcleared",
+	}
+	for _, b := range batches {
+		if o.route([]byte(b)) != nil {
+			t.Fatalf("command output was taken by the absorber: %q", b)
+		}
+	}
+}
+
+// Ordinary output that itself contains the digits 8; must not be mistaken
+// for a size report: the report must follow the cursor hide directly.
+func TestAbsorbNeedsTheReportRightAfterTheCursorHide(t *testing.T) {
+	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
+	defer pf.termView.Close()
+	o := newReflowOracle(pf, winReflowOracle)
+	if o.route([]byte("\x1b[?25l\x1b[5;1Hsee \x1b[8;3;4t later\x1b[?25h")) != nil {
+		t.Fatal("a size report not directly after the cursor hide is not a frame")
 	}
 }
 
@@ -861,14 +898,16 @@ func TestAbsorbFollowsASplitFrameToItsClose(t *testing.T) {
 	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
 	defer pf.termView.Close()
 	o := newReflowOracle(pf, winReflowOracle)
-	o.absorbResizeRepaint()
 	if o.route([]byte("\x1b[?25l\x1b[8;24;80t\x1b[Hfirst half")) == nil {
 		t.Fatal("the opening chunk must be taken")
+	}
+	if !o.absorbArmed() {
+		t.Fatal("a frame is open")
 	}
 	if o.route([]byte("second half\x1b[K\x1b[?25h")) == nil {
 		t.Fatal("the closing chunk must be taken")
 	}
-	if o.route([]byte("after the frame")) != nil {
+	if o.route([]byte("\x1b[?25lafter the frame\x1b[?25h")) != nil {
 		t.Fatal("output after the close must reach the display")
 	}
 }
@@ -881,24 +920,8 @@ func TestAbsorbNeverStealsFromAPass(t *testing.T) {
 	o.mu.Lock()
 	o.running, o.sink = true, pass
 	o.mu.Unlock()
-	o.absorbResizeRepaint()
-	if got := o.route([]byte("\x1b[?25l\x1b[H\x1b[?25h")); got != pass {
+	if got := o.route([]byte("\x1b[?25l\x1b[8;24;80t\x1b[H\x1b[?25h")); got != pass {
 		t.Fatal("a running oracle pass must keep the stream")
-	}
-}
-
-// The absorber expires: a frame long after the resize is ordinary output.
-func TestAbsorbExpires(t *testing.T) {
-	old := absorbWindow
-	absorbWindow = 10 * time.Millisecond
-	t.Cleanup(func() { absorbWindow = old })
-	pf := &PanelsFrame{termView: NewTerminalView(80, 24)}
-	defer pf.termView.Close()
-	o := newReflowOracle(pf, winReflowOracle)
-	o.absorbResizeRepaint()
-	time.Sleep(30 * time.Millisecond)
-	if o.route([]byte("\x1b[?25l\x1b[H\x1b[?25h")) != nil {
-		t.Fatal("a frame after the window must reach the display")
 	}
 }
 
