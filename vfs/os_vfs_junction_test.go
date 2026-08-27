@@ -40,9 +40,14 @@ func TestResolveReparseCandidates(t *testing.T) {
 	}
 
 	resolved := filepath.Clean(candidates[0])
-	want := filepath.Clean(real)
-	// EvalSymlinks normalizes path casing on Windows (e.g. "TEMP" -> "temp"),
-	// so compare case-insensitively.
+	want, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", real, err)
+	}
+	want = filepath.Clean(want)
+	// EvalSymlinks normalizes path casing and expands 8.3 short names on
+	// Windows (e.g. "RUNNER~1" -> "runneradmin"), so compare canonical
+	// paths case-insensitively.
 	if !strings.EqualFold(resolved, want) {
 		t.Errorf("resolveReparseCandidates(%q)[0] = %q, want %q", link, resolved, want)
 	}
