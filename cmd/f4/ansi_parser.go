@@ -576,6 +576,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 				// DECTCEM. ConPTY brackets every repaint frame in ?25l ... ?25h
 				// (docs/TERMINAL_LEDGER.md P7); the reflow oracle keys on the
 				// closing one to know a frame has ended.
+				p.term.SetCursorVisible(isSet)
 				if isSet && p.term.OnCursorShown != nil {
 					p.term.OnCursorShown()
 				}
