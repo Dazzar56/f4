@@ -32,6 +32,22 @@ const (
 	// Terminal hosts the console in one and draws the text itself, so the
 	// window exists, is never shown, and is the wrong thing to draw over.
 	SourceHidden
+
+	// SourcePseudo means GetConsoleWindow returned a ConPTY pseudo console
+	// window: class PseudoConsoleWindow, owned by the terminal on the far
+	// side of the pty.
+	//
+	// It is reported *visible*, which is why looking at visibility alone was
+	// not enough. When a Windows Terminal tab is on screen OpenConsole calls
+	// ShowWindow(SW_SHOWNOACTIVATE) on it, and when the tab is hidden it
+	// minimizes it rather than hiding it, so WS_VISIBLE is never cleared and
+	// IsWindowVisible answers true either way. The window is nonetheless 0x0
+	// with no client area at all, so an overlay parented to it drew every
+	// frame into nothing and gave up with "nothing on the client area" —
+	// which is exactly what the picture-never-appears report looks like
+	// (docs/WINCON_805_HANDOVER.md F2, F3; measured again in F14 and by the
+	// field runs behind F23/F24).
+	SourcePseudo
 )
 
 func (s Source) String() string {
@@ -40,17 +56,39 @@ func (s Source) String() string {
 		return "GetConsoleWindow"
 	case SourceHidden:
 		return "a hidden pseudoconsole"
+	case SourcePseudo:
+		return "a ConPTY pseudo console window (Windows Terminal or another terminal on the far side of a pty)"
 	}
 	return "nothing"
 }
 
 // Trusted reports whether the window is one to draw on.
 //
-// Only a visible console window is. Windows Terminal is deliberately excluded
-// and needs no overlay: it renders sixel itself, so pictures go down the wire
-// as they do on any capable terminal, and drawing over a window the user never
-// sees would put them nowhere.
+// Only a real, visible classic console window is. Windows Terminal is
+// deliberately excluded and needs no overlay: it renders sixel itself, so
+// pictures go down the wire as they do on any capable terminal, and drawing
+// over its 0x0 pseudo window would put them nowhere.
 func (s Source) Trusted() bool { return s == SourceConsole }
+
+// ClassifyConsoleWindow decides what GetConsoleWindow just returned, from the
+// window's class name and whether it is on screen.
+//
+// The class is asked first and visibility second, because a pseudo console
+// window answers "visible" (see SourcePseudo). An unfamiliar class is not
+// trusted: whatever it belongs to, f4 did not create it and has no measured
+// reason to believe pixels put there will be seen.
+func ClassifyConsoleWindow(class string, visible bool) Source {
+	switch class {
+	case "PseudoConsoleWindow":
+		return SourcePseudo
+	case "ConsoleWindowClass":
+		if visible {
+			return SourceConsole
+		}
+		return SourceHidden
+	}
+	return SourceHidden
+}
 
 // CellRect turns a rectangle of character cells into pixels of the client
 // area, given the size of a cell.

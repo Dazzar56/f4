@@ -81,6 +81,8 @@ func sharedConsoleOverlay() *consoleImageOverlay {
 
 	_, src := wincon.ConsoleWindow()
 	if !src.Trusted() {
+		// Naming the source, not just refusing, is what turns a silent
+		// "no picture" into a one-line diagnosis in a user's log.
 		vtui.DebugLog("WINCON: not drawing over %v", src)
 		return nil
 	}

@@ -116,3 +116,37 @@ func TestBlitIntoClips(t *testing.T) {
 		t.Errorf("the pixel inside must land: %v", dst[0:16])
 	}
 }
+
+func TestClassifyConsoleWindowDoesNotTrustAPseudoConsole(t *testing.T) {
+	// The case this exists for: Windows Terminal's helper window answers
+	// "visible" while being 0x0, so visibility alone said "draw here" and
+	// every frame went nowhere (WINCON_805_HANDOVER F2, F3).
+	if got := ClassifyConsoleWindow("PseudoConsoleWindow", true); got != SourcePseudo {
+		t.Fatalf("a visible pseudo console window classified as %v", got)
+	}
+	if ClassifyConsoleWindow("PseudoConsoleWindow", true).Trusted() {
+		t.Fatal("a pseudo console window must never be drawn over")
+	}
+	if got := ClassifyConsoleWindow("PseudoConsoleWindow", false); got != SourcePseudo {
+		t.Fatalf("a hidden pseudo console window classified as %v", got)
+	}
+}
+
+func TestClassifyConsoleWindowTrustsOnlyAVisibleClassicConsole(t *testing.T) {
+	if got := ClassifyConsoleWindow("ConsoleWindowClass", true); got != SourceConsole || !got.Trusted() {
+		t.Fatalf("a visible classic console classified as %v", got)
+	}
+	if got := ClassifyConsoleWindow("ConsoleWindowClass", false); got != SourceHidden || got.Trusted() {
+		t.Fatalf("an off-screen classic console classified as %v", got)
+	}
+}
+
+func TestClassifyConsoleWindowDistrustsWhatItDoesNotKnow(t *testing.T) {
+	// An unfamiliar class is not evidence of anything, and a wrong guess here
+	// costs a picture drawn where nobody can see it.
+	for _, class := range []string{"", "Chrome_WidgetWin_1", "CASCADIA_HOSTING_WINDOW_CLASS"} {
+		if got := ClassifyConsoleWindow(class, true); got.Trusted() {
+			t.Errorf("class %q was trusted (%v)", class, got)
+		}
+	}
+}

@@ -52,6 +52,13 @@ func ManageSessions() {
 	// itself no-ops when -e wasn't given.
 	openDashEFileIfRequested()
 
+	// Ask the terminal what it can draw, if the environment did not say.
+	// This must happen here: after PrepareTerminal, so VT output is on and
+	// the query is asked rather than printed; before InstallConsoleOverlay,
+	// which decides on the answer; and before vtinput's reader exists, which
+	// would otherwise swallow the reply as keystrokes.
+	probeGraphicsIfUnknown(scr)
+
 	// The window over the console, for a console that cannot show a picture
 	// itself — which is conhost, where cmd.exe lives. Windows Terminal
 	// renders sixel and is left alone. Before the first frame, because

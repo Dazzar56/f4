@@ -55,6 +55,7 @@ var (
 	procGetModuleHandleW        = kernel32.NewProc("GetModuleHandleW")
 
 	procIsWindowVisible    = user32.NewProc("IsWindowVisible")
+	procGetClassNameW      = user32.NewProc("GetClassNameW")
 	procRegisterClassExW   = user32.NewProc("RegisterClassExW")
 	procCreateWindowExW    = user32.NewProc("CreateWindowExW")
 	procDestroyWindow      = user32.NewProc("DestroyWindow")
@@ -202,10 +203,19 @@ func ConsoleWindow() (uintptr, Source) {
 		return 0, SourceNone
 	}
 	visible, _, _ := procIsWindowVisible.Call(h)
-	if visible == 0 {
-		return h, SourceHidden
+	return h, ClassifyConsoleWindow(consoleWindowClass(h), visible != 0)
+}
+
+// consoleWindowClass reads the window class name. Under a pseudoconsole this
+// is the only cheap fact that separates the terminal's 0x0 helper window from
+// a real console window: both answer "visible".
+func consoleWindowClass(h uintptr) string {
+	var buf [64]uint16
+	n, _, _ := procGetClassNameW.Call(h, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if n == 0 {
+		return ""
 	}
-	return h, SourceConsole
+	return syscall.UTF16ToString(buf[:n])
 }
 
 // CellSize is the pixel size of one character cell, straight from the console.
