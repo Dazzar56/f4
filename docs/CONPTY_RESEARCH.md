@@ -730,3 +730,122 @@ to one 3658-character line), so it needs mode switching, and mode switching
 is the guessing that §7 closed. **B only if D's route turns out to be shut**;
 it buys winpty-grade behaviour, which is what Microsoft moved away from. **E
 is what ships meanwhile.**
+
+## 9. After §7: three ideas turned over, and where they land (2026-08-28)
+
+Written in the "turning it over" stage, before any code, as a record of what
+was considered and why only one of the three survives. Nothing here revives
+the absorber; §7 stands.
+
+**How conhost wraps, restated precisely.** By cells, never by words. A write
+running off the right edge sets a per-row flag (`ROW::WasWrapForced` in
+`microsoft/terminal` main) and continues on the next row; `TextBuffer::Reflow`
+joins and re-cuts by that flag. Two details matter for anyone reading rows
+from outside. A double-width glyph that will not fit in the last column moves
+to the next row and the orphaned cell is marked `WasDoubleBytePadded`, so a
+naive join would invent a space. And the deferred EOL: exactly W characters
+with nothing following leaves the cursor pending and sets no flag -- the flag
+appears only when the next glyph actually crosses. So "row is full" is not
+"row wrapped", which is the root of P13 and is unfixable from outside.
+
+**Idea 1: the minus-one probe.** Shrink the console by one column, compare
+before and after, read the wrap points out of the difference. In a frozen
+world with atomic snapshots it is sound: resolve full rows top-down against
+two predictions (hard break: one trailing character; soft wrap: trailing
+character plus a continuation), and the only unresolvable case -- a full row
+with nothing after it -- is deferred EOL, which means "no wrap" anyway.
+Three facts already in this file kill it. P16: ConPTY has no scrollback, so
+the probe can only speak about the viewport, and the pain is the history
+above it. 6.15/6.22: every `ResizePseudoConsole` repaints and moves the delta
+base, so the instrument is the mechanism that caused §7's corruption. And the
+child sees two spurious resize events. The wide-resize oracle got the same
+answer in one comparison and died not from lack of information (W8: zero
+disagreements with the hint) but from two owners on the same rows. The
+minus-one probe inherits every cause of that death and adds a more fragile
+alignment. **Rejected, and it is the same object as the oracle.**
+
+**Idea 3: give up our own history, let ConPTY keep it and ask it to re-wrap
+at 4000 on F4.** The framing is right and the mechanism is unavailable. A
+"long enough buffer" cannot be arranged from outside: ConPTY's buffer *is*
+the viewport (P16). "Always 4000" is C, already measured -- programs format
+*for* 4000 (`ls -C` collapsing to one 3658-character line). "4000 on demand"
+is the oracle, which is §7. What the idea actually asks for is a host that
+owns logical lines and hands them over on request; it needs a host that can
+be asked. That is idea 2.
+
+**Idea 2: bundle a console host of our own -- but not ReactOS's.** ReactOS
+reimplements the CSRSS/consrv era, before ConDrv and without ConPTY at all;
+its host does not speak the protocol shipping Windows uses. The right donor
+is OpenConsole: not a lookalike, but conhost itself (`src/host`, MIT). Three
+things change the economics of direction D:
+
+1. **O16 is answered by the industry, not by us.** `src/host` does build
+   standalone -- the result is OpenConsole.exe, which Windows Terminal and
+   wezterm have shipped for years; Alacritty took a PR that picks up a
+   `conpty.dll` sitting next to the binary. Microsoft publishes a signed
+   NuGet package (`Microsoft.Windows.Console.ConPTY`, 1.24.x line) containing
+   both. arm64 availability in that package is unverified and is a probe
+   question.
+2. **No cgo.** `conpty.dll` exports the same `CreatePseudoConsole` /
+   `ResizePseudoConsole` / `ClosePseudoConsole`; Go calls it through
+   `NewLazyDLL` with a kernel32 fallback. D's headline cost -- C++ in f4's
+   build -- disappears. This is D moved out of process; call it **D3**.
+3. **The D2 measurements de-risk it.** D2 died on placing a client on an
+   endpoint f4 serves. In D3 OpenConsole is the server and placement is the
+   documented `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`: `winconpty.cpp` creates
+   the server handle, opens `\Reference` from it via `CreateClientHandle`,
+   and passes that reference in the attribute; the host is launched
+   `--headless --width --height --signal --server`, with a side-by-side
+   OpenConsole preferred over the inbox conhost. D2's first measurement --
+   conhost accepting a handle f4 created -- already proved the scariest part.
+
+**What stock bundling buys, and what it does not.** Pinning removes
+cross-build variance (P6 vs P11/P12; O4), and that matters more now than when
+this file was written: upstream removed VtEngine and translates Console API
+calls straight to VT (#17510), and `ClosePseudoConsole` changed behaviour in
+26100 (24H2) -- the inbox emitter is a generation the assumption table in §4
+was never measured against. What stock does **not** buy is §7's root cause:
+two owners of the viewport and no row identity. The absorber stays dead.
+
+**Where a micro-fork earns its keep**, and it is exactly the two routes §7
+called the only honest ones:
+
+- **(a) Truth in the stream.** Guaranteed write-through of `wrapForced` rows
+  including repaints; a private marker id on the repaint frame, so a repaint
+  is recognised by its number rather than its silhouette; an event when a row
+  leaves the viewport carrying its flag. The hint stops being an inference.
+- **(b) The oracle as an API.** A retirement ring of logical lines inside the
+  host (text plus `WasWrapForced` at the moment the row leaves the circular
+  buffer -- the data is already in `TextBuffer`), and a request on a side
+  channel: "give me the last N logical lines". This is idea 3 done properly:
+  f4 re-wraps its history with no resize at all and the child sees nothing.
+  Hundreds of lines of patch, not thousands, and a working prototype turns
+  §7's "row identity in the stream that ConPTY does not provide" into an
+  upstream pitch.
+
+**Costs, honestly.** Carrying a fork (softened by pinning: ConDrv has been
+stable ~13 years, and running one build's host on other builds is what WT and
+wezterm do daily); two binaries per architecture; signing for a fork, where
+the NuGet stock is already signed; MIT is compatible with BSD-3. It does not
+help remote ssh -- a layout decided on the far side stays as received (the
+same caveat as D). A for `wsl.exe`/PowerShell 7 and E as the baseline are
+unaffected. Out of scope deliberately: `ReadProcessMemory` against another
+process's `TextBuffer` offsets, and injecting hooks into clients (the ConEmu
+route) -- both more fragile than D2.
+
+**The one-evening probe, before any code.** Take the signed 1.24.x pair from
+NuGet, bring up a session from Go through `conpty.dll`, and run the existing
+`tools/conptyprobe` against the pinned host. One run answers three things:
+whether the bundling mechanics work end to end; what the post-rewrite emitter
+looks like -- there is a real chance write-through is now total and the hint
+is exact on a pinned host, though the known post-rewrite issue list still
+mentions a cooked-read prompt misaligning when a long line wraps, so the
+neighbourhood is live; and it fills the third column of `conptyBehaviour`.
+If stock is not enough, micro-fork (b) is the minimum step; (a) only if the
+viewport's duplicated rows -- which even Windows Terminal accepts -- are also
+to be fixed.
+
+**Order after this section:** A (wsl/pwsh) unchanged and still cheapest; then
+the D3 probe above, which is now the cheapest question with the largest
+consequence, D2 having closed; D as originally written (C++ in the build) only
+if bundling turns out to be impossible; C stays demoted; E is what ships.
