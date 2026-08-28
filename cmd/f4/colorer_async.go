@@ -15,7 +15,7 @@ type colorerJob struct {
 	id           uint64
 	generation   uint64
 	target       int
-	line         string
+	lines        []string
 	contextStart int
 	context      []string
 	reset        bool
@@ -24,12 +24,19 @@ type colorerJob struct {
 	total        int
 }
 
-type colorerResult struct {
-	job        colorerJob
+type colorerLineAttrs struct {
 	attrs      []uint64
 	background uint64
-	parsedIdx  int
-	err        error
+}
+
+type colorerResult struct {
+	job   colorerJob
+	lines []colorerLineAttrs
+	// partial marks a batch cut short by a parse error on a prefetched line:
+	// the attributes up to the bad line are good, but the session's position
+	// is unknown, so the next job must re-anchor.
+	partial bool
+	err     error
 }
 
 // startWorker transfers ownership of session calls to one goroutine. A
@@ -66,7 +73,7 @@ func (ch *ColorerHighlighter) runWorker(ctx context.Context, session *colorer.Se
 			return
 		case job := <-ch.workerJobs:
 			if err := ch.prepareWorkerSession(ctx, session, job, &parsedIdx, &forgottenUpTo); err != nil {
-				ch.postColorerResult(colorerResult{job: job, parsedIdx: parsedIdx, err: err})
+				ch.postColorerResult(colorerResult{job: job, err: err})
 				return
 			}
 
@@ -74,7 +81,7 @@ func (ch *ColorerHighlighter) runWorker(ctx context.Context, session *colorer.Se
 			if !baseKnown || baseAttr != job.baseAttr || schemeGen != generation {
 				activeScheme := currentColorerSchemeName()
 				if err := session.SetHRD("rgb", activeScheme); err != nil {
-					ch.postColorerResult(colorerResult{job: job, parsedIdx: parsedIdx, err: err})
+					ch.postColorerResult(colorerResult{job: job, err: err})
 					return
 				}
 				baseAttr = job.baseAttr
@@ -88,37 +95,56 @@ func (ch *ColorerHighlighter) runWorker(ctx context.Context, session *colorer.Se
 				}
 				if _, err := session.ParseLine(contextLine); err != nil {
 					vtui.DebugLog("COLORER: ParseLine failed in context at line %d: %v", job.contextStart+i, err)
-					ch.postColorerResult(colorerResult{job: job, parsedIdx: parsedIdx, err: err})
+					ch.postColorerResult(colorerResult{job: job, err: err})
 					return
 				}
 				parsedIdx++
 				if i == len(job.context)-1 || i%16 == 0 {
-					ch.postColorerProgress(job, i+1)
+					ch.postColorerProgress(job.id, job.total, i+1)
 				}
 			}
 
 			if parsedIdx != job.target {
 				err := colorerWorkerStateError{want: job.target, got: parsedIdx}
-				ch.postColorerResult(colorerResult{job: job, parsedIdx: parsedIdx, err: err})
+				ch.postColorerResult(colorerResult{job: job, err: err})
 				return
 			}
 
+			// No progress posts inside the batch: the attributes only land on
+			// screen with the final result, so a mid-batch redraw would paint
+			// nothing new — the per-line render cost the batch exists to avoid.
+			lineResults := make([]colorerLineAttrs, 0, len(job.lines))
+			partial := false
+			for i, lineText := range job.lines {
+				if ctx.Err() != nil {
+					return
+				}
+				regions, err := session.ParseLine(lineText)
+				if err != nil {
+					vtui.DebugLog("COLORER: ParseLine failed at line %d: %v", job.target+i, err)
+					if len(lineResults) == 0 {
+						// The line the viewport actually asked for cannot be
+						// parsed; nothing to salvage.
+						ch.postColorerResult(colorerResult{job: job, err: err})
+						return
+					}
+					// A prefetched line failed: keep the finished attributes
+					// instead of throwing the whole batch away. Whether the
+					// session consumed the bad line is unknown, so its
+					// position is unknown too — the next job must re-anchor.
+					partial = true
+					break
+				}
+				parsedIdx++
+				attrs, background := ch.attrsForSyntax(lineText, regions, job.baseAttr, job.syntax)
+				lineResults = append(lineResults, colorerLineAttrs{attrs: attrs, background: background})
+			}
 			if ctx.Err() != nil {
 				return
 			}
-			regions, err := session.ParseLine(job.line)
-			parsedIdx = job.target + 1
-			if err != nil {
-				vtui.DebugLog("COLORER: ParseLine failed at line %d: %v", job.target, err)
-				ch.postColorerResult(colorerResult{job: job, parsedIdx: parsedIdx, err: err})
-				return
-			}
-
-			attrs, background := ch.attrsForSyntax(job.line, regions, job.baseAttr, job.syntax)
-			if ctx.Err() != nil {
-				return
-			}
-			if !forgetDisabled {
+			if partial {
+				parsedIdx = -1 // never matches a contextStart: forces a reset
+			} else if !forgetDisabled {
 				if keepFrom, do := colorerForgetPlan(parsedIdx, forgottenUpTo); do {
 					if err := session.ForgetBefore(keepFrom); err != nil {
 						vtui.DebugLog("COLORER: ForgetBefore unsupported, disabling for this session: %v", err)
@@ -128,12 +154,10 @@ func (ch *ColorerHighlighter) runWorker(ctx context.Context, session *colorer.Se
 					}
 				}
 			}
-			ch.postColorerProgress(job, job.total)
 			ch.postColorerResult(colorerResult{
-				job:        job,
-				attrs:      attrs,
-				background: background,
-				parsedIdx:  parsedIdx,
+				job:     job,
+				lines:   lineResults,
+				partial: partial,
 			})
 		}
 	}
@@ -178,6 +202,10 @@ func (ch *ColorerHighlighter) prepareWorkerSession(ctx context.Context, session 
 // never calls into Colorer. A jump is re-anchored to at most
 // hlColorerContext lines, and ordinary scrolling snapshots only the missing
 // forward lines.
+//
+// One job covers the whole uncoloured run starting at idx, up to
+// hlColorerBatchLines: colouring a viewport in one round trip is what keeps
+// the screen from filling in visibly line by line, one redraw per line.
 func (ch *ColorerHighlighter) queueLine(idx int, line string, baseAttr uint64) {
 	if ch.pending || ch.workerJobs == nil || ch.lineAt == nil {
 		return
@@ -211,18 +239,37 @@ func (ch *ColorerHighlighter) queueLine(idx int, line string, baseAttr uint64) {
 		contextLines = append(contextLines, contextLine)
 	}
 
+	// The batch stops at the first line that is already coloured or whose
+	// text is not available yet — the next frame picks up from there — and
+	// at the byte budget, which keeps this snapshot loop from copying
+	// megabytes inside a frame when lines are huge.
+	batch := make([]string, 0, hlColorerBatchLines)
+	batch = append(batch, line)
+	batchBytes := len(line)
+	for lineIdx := idx + 1; len(batch) < hlColorerBatchLines && batchBytes < hlColorerBatchBytes; lineIdx++ {
+		if _, cached := ch.attrCache[lineIdx]; cached {
+			break
+		}
+		text, ok := ch.lineAt(lineIdx)
+		if !ok {
+			break
+		}
+		batch = append(batch, text)
+		batchBytes += len(text)
+	}
+
 	ch.workGeneration++
 	job := colorerJob{
 		id:           ch.workGeneration,
 		generation:   ch.workGeneration,
 		target:       idx,
-		line:         line,
+		lines:        batch,
 		contextStart: start,
 		context:      contextLines,
 		reset:        reset,
 		baseAttr:     baseAttr,
 		syntax:       AppConfig.EditorColorerSyntax,
-		total:        len(contextLines) + 1,
+		total:        len(contextLines) + len(batch),
 	}
 	ch.forceReset = false
 	ch.pending = true
@@ -235,7 +282,10 @@ func (ch *ColorerHighlighter) queueLine(idx int, line string, baseAttr uint64) {
 	}
 }
 
-func (ch *ColorerHighlighter) postColorerProgress(job colorerJob, done int) {
+// postColorerProgress takes the job's id and total, not the job: the queued
+// closure would otherwise keep the whole line snapshot — up to hundreds of
+// lines of text — alive until the UI thread gets around to it.
+func (ch *ColorerHighlighter) postColorerProgress(jobID uint64, total, done int) {
 	if ch.postTask == nil || ch.owner == nil {
 		return
 	}
@@ -243,11 +293,11 @@ func (ch *ColorerHighlighter) postColorerProgress(job colorerJob, done int) {
 	redraw := ch.redraw
 	owner := ch.owner
 	postTask(func() {
-		if ch.closed || owner.highlighter != vtui.Highlighter(ch) || owner.colorerWorkID != job.id {
+		if ch.closed || owner.highlighter != vtui.Highlighter(ch) || owner.colorerWorkID != jobID {
 			return
 		}
 		owner.colorerProgress = done
-		owner.colorerTotal = job.total
+		owner.colorerTotal = total
 		if redraw != nil {
 			redraw()
 		}
@@ -277,8 +327,16 @@ func (ch *ColorerHighlighter) postColorerResult(result colorerResult) {
 			ch.disabled = true
 			vtui.DebugLog("COLORER: background highlighting stopped: %v", result.err)
 		} else {
-			ch.parsedIdx = result.parsedIdx
-			ch.storeAttrs(result.job.target, result.attrs, result.background)
+			ch.parsedIdx = result.job.target + len(result.lines)
+			for i, lineAttrs := range result.lines {
+				ch.storeAttrs(result.job.target+i, lineAttrs.attrs, lineAttrs.background)
+			}
+			if result.partial {
+				// The worker lost the session's position on the failed line;
+				// forward-feeding from here would cold-start the parser with
+				// no context. The next job re-anchors instead.
+				ch.forceReset = true
+			}
 		}
 		owner.finishColorerWork(result.job.id)
 		if redraw != nil {
