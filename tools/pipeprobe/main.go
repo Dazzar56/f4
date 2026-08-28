@@ -18,10 +18,10 @@
 // then wrap at 80 columns. So the probe asks, for every program and for ssh
 // specifically:
 //
-//	1. Does it run at all over pipes, and what does it produce?
-//	2. Does it produce VT colour when told the terminal supports it?
-//	3. Does it honour COLUMNS/LINES for the width, having no console?
-//	4. (ssh) Does it start, and does it report a size to the far end?
+//  1. Does it run at all over pipes, and what does it produce?
+//  2. Does it produce VT colour when told the terminal supports it?
+//  3. Does it honour COLUMNS/LINES for the width, having no console?
+//  4. (ssh) Does it start, and does it report a size to the far end?
 //
 // Every answer is a fact about this machine's binaries, not a guess, and the
 // combination decides whether A is worth building and whether ssh needs
