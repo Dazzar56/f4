@@ -605,11 +605,57 @@ and what `mode con` reports as the width inside it -- so that whichever route
 lands, the next step has something to compare console-API text against
 without another measurement.
 
-Run it on as many builds as can be found -- 10, 11 21H2/23H2/24H2/25H2,
-Server. Three matching reports across a decade of builds is a far better
-answer about stability than any amount of reasoning, and three differing
-ones close the direction cheaply. The next run needs to answer question 2 with a client
-actually attached: whether a message arrives, and what its bytes look like.
+**D2, fourth and final measurement (2026-08-28): the direction is closed.**
+All three attachment routes were tried in one run, and none put a client on
+our endpoint. The decisive line is from route C:
+
+    open \Connect: NTSTATUS 0xC0000008   (STATUS_INVALID_HANDLE)
+
+The driver will not open the *client* side of a console relative to a server
+handle. That side is not ours to create: the kernel makes it, when
+`AllocConsole` asks ConDrv to create the process (the `0x500037` ioctl in the
+public analyses). Route A failed as expected -- standard handles do not
+choose a console. Route B "succeeded" at nothing relevant:
+`CreatePseudoConsole` builds its own console with its own conhost inside, so
+it was never pointed at our endpoint, and it is also what left an orphaned
+console window on screen after the probe exited, since the pseudoconsole
+outlived the child the probe killed.
+
+So the tally for D2: the endpoint is creatable unprivileged (yes), the server
+role is obtainable and exclusive (yes), conhost will serve an endpoint f4
+created (yes) -- and f4 cannot place a client on it (no). Three of four, and
+the fourth is the one that matters, because a console server with no clients
+is furniture.
+
+**Why the cheap version was an illusion.** D2's appeal was "do not
+reimplement conhost, sit in front of it". But sitting in front requires
+owning both sides of the conversation, and the client side is created by the
+kernel on behalf of `AllocConsole`. To place clients f4 would have to drive
+that undocumented ioctl itself -- that is, reimplement a piece of
+`AllocConsole` on an interface with no compatibility promise, where a mistake
+strands a console window on the user's desktop. The probe demonstrated that
+failure mode by accident in its own last run. That is not a proxy; it is D
+with worse guarantees and no C++ saved.
+
+**What stands from the D2 work**, because it was not wasted:
+
+- The seat is real and obtainable, and conhost accepts an endpoint f4
+  creates. If direction D is ever built, f4 does not have to fight for the
+  server role -- it can have it.
+- The server role is exclusive, first claimant wins. Measured twice by
+  control: conhost accepted the same handle before the probe claimed the
+  role and refused it (`0x80070016`) after.
+- The ConDrv control codes and the child-object names (`\Reference`,
+  `\Input`, `\Output`) are confirmed working on 10.0.22000, and
+  `condrv.sys` still reports a Windows 8-era file version, which is the
+  strongest evidence available that this interface is not churning.
+
+**Where this leaves the list.** D2 is closed. D -- build conhost's own
+`src/host` into f4 -- keeps its appeal precisely because Microsoft already
+solved the client-attachment problem inside it, and it remains gated on the
+one-evening question of whether `src/host` builds standalone (O16). A first
+for `wsl.exe` and PowerShell 7 is untouched by any of this and is still the
+cheapest real improvement. E is what ships.
 
 **E. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under
