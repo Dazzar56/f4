@@ -11,11 +11,10 @@ import (
 const terminalRedrawInterval = 16 * time.Millisecond
 
 type terminalRedrawScheduler struct {
-	mu       sync.Mutex
-	pending  bool
-	trailing bool
-	stopped  bool
-	redraw   func()
+	mu      sync.Mutex
+	pending bool
+	stopped bool
+	redraw  func()
 }
 
 func newTerminalRedrawScheduler(redraw func()) *terminalRedrawScheduler {
@@ -28,15 +27,7 @@ func (s *terminalRedrawScheduler) request() {
 	}
 
 	s.mu.Lock()
-	if s.stopped {
-		s.mu.Unlock()
-		return
-	}
-	if s.pending {
-		// The parser has already applied this output to the terminal model.
-		// Remember that the renderer must get one more frame after the current
-		// coalescing window, or the model and the visible screen can diverge.
-		s.trailing = true
+	if s.stopped || s.pending {
 		s.mu.Unlock()
 		return
 	}
@@ -50,33 +41,11 @@ func (s *terminalRedrawScheduler) request() {
 	if redraw != nil {
 		redraw()
 	}
-	time.AfterFunc(terminalRedrawInterval, s.release)
-}
-
-// release ends one redraw window. If output arrived while that window was
-// active, issue a trailing frame and keep coalescing until that frame's own
-// window is complete.
-func (s *terminalRedrawScheduler) release() {
-	s.mu.Lock()
-	if s.stopped {
-		s.pending = false
-		s.trailing = false
-		s.mu.Unlock()
-		return
-	}
-	if !s.trailing {
+	time.AfterFunc(terminalRedrawInterval, func() {
+		s.mu.Lock()
 		s.pending = false
 		s.mu.Unlock()
-		return
-	}
-	s.trailing = false
-	redraw := s.redraw
-	s.mu.Unlock()
-
-	if redraw != nil {
-		redraw()
-	}
-	time.AfterFunc(terminalRedrawInterval, s.release)
+	})
 }
 
 func (s *terminalRedrawScheduler) stop() {
@@ -86,6 +55,5 @@ func (s *terminalRedrawScheduler) stop() {
 	s.mu.Lock()
 	s.stopped = true
 	s.pending = false
-	s.trailing = false
 	s.mu.Unlock()
 }

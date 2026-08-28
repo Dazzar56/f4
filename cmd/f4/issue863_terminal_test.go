@@ -2,31 +2,36 @@ package main
 
 import (
 	"testing"
-	"time"
+
+	"github.com/unxed/vtui"
 )
 
-// TestIssue863TerminalOutputRequestsTrailingRedraw models a two-line command
-// whose PTY output arrives in two reads. The second read must not be stranded
-// behind the redraw coalescing window: the model may contain both lines while
-// the screen still shows only the first one.
-func TestIssue863TerminalOutputRequestsTrailingRedraw(t *testing.T) {
-	redraws := make(chan struct{}, 2)
-	scheduler := newTerminalRedrawScheduler(func() { redraws <- struct{}{} })
+// TestIssue863OwnTerminalKeepsPTYHeightWhileBusy guards the resize that makes
+// bash redraw a prompt over output which did not end in a newline.
+func TestIssue863OwnTerminalKeepsPTYHeightWhileBusy(t *testing.T) {
+	vtui.SetDefaultPalette()
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
-	scheduler.request()
-	select {
-	case <-redraws:
-	case <-time.After(time.Second):
-		t.Fatal("initial terminal redraw was not requested")
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.shellMode = ShellModeOwn
+	pf.showPanels = false
+	pf.showKeyBar = true
+	pf.pty = &mockPty{}
+
+	pf.ResizeConsole(80, 25)
+	idleHeight := pf.termView.Height
+	if idleHeight <= 0 {
+		t.Fatalf("idle own terminal height = %d, want a positive size", idleHeight)
 	}
 
-	// This request is guaranteed to fall inside the coalescing interval: the
-	// first request's callback is synchronous and the interval has not elapsed.
-	scheduler.request()
-	select {
-	case <-redraws:
-	case <-time.After(2 * terminalRedrawInterval):
-		t.Fatal("terminal output arriving during redraw coalescing was dropped")
+	pf.executing = true
+	pf.ResizeConsole(80, 25)
+	if pf.termView.Height != idleHeight {
+		t.Fatalf("own terminal changed PTY height while busy: got %d, want %d", pf.termView.Height, idleHeight)
 	}
-	scheduler.stop()
+	if pf.termView.Y2 >= pf.cmdLine.Y1 {
+		t.Fatalf("own terminal overlaps f4 command line: terminal Y2=%d, command line Y1=%d", pf.termView.Y2, pf.cmdLine.Y1)
+	}
 }

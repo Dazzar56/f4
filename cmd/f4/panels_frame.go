@@ -1345,8 +1345,18 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			pf.drawHostConsoleOverlay()
 		}
 	} else {
-		// KeyBar only takes space if it's actually visible (not in AltScreen and not busy)
-		if pf.showKeyBar && !pf.termView.OnAltScreen() && !pf.isPtyBusy() {
+		// In the own terminal, the f4 command line is painted over the bottom
+		// row while the shell is idle. Reserve that row (and the configured
+		// keybar row) in the PTY viewport, even while the command is running,
+		// so a prompt after output without a trailing newline is not hidden by
+		// the command line (issue #863) and the shell size stays stable.
+		if pf.shellMode == ShellModeOwn && !pf.showPanels && !pf.termView.OnAltScreen() {
+			reserved := 1 // f4 command line
+			if pf.showKeyBar {
+				reserved++
+			}
+			termY2 = h - 1 - reserved
+		} else if pf.showKeyBar && !pf.termView.OnAltScreen() && !pf.isPtyBusy() {
 			termY2 = h - 2
 		}
 		termH := termY2 - contentY1 + 1
