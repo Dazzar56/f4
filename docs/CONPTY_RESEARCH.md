@@ -650,6 +650,28 @@ with worse guarantees and no C++ saved.
   `condrv.sys` still reports a Windows 8-era file version, which is the
   strongest evidence available that this interface is not churning.
 
+**A, and the ssh problem it has to answer.** If a user runs `ssh` from f4's
+terminal rather than f4's own SSH client, the remote session inherits every
+ConPTY limitation -- not because the far end is at fault (a Linux server
+sends clean VT), but because `ssh.exe` is a *local* program and f4 gives it
+its console. Under pipes that disappears: `ssh.exe` forwards bytes, f4 wraps
+them, and the scrollback is f4's own. The catch is that `ssh.exe` learns the
+window size from the console, and over pipes there is none -- so the far
+end's shell would lay out for 80 columns unless the size can be passed some
+other way. `tools/pipeprobe` asks that, along with the rest of what A needs,
+in one run: what WSL, PowerShell 7, PowerShell 5 and cmd produce with no
+console at all; whether colour survives when `TERM`/`COLORTERM` say it
+should; whether `COLUMNS`/`LINES` are honoured for width; and whether
+`ssh.exe` runs at all that way. One question needs a live server and is
+asked of the tester directly: run `ssh <host> "stty size; tput cols"` from
+f4 and from `cmd.exe`, and compare.
+
+If `COLUMNS` turns out to be honoured, A covers remote work too and the
+`ssh` case needs nothing special. If it is not, the honest options are a
+session whose width is fixed at connect time, or offering to open `ssh …`
+through f4's own SSH client -- an offer, like an IDE's "open in integrated
+terminal", not a silent substitution.
+
 **Where this leaves the list.** D2 is closed. D -- build conhost's own
 `src/host` into f4 -- keeps its appeal precisely because Microsoft already
 solved the client-attachment problem inside it, and it remains gated on the
