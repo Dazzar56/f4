@@ -747,6 +747,9 @@ func SetupUI() {
 	}
 	previousEventFilter := vtui.FrameManager.EventFilter
 	vtui.FrameManager.EventFilter = func(e *vtinput.InputEvent) bool {
+		if handleTranslatorMouseEvent(e) {
+			return true
+		}
 		if previousEventFilter != nil && previousEventFilter(e) {
 			return true
 		}
