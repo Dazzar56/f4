@@ -78,8 +78,24 @@ func reportEnvironment() {
 	for _, name := range []string{"ssh.exe", "wsl.exe", "pwsh.exe", "powershell.exe", "git.exe"} {
 		if p, err := exec.LookPath(name); err == nil {
 			say("%-15s %s\n", name+":", p)
+		} else if p := findPwshOutsidePath(name); p != "" {
+			say("%-15s %s (not on PATH)\n", name+":", p)
 		} else {
 			say("%-15s not found\n", name+":")
+		}
+	}
+	// A distribution is what makes wsl.exe useful; without one every call
+	// returns the help text, which is what the first run recorded.
+	if _, err := exec.LookPath("wsl.exe"); err == nil {
+		text, _ := runPiped(nil, "wsl.exe", "--list", "--quiet")
+		if looksUTF16(text) {
+			text = decodeUTF16(text)
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			say("wsl distributions: none installed (so wsl.exe answers with help text)\n")
+		} else {
+			say("wsl distributions: %s\n", strings.Join(strings.Fields(text), ", "))
 		}
 	}
 	say("TERM=%s COLORTERM=%s COLUMNS=%s LINES=%s\n\n",
@@ -87,11 +103,60 @@ func reportEnvironment() {
 		orNone(os.Getenv("COLUMNS")), orNone(os.Getenv("LINES")))
 }
 
+// looksUTF16 spots the pattern of UTF-16LE ASCII: every other byte zero.
+func looksUTF16(s string) bool {
+	if len(s) < 8 {
+		return false
+	}
+	zeros := 0
+	n := len(s)
+	if n > 64 {
+		n = 64
+	}
+	for i := 1; i < n; i += 2 {
+		if s[i] == 0 {
+			zeros++
+		}
+	}
+	return zeros > n/4
+}
+
+func decodeUTF16(s string) string {
+	var b strings.Builder
+	for i := 0; i+1 < len(s); i += 2 {
+		r := rune(uint16(s[i]) | uint16(s[i+1])<<8)
+		if r != 0 {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func orNone(s string) string {
 	if s == "" {
 		return "(unset)"
 	}
 	return s
+}
+
+// findPwshOutsidePath looks where PowerShell 7 installs itself, since it is
+// often present without being on PATH -- and it is direction A's strongest
+// candidate, so "not found" should mean not installed.
+func findPwshOutsidePath(name string) string {
+	if name != "pwsh.exe" {
+		return ""
+	}
+	for _, dir := range []string{
+		os.Getenv("ProgramFiles") + `\PowerShell\7`,
+		os.Getenv("ProgramFiles") + `\PowerShell\7-preview`,
+		os.Getenv("LOCALAPPDATA") + `\Microsoft\WindowsApps`,
+	} {
+		p := filepath.Join(dir, "pwsh.exe")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func windowsVersion() string {
@@ -134,6 +199,12 @@ func runPiped(env []string, name string, args ...string) (string, error) {
 func describe(text string, err error) {
 	if err != nil {
 		say("    error: %v\n", err)
+	}
+	// wsl.exe writes UTF-16LE to a pipe, so a report that only counted bytes
+	// would call its output unreadable noise. Say so instead.
+	if looksUTF16(text) {
+		say("    (UTF-16LE output; decoded below)\n")
+		text = decodeUTF16(text)
 	}
 	esc := strings.Count(text, "\x1b")
 	lines := strings.Count(text, "\n")
@@ -223,12 +294,14 @@ func reportSSH() {
 	say("  `ssh -G` with COLUMNS=137 (does it run, and what does it resolve):\n")
 	describe(text, err)
 
-	say("\n  What is still unknown after this: whether ssh.exe *sends* 137 to the\n")
-	say("  far end. That needs a real server, so if you have one to hand:\n")
-	say("      ssh <host> \"stty size; tput cols\"\n")
-	say("  run once from f4's terminal and once from cmd.exe, and paste both.\n")
-	say("  A difference is the size of the problem; no difference means ssh\n")
-	say("  takes the size from somewhere f4 can control.\n\n")
+	say("\n  What is still unknown after this: whether ssh.exe *sends* a usable\n")
+	say("  width to the far end. That needs a real server:\n")
+	say("      ssh -t <host> \"stty size; tput cols\"\n")
+	say("  Note the -t. Without it ssh requests no pty at all, both sides answer\n")
+	say("  'Inappropriate ioctl for device', and the comparison measures nothing\n")
+	say("  -- which is exactly what the first attempt at this question did.\n")
+	say("  Non-interactive ssh has no pty and so no wrapping problem; only the\n")
+	say("  interactive case is at stake.\n\n")
 }
 
 // reportConsoleUsers separates the programs that genuinely need a console

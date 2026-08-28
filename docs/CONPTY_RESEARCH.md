@@ -672,6 +672,37 @@ session whose width is fixed at connect time, or offering to open `ssh …`
 through f4's own SSH client -- an offer, like an IDE's "open in integrated
 terminal", not a silent substitution.
 
+**A, measured (2026-08-28, `tools/pipeprobe`, 10.0.22000).** The result is
+weaker than the argument for A implied, and two of the four questions were
+asked badly. Recorded as it stands, because the tester has run enough probes
+for this issue and the remaining gaps do not need another one to be
+described honestly.
+
+| Candidate | Over pipes, no console | Reading |
+| --- | --- | --- |
+| `cmd /c dir`, `where.exe` | works, plain text | as expected; produces output but formats for 80 columns without a console, so it stays on ConPTY anyway |
+| `cmd /c mode con` | nothing, fails | the signature of a program that genuinely needs a console -- so the split A relies on is measurable |
+| **PowerShell 5.1** | **nothing, 0 bytes** | **needs a console.** It is the PowerShell present on most machines, and it cannot be routed to pipes |
+| PowerShell 7 (`pwsh`) | not installed here | untested; it was A's strongest candidate |
+| **WSL** | every call returned the help text | no distribution installed on this machine, so nothing was exercised |
+| `ssh.exe` (OpenSSH 8.1p1) | runs: `-V` and `-G` both fine | it starts and reads config with no console, which is the necessary condition |
+
+Two incidental findings worth keeping. `wsl.exe` writes **UTF-16LE** to a
+pipe, not UTF-8 -- visible in the help text it emitted -- so any pipe route
+for WSL needs a decode step. And the live-server check was asked wrongly:
+`ssh host "command"` does not request a pty at all, which is why both runs
+returned `Inappropriate ioctl for device` and an empty `$TERM`, identically.
+The correct form is `ssh -t host "stty size; tput cols"`. That mistake taught
+something anyway: **non-interactive ssh has no pty and therefore no wrapping
+problem** -- only interactive sessions are at stake.
+
+**Status of A: not disproved, not demonstrated.** Of the three programs it
+was supposed to help, one needs a console after all (PowerShell 5), one was
+untestable on this machine (WSL), and the third (ssh) is confirmed only to
+start. A meaningful verdict needs a machine with WSL and `pwsh` installed and
+one `ssh -t` comparison; until then A is a hypothesis with one necessary
+condition met, and it should not be planned around.
+
 **Where this leaves the list.** D2 is closed. D -- build conhost's own
 `src/host` into f4 -- keeps its appeal precisely because Microsoft already
 solved the client-attachment problem inside it, and it remains gated on the
@@ -684,10 +715,11 @@ reflow there is free, and it may be all users need from history under
 Windows. The honest minimum, and what ships today while A through D are
 decided.
 
-Order to try. **A first for `wsl.exe` and PowerShell 7**: there f4 is the
-terminal, the wrap is its own by construction, and the work is nearly free --
-it is the same thing f4's own SSH client already does for remote sessions,
-with a different transport. **Then D2's probe run**, because it is the cheapest question with the
+Order to try. **A first for `wsl.exe` and PowerShell 7**, if a machine with
+both can be found: there f4 would be the terminal and the wrap its own by
+construction. The one measurement so far neither confirmed nor refuted it --
+PowerShell 5 turned out to need a console, WSL was not installed, and ssh
+was only shown to start (see "A, measured" above). **Then D2's probe run**, because it is the cheapest question with the
 largest consequence: if f4 can hold the server endpoint and let the real
 conhost do the work, the wrap stops being a guess and no C++ enters the
 build. **D itself only if D2's seat turns out to be unavailable** -- it buys
