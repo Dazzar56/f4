@@ -12,6 +12,7 @@ import (
 )
 
 func TestIssue635NetworkDropWhileProgressScreenIsBackground(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	oldTimeout := updateDownloadIdleTimeout
 	updateDownloadIdleTimeout = 50 * time.Millisecond
