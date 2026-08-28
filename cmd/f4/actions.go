@@ -294,18 +294,21 @@ func actionCommandHistory(pf *PanelsFrame) {
 	}
 
 	// Shared "paste selected command" path used by Enter and mouse click.
-	pasteCurrent := func() {
-		_, rec, ok := search.selected()
-		if !ok {
-			return
-		}
+	// The record is passed in because VMenu.Close restores its initial
+	// selection, which would otherwise make Enter paste a different row.
+	pasteRecord := func(rec HistoryRecord) {
 		search.cleanup()
 		pf.cmdLine.Edit.SetText(rec.Name)
 		pf.cmdLine.Edit.HistoryPos = -1
 	}
 	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
-	// the menu automatically — pasteCurrent only does the side effect.
-	menu.OnAction = func(int) { pasteCurrent() }
+	// the menu automatically — pasteRecord only does the side effect.
+	menu.OnAction = func(int) {
+		_, rec, ok := search.selected()
+		if ok {
+			pasteRecord(rec)
+		}
+	}
 
 	// Setup shortcuts
 	menu.OnKeyDown = func(e *vtinput.InputEvent) bool {
@@ -336,7 +339,7 @@ func actionCommandHistory(pf *PanelsFrame) {
 				return true
 			}
 			menu.Close()
-			pasteCurrent()
+			pasteRecord(rec)
 			return true
 		}
 

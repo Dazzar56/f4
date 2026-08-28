@@ -1833,7 +1833,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0:
 			return false // Let the framework handle Ctrl+W
 		case e.VirtualKeyCode >= vtinput.VK_F1 && e.VirtualKeyCode <= vtinput.VK_F12:
-			return false // Let global hotkeys handle it
+			// KeyBar clicks inject F-key events after the frame-manager filter
+			// has already been bypassed. zoin-bot routes those events through
+			// the configured editor action before yielding to framework fallbacks.
+			if MacroMgr.LookupHotkey(e) {
+				return true
+			}
+			return false // Let framework fallbacks handle unbound F-keys
 		}
 		if MacroMgr.LookupHotkey(e) {
 			return true

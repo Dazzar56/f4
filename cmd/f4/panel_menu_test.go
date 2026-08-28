@@ -66,3 +66,32 @@ func findSideDriveMenuItem(items []vtui.MenuItem, label, shortcut string, comman
 	}
 	return false
 }
+
+func TestPanelsFrame_SideMenuExposesWorkspaceHotkeys(t *testing.T) {
+	items := (&PanelsFrame{}).leftMenu().SubItems
+	for _, tc := range []struct {
+		command  int
+		label    string
+		shortcut string
+	}{
+		{command: CmWorkspaceNew, label: "Action.Workspace.New", shortcut: "Ctrl+N"},
+		{command: CmWorkspaceClose, label: "Action.Workspace.Close", shortcut: "Ctrl+W"},
+	} {
+		found := false
+		for _, item := range items {
+			if item.Command != tc.command {
+				continue
+			}
+			found = true
+			if item.Text != Msg(tc.label) {
+				t.Errorf("workspace command %d label = %q, want %q", tc.command, item.Text, Msg(tc.label))
+			}
+			if item.Shortcut != tc.shortcut {
+				t.Errorf("workspace command %d shortcut = %q, want %q", tc.command, item.Shortcut, tc.shortcut)
+			}
+		}
+		if !found {
+			t.Errorf("left menu has no workspace command %d", tc.command)
+		}
+	}
+}

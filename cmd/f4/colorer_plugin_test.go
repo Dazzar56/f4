@@ -157,6 +157,118 @@ func TestColorerQueueLineBoundsDocumentSnapshot(t *testing.T) {
 	}
 }
 
+// One job covers the whole uncoloured run, so a viewport colours in a single
+// worker round trip instead of one redraw per line.
+func TestColorerQueueLineBatchesTheUncolouredRun(t *testing.T) {
+	ch := &ColorerHighlighter{
+		lineAt:     func(idx int) (string, bool) { return "text", idx < 50 },
+		workerJobs: make(chan colorerJob, 1),
+	}
+
+	ch.queueLine(10, "target", 0)
+	job := <-ch.workerJobs
+	if len(job.lines) != 40 {
+		t.Fatalf("batch holds %d lines, want the 40 remaining document lines", len(job.lines))
+	}
+	if job.lines[0] != "target" {
+		t.Errorf("the first batched line must be the caller's snapshot, got %q", job.lines[0])
+	}
+	if job.total != len(job.context)+len(job.lines) {
+		t.Errorf("total = %d, want context %d + batch %d", job.total, len(job.context), len(job.lines))
+	}
+}
+
+func TestColorerQueueLineBatchStopsAtCachedLines(t *testing.T) {
+	ch := &ColorerHighlighter{
+		attrCache:  map[int][]uint64{12: {0}},
+		lineAt:     func(idx int) (string, bool) { return "text", true },
+		workerJobs: make(chan colorerJob, 1),
+	}
+
+	ch.queueLine(10, "target", 0)
+	job := <-ch.workerJobs
+	if len(job.lines) != 2 {
+		t.Fatalf("batch holds %d lines, want 2: it must stop at the already-coloured line", len(job.lines))
+	}
+}
+
+func TestColorerQueueLineBatchIsBounded(t *testing.T) {
+	ch := &ColorerHighlighter{
+		lineAt:     func(idx int) (string, bool) { return "text", true },
+		workerJobs: make(chan colorerJob, 1),
+	}
+
+	ch.queueLine(0, "target", 0)
+	job := <-ch.workerJobs
+	if len(job.lines) != hlColorerBatchLines {
+		t.Fatalf("batch holds %d lines, want the hlColorerBatchLines cap of %d", len(job.lines), hlColorerBatchLines)
+	}
+}
+
+// Lines are cut at 64 KB each, so a line count alone would let one snapshot
+// copy ~12.8 MB inside a frame; the byte budget bounds the copy instead.
+func TestColorerQueueLineBatchRespectsTheByteBudget(t *testing.T) {
+	big := strings.Repeat("x", 64*1024)
+	ch := &ColorerHighlighter{
+		lineAt:     func(idx int) (string, bool) { return big, true },
+		workerJobs: make(chan colorerJob, 1),
+	}
+
+	ch.queueLine(0, big, 0)
+	job := <-ch.workerJobs
+	if want := hlColorerBatchBytes / len(big); len(job.lines) != want {
+		t.Fatalf("batch holds %d huge lines, want %d: the byte budget must cut it short", len(job.lines), want)
+	}
+}
+
+// A parse error on a prefetched line must not throw away the attributes the
+// batch already computed, and must not disable highlighting — only the line
+// the viewport actually asked for is allowed to be terminal. The session's
+// position after the failure is unknown, so the next job must re-anchor.
+func TestColorerPartialResultKeepsAttrsAndForcesReanchor(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pt := piecetable.New([]byte("a\nb\nc\n"))
+	ev := NewEditorView(pt, nil, "test.txt")
+	defer ev.Close()
+
+	ch := &ColorerHighlighter{
+		owner:          ev,
+		postTask:       func(f func()) { f() },
+		redraw:         func() {},
+		pending:        true,
+		workGeneration: 1,
+	}
+	ev.highlighter = ch
+
+	job := colorerJob{id: 1, generation: 1, target: 10, lines: []string{"l0", "l1", "l2"}}
+	ch.postColorerResult(colorerResult{
+		job:     job,
+		lines:   []colorerLineAttrs{{attrs: []uint64{1}}, {attrs: []uint64{2}}},
+		partial: true,
+	})
+
+	if ch.disabled {
+		t.Error("a prefetch failure must not disable highlighting")
+	}
+	if ch.pending {
+		t.Error("the finished job must clear pending")
+	}
+	if !ch.forceReset {
+		t.Error("a partial result must force the next job to re-anchor")
+	}
+	if ch.parsedIdx != 12 {
+		t.Errorf("parsedIdx = %d, want target + the 2 salvaged lines = 12", ch.parsedIdx)
+	}
+	if _, ok := ch.attrCache[11]; !ok {
+		t.Error("salvaged attributes were not stored")
+	}
+	if _, ok := ch.attrCache[12]; ok {
+		t.Error("the unparsed line must not get attributes")
+	}
+}
+
 func TestColorerCancelInvalidatesWork(t *testing.T) {
 	ch := &ColorerHighlighter{pending: true, workGeneration: 7}
 	ch.Cancel()
@@ -282,6 +394,12 @@ func TestColorer_DownloadColorerSchemas(t *testing.T) {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
+
+	// Preserve an initialized config cache when this test temporarily swaps
+	// the directory below. Otherwise cleanup can restore an empty cache while
+	// configDirOnce remains consumed, making later shuffled tests resolve
+	// relative paths.
+	_ = GetF4ConfigDir()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")

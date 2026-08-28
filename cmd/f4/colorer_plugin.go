@@ -50,6 +50,22 @@ const (
 	// makes; batching keeps the cost negligible while still bounding memory
 	// well under file size. See HIGHLIGHT.md, item 9 and item 4's log.
 	hlColorerForgetEvery = 1000
+
+	// How many uncoloured lines one worker job may take on, counting the
+	// line that missed the cache. One job per line meant one full UI round
+	// trip — worker, PostTask, whole-screen redraw — per line, and the
+	// viewport visibly filled with colour line by line. A batch colours a
+	// screen in a single round trip; the cap only has to exceed any
+	// realistic terminal height.
+	hlColorerBatchLines = 200
+
+	// How much line text one batch snapshot may copy on the UI render
+	// thread. Lines are cut at 64 KB each, so a line count alone bounds the
+	// snapshot at ~12.8 MB — fine as a parse budget, not as a synchronous
+	// copy inside a frame. Ordinary code is a few dozen bytes per line and
+	// never notices this; only files with enormous lines trade batch depth
+	// for a bounded frame.
+	hlColorerBatchBytes = 256 * 1024
 )
 
 // The style bits an hrd assign carries, as StyledRegion defines them.

@@ -142,8 +142,12 @@ func TestFolderHistoryNavigationAndMenuDoNotReorderHistory(t *testing.T) {
 	if menu.SelectPos < 0 || menu.SelectPos >= len(menu.Items) {
 		t.Fatalf("initial menu selection = %d, item count %d", menu.SelectPos, len(menu.Items))
 	}
-	if selected := menu.Items[menu.SelectPos].Text; !sameFolderHistoryPath(selected, middle) {
-		t.Fatalf("initial menu selection = %q, want current folder %q", selected, middle)
+	if activeHistorySearch == nil {
+		t.Fatal("folder history did not install a history search")
+	}
+	_, selected, ok := activeHistorySearch.selected()
+	if !ok || !sameFolderHistoryPath(selected.Name, middle) {
+		t.Fatalf("initial menu selection = %q, want current folder %q", selected.Name, middle)
 	}
 	// Display order is oldest -> newest. Select the missing entry; activation
 	// must skip it and continue downwards to the newer, accessible entry.
