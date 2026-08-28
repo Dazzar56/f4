@@ -95,3 +95,50 @@ func TestPanelsFrame_SideMenuExposesWorkspaceHotkeys(t *testing.T) {
 		}
 	}
 }
+
+func TestPanelsFrame_GetMenuBarKeepsNativeWorkspaceHotkeys(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldHotkeys := GlobalHotkeysMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	t.Cleanup(func() { GlobalHotkeysMgr = oldHotkeys })
+
+	pf := setupMockPanelsFrame(t)
+	t.Cleanup(pf.Close)
+	vtui.FrameManager.Push(pf)
+	menuFrame := vtui.NewVMenu("test")
+	vtui.FrameManager.Push(menuFrame)
+	t.Cleanup(func() { vtui.FrameManager.Pop() })
+
+	find := func(command int) *vtui.MenuItem {
+		menu := pf.GetMenuBar()
+		for i := range menu.Items[0].SubItems {
+			item := &menu.Items[0].SubItems[i]
+			if item.Command == command {
+				return item
+			}
+		}
+		return nil
+	}
+
+	if item := find(CmWorkspaceNew); item == nil || item.Shortcut != "Ctrl+N" {
+		if item == nil {
+			t.Fatal("Left menu has no New workspace item after GetMenuBar refresh")
+		}
+		t.Fatalf("New workspace shortcut after GetMenuBar refresh = %q, want Ctrl+N", item.Shortcut)
+	}
+	if item := find(CmWorkspaceClose); item == nil || item.Shortcut != "Ctrl+W" {
+		if item == nil {
+			t.Fatal("Left menu has no Close workspace item after GetMenuBar refresh")
+		}
+		t.Fatalf("Close workspace shortcut after GetMenuBar refresh = %q, want Ctrl+W", item.Shortcut)
+	}
+
+	GlobalHotkeysMgr.Bind("Shell", "CtrlN", "None")
+	if item := find(CmWorkspaceNew); item == nil || item.Shortcut != "" {
+		if item == nil {
+			t.Fatal("Left menu lost New workspace item after explicit unbind")
+		}
+		t.Fatalf("explicitly unbound New workspace shortcut = %q, want empty", item.Shortcut)
+	}
+}

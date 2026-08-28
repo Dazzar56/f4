@@ -51,9 +51,7 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 			OnClick:  func() { RunAction(a.Name) },
 			UserData: menuHistoryItemKey(a.Name),
 		}
-		if hm := GlobalHotkeysMgr; hm != nil {
-			item.Shortcut = FormatKeyForUI(hm.GetKeyForAction(area, a.Name))
-		}
+		item.Shortcut = MenuShortcutsForAction(area, a.Name)
 		if a.MenuLast {
 			if a.MenuSeparatorBefore {
 				m.pinned = append(m.pinned, vtui.MenuItem{Separator: true})

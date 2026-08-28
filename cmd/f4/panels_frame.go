@@ -808,7 +808,9 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 		pf.menuBar.Items[4].SubItems[i+5].Text = getSortMenuText(rSort, item.mode, "&"+Msg("Menu."+item.key))
 	}
 
-	// Update shortcuts dynamically from HotkeyManager
+	// Update shortcuts dynamically from the action registry. Framework-owned
+	// native keys are intentionally absent from HotkeyManager defaults, but
+	// custom side menus must still advertise them (issue #651).
 	if hm := GlobalHotkeysMgr; hm != nil {
 		area := "Shell"
 		for i := range pf.menuBar.Items {
@@ -818,11 +820,7 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 					if shortcutAction, exists := commandShortcutActionName[sub.Command]; exists {
 						actName = shortcutAction
 					}
-					if key := hm.GetKeyForAction(area, actName); key != "" {
-						sub.Shortcut = FormatKeyForUI(key)
-					} else {
-						sub.Shortcut = ""
-					}
+					sub.Shortcut = MenuShortcutsForAction(area, actName)
 				}
 			}
 		}
