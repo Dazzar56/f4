@@ -86,10 +86,36 @@ func (s *historySearch) applyFilter() {
 	s.menu.ItemCount = len(items)
 	s.menu.TopPos = 0
 	s.resize()
+	// VMenu's default renderer draws MenuItem.Text after the leading margin,
+	// without knowing about the frame's right border. Keep its copy bounded so
+	// a long command cannot paint into the terminal outside the dialog. The
+	// custom renderer below still obtains the complete text from s.all, so
+	// filtering and command insertion retain the original value.
+	for i := range s.menu.Items {
+		entry, ok := s.menu.Items[i].UserData.(historySearchEntry)
+		if !ok || entry.index < 0 || entry.index >= len(s.all) {
+			continue
+		}
+		s.menu.Items[i].Text = s.defaultMenuText(s.displayText(s.all[entry.index]))
+	}
 	// Open at the most recent visible entry. SetSelectPos also scrolls it into
 	// view, which places a long history at the bottom of the viewport.
 	s.menu.SetSelectPos(len(items) - 1)
 	vtui.FrameManager.Redraw()
+}
+
+func (s *historySearch) defaultMenuText(text string) string {
+	// VMenu reserves one cell for its leading space and one for the right
+	// border. There are no shortcuts in history menus, so this is the maximum
+	// number of cells its default renderer may draw for the item text.
+	maxWidth := s.menu.X2 - s.menu.X1 - 2
+	if maxWidth <= 0 {
+		// Unit tests and callers that have not allocated a screen yet leave the
+		// menu at its zero geometry. In that state there is no drawable border
+		// to clip against; preserve the logical item text until layout occurs.
+		return text
+	}
+	return runewidth.Truncate(text, maxWidth, "…")
 }
 
 func (s *historySearch) displayText(record HistoryRecord) string {
@@ -420,6 +446,9 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 		}
 		item := s.menu.Items[itemIdx]
 		text := item.Text
+		if entry, ok := item.UserData.(historySearchEntry); ok && entry.index >= 0 && entry.index < len(s.all) {
+			text = s.displayText(s.all[entry.index])
+		}
 		_, highlights := historySearchMatch(text, s.query, s.prefixOnly)
 
 		baseAttr := vtui.Palette[s.menu.ColorTextIdx]
