@@ -546,11 +546,44 @@ and it must be written down as such before anyone plans on the cheap version.
 Weak evidence, but it points the same way as the interface history above:
 this driver is not being rewritten.
 
+**D2, second measurement (2026-08-28, same machine).** With the control
+codes fixed, the probe got further and turned one of its own failures into
+the most useful result so far.
+
+- **f4 can take the server role.** `SET_SERVER_INFORMATION` was accepted: the
+  driver took the probe's event. Holding the endpoint and *being* its server
+  are different things, and both are now confirmed.
+- **The server role is exclusive, measured rather than argued.** On the first
+  run conhost accepted our handle and ran on it. On the second it refused
+  with `0x80070016` (`ERROR_BAD_COMMAND`). The only difference between the
+  runs was that the probe had claimed the server role in between. So an
+  endpoint has exactly one server, first claimant wins -- which settles the
+  shape of D2 for good: **not "listen alongside", but a real proxy** with two
+  endpoints, f4 facing the client and conhost facing f4, messages and replies
+  forwarded between them.
+- **Question 2 is still open, and again on a probe fault.** A plain
+  `CreateProcess` gives the child *the parent's* console, so `cmd.exe` went
+  to the probe's own console and nothing arrived at the new endpoint; the
+  three-second silence proved nothing. A client lands on a particular server
+  only if handed that server's console handles, which are opened as child
+  objects of the server handle -- `\Reference`, `\Input`, `\Output` -- and
+  passed as its standard handles. The probe now does that, reports the
+  NTSTATUS of each open so a failure names itself, and asks the driver
+  `GET_SERVER_PID` afterwards to say whether anything actually attached.
+  Question 3 now runs on a fresh, unclaimed endpoint, since the old one
+  cannot answer it once we are its server.
+
+Three necessary conditions for D2 are met -- the endpoint is creatable
+unprivileged, the server role is obtainable, and conhost will serve an
+endpoint f4 created. The remaining question is the one that decides the
+direction: do the messages arrive, and do they carry what §8 claims they do
+-- the application's intent, before anything wraps it.
+
 Run it on as many builds as can be found -- 10, 11 21H2/23H2/24H2/25H2,
 Server. Three matching reports across a decade of builds is a far better
 answer about stability than any amount of reasoning, and three differing
-ones close the direction cheaply. The next run needs to answer question 2:
-whether a message arrives, and what its bytes look like.
+ones close the direction cheaply. The next run needs to answer question 2 with a client
+actually attached: whether a message arrives, and what its bytes look like.
 
 **E. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under

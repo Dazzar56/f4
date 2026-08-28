@@ -144,9 +144,16 @@ func main() {
 	reportEnvironment()
 	h := reportServerEndpoint()
 	if h != 0 {
-		defer syscall.CloseHandle(syscall.Handle(h))
 		reportMessages(h)
-		reportConhostAcceptance(h)
+		syscall.CloseHandle(syscall.Handle(h))
+	}
+	// Question 3 needs an endpoint nobody has claimed. The previous run
+	// answered "refused" only because the probe had already made itself the
+	// server on that same handle -- which is itself the finding that an
+	// endpoint has exactly one server. So it gets a fresh one.
+	if h2 := reportServerEndpointQuiet(); h2 != 0 {
+		defer syscall.CloseHandle(syscall.Handle(h2))
+		reportConhostAcceptance(h2)
 	}
 
 	say("\n--- Done ---\n")
@@ -230,6 +237,28 @@ func reportServerEndpoint() uintptr {
 	return handle
 }
 
+// reportServerEndpointQuiet makes a second, unclaimed endpoint for question
+// 3, without repeating question 1's explanation.
+func reportServerEndpointQuiet() uintptr {
+	name := `\Device\ConDrv\Server`
+	var us unicodeString
+	p, _ := syscall.UTF16PtrFromString(name)
+	procRtlInitUnicodeStr.Call(uintptr(unsafe.Pointer(&us)), uintptr(unsafe.Pointer(p)))
+	oa := objectAttributes{ObjectName: &us, Attributes: 0x00000002}
+	oa.Length = uint32(unsafe.Sizeof(oa))
+	var handle uintptr
+	var iosb ioStatusBlock
+	st, _, _ := procNtCreateFile.Call(
+		uintptr(unsafe.Pointer(&handle)), 0x10000000|0x00100000,
+		uintptr(unsafe.Pointer(&oa)), uintptr(unsafe.Pointer(&iosb)),
+		0, 0, 3, 2, 0x20, 0, 0)
+	if st != 0 {
+		say("(could not create a second endpoint for question 3: 0x%08X)\n\n", uint32(st))
+		return 0
+	}
+	return handle
+}
+
 // reportMessages answers question 2: does the driver deliver API messages?
 //
 // The order matters and the first run did not follow it. A server must
@@ -274,6 +303,17 @@ func reportMessages(server uintptr) {
 	}
 	say("client launch: %s\n", client)
 
+	// Did anything actually attach? The driver knows, and will say.
+	var pid uint32
+	r, _, _ = procDeviceIoControl.Call(server, uintptr(ioctlGetSrvPID),
+		0, 0, uintptr(unsafe.Pointer(&pid)), unsafe.Sizeof(pid),
+		uintptr(unsafe.Pointer(&returned)), 0)
+	if r != 0 {
+		say("GET_SERVER_PID: %d -- a client is attached to this endpoint.\n", pid)
+	} else {
+		say("GET_SERVER_PID: no client attached to this endpoint.\n")
+	}
+
 	const waitObject0 = 0
 	w, _, _ := procWaitForSingleObject.Call(ev, 3000)
 	if w != waitObject0 {
@@ -301,28 +341,84 @@ func reportMessages(server uintptr) {
 	say(" so the only evidence it is stable is the same shape on another build.)\n\n")
 }
 
-// launchClient starts a console program attached to our server endpoint, so
-// that question 2 has something to observe. A client connects through
-// \Device\ConDrv\Connect, which the driver associates with the server that
-// owns the console -- inheriting our handle is what makes that us.
+// launchClient starts a console program on *our* endpoint, the way conhost
+// does, and reports every step so a failure names itself.
+//
+// The previous run used a plain CreateProcess, which gives the child the
+// parent's console -- so cmd.exe went to the probe's own console and nothing
+// arrived here. A client lands on a particular server only if it is handed
+// that server's console handles, and those are opened as child objects of
+// the server handle: \Reference keeps the console alive, \Connect is the
+// client's attachment, and \Input and \Output become its standard handles.
+// Their names come from conhost's own startup path; each open is reported
+// with its NTSTATUS, because which one fails is the finding.
 func launchClient(server uintptr) (string, func()) {
+	open := func(name string, access uint32, disposition uint32) (uintptr, uintptr) {
+		var us unicodeString
+		p, _ := syscall.UTF16PtrFromString(name)
+		procRtlInitUnicodeStr.Call(uintptr(unsafe.Pointer(&us)), uintptr(unsafe.Pointer(p)))
+		oa := objectAttributes{RootDirectory: server, ObjectName: &us, Attributes: 0x00000002}
+		oa.Length = uint32(unsafe.Sizeof(oa))
+		var h uintptr
+		var iosb ioStatusBlock
+		st, _, _ := procNtCreateFile.Call(
+			uintptr(unsafe.Pointer(&h)),
+			uintptr(access)|0x00100000, // | SYNCHRONIZE
+			uintptr(unsafe.Pointer(&oa)),
+			uintptr(unsafe.Pointer(&iosb)),
+			0, 0, 3 /* share RW */, uintptr(disposition), 0x20 /* synchronous */, 0, 0)
+		return h, st
+	}
+
+	const (
+		fileCreate    = 2
+		fileOpen      = 1
+		genericRead   = 0x80000000
+		genericWrite  = 0x40000000
+		genericAll    = 0x10000000
+		fileReadData  = 0x0001
+		fileWriteData = 0x0002
+	)
+
+	ref, st := open(`\Reference`, genericRead|genericWrite, fileCreate)
+	say("  open \\Reference: NTSTATUS 0x%08X\n", uint32(st))
+	if ref == 0 {
+		return "no reference handle; the console cannot be kept alive", nil
+	}
+
+	in, stIn := open(`\Input`, genericRead|genericWrite, fileCreate)
+	say("  open \\Input:     NTSTATUS 0x%08X\n", uint32(stIn))
+	out2, stOut := open(`\Output`, genericRead|genericWrite, fileCreate)
+	say("  open \\Output:    NTSTATUS 0x%08X\n", uint32(stOut))
+	if in == 0 || out2 == 0 {
+		syscall.CloseHandle(syscall.Handle(ref))
+		return "no client handles; nothing can attach here", nil
+	}
+
 	var si syscall.StartupInfo
 	var pi syscall.ProcessInformation
 	si.Cb = uint32(unsafe.Sizeof(si))
-	argv, err := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe`)
+	si.Flags = syscall.STARTF_USESTDHANDLES
+	si.StdInput = syscall.Handle(in)
+	si.StdOutput = syscall.Handle(out2)
+	si.StdErr = syscall.Handle(out2)
+	argv, _ := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe`)
+	// No CREATE_NEW_CONSOLE and no DETACHED_PROCESS: the child must take the
+	// console its handles belong to, which is ours.
+	err := syscall.CreateProcess(nil, argv, nil, nil, true, 0, nil, nil, &si, &pi)
 	if err != nil {
-		return "could not build a command line", nil
+		syscall.CloseHandle(syscall.Handle(ref))
+		syscall.CloseHandle(syscall.Handle(in))
+		syscall.CloseHandle(syscall.Handle(out2))
+		return fmt.Sprintf("CreateProcess failed: %v", err), nil
 	}
-	// CREATE_NEW_CONSOLE would give it a console of its own, which is the
-	// opposite of what is wanted; the client must land on our endpoint.
-	err = syscall.CreateProcess(nil, argv, nil, nil, true, 0, nil, nil, &si, &pi)
-	if err != nil {
-		return fmt.Sprintf("failed: %v", err), nil
-	}
-	return "cmd.exe started", func() {
+	return "cmd.exe started on our endpoint", func() {
 		syscall.TerminateProcess(pi.Process, 0)
 		syscall.CloseHandle(pi.Thread)
 		syscall.CloseHandle(pi.Process)
+		syscall.CloseHandle(syscall.Handle(in))
+		syscall.CloseHandle(syscall.Handle(out2))
+		syscall.CloseHandle(syscall.Handle(ref))
 	}
 }
 
@@ -345,11 +441,11 @@ func reportConhostAcceptance(server uintptr) {
 	say("hand the work to the real conhost, watching the messages go past --\n")
 	say("direction D2, with no C++ in the build and no console server of our own\n")
 	say("to get right.\n")
-	say("Note: this and question 2 cannot both succeed in one run. If conhost\n")
-	say("serves the endpoint, conhost reads the messages, not us. A real proxy\n")
-	say("therefore needs two endpoints -- ours facing the client, a second one\n")
-	say("facing conhost -- and this question only asks whether the seat is\n")
-	say("genuinely ours to hand over.\n")
+	say("Note: this runs on a FRESH endpoint, not the one above. The first run\n")
+	say("of this probe saw conhost accept our handle; the second saw it refuse\n")
+	say("with 0x80070016, and the only difference was that the probe had claimed\n")
+	say("the server role in between. An endpoint has exactly one server, so a\n")
+	say("proxy needs two: ours facing the client, a second facing conhost.\n")
 
 	sys := os.Getenv("SystemRoot")
 	if sys == "" {
