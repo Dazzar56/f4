@@ -122,18 +122,29 @@ seconds after a held `PgDn`.
 ### 3.2 Colorer is addressed by line number, from an anchor
 
 `ColorerHighlighter.HighlightLine(idx, line, baseAttr)` is what the render loop
-calls. Internally:
+calls. A cache hit returns the stored attributes; a miss queues work and
+returns nil — the line stays plain until the result lands. Internally
+(`colorer_async.go`):
 
 - `colorerContextPlan(parsedIdx, idx)` — pure, and the whole decision. If the
   wanted line is ahead of the session and no further than `hlColorerForward`
   (2000) lines, feed the session forward. Otherwise reset and restart
   `hlColorerContext` (300) lines above the target.
-- `ensureContext` is called **only on an attribute-cache miss**, so a screen
-  that is already coloured costs nothing and does not move the session.
-- `resetSessionAt(start)` resets, re-selects the file type, and declares
-  `start` to be the session's first line.
-- `parseThrough(idx)` feeds lines up to but not including `idx`, reading them
-  through `ch.lineAt`.
+- `queueLine` runs on the UI thread but never calls into Colorer. It snapshots
+  the context lines and the whole uncoloured run starting at `idx` — bounded
+  by `hlColorerBatchLines` and `hlColorerBatchBytes`, stopping at the first
+  line already coloured or not yet loaded — into one immutable `colorerJob`.
+  One job per screen, not per line: the per-line version coloured the viewport
+  visibly line by line, one worker round trip and one full redraw each.
+- A single worker goroutine owns the session (`runWorker`). It replays the
+  context, parses the batch, and posts all the attributes back in one
+  `PostTask`, which stores them and triggers one redraw. `workGeneration`
+  invalidates results that were overtaken by an edit or a cancel.
+- A parse error on the first batch line — the one the viewport asked for —
+  disables highlighting for the file. An error on a *prefetched* line only
+  cuts the batch short: the finished attributes are posted (`partial`), and
+  both sides force a re-anchor, because the session's position after a failed
+  `ParseLine` is unknown.
 
 *Why an anchor.* A jump then costs the same at line 500 and at line 500 000,
 which is the only way a 600 000-line file can behave. Sequential scrolling
@@ -175,13 +186,19 @@ When the Colorer session cannot be created, or no schema matches the file,
 Otherwise a perfectly ordinary Chroma highlighter would be treated as Colorer
 by `usesStateChain` and lose both its chain and its walker.
 
-### 3.6 Everything runs on the UI thread
+### 3.6 Everything runs on the UI thread — except Colorer parsing
 
-The walker's slices, the render loop and every highlighter call happen there,
-through `PostTask`. Highlighters are not thread-safe, the Colorer session is a
-pooled external resource, and the wrap engine mutates its caches as a side
-effect of what look like reads. Responsiveness comes from bounding each slice
-in time, not from moving work to another thread.
+The walker's slices, the render loop and every Chroma-style highlighter call
+happen there, through `PostTask`. Highlighters are not thread-safe and the
+wrap engine mutates its caches as a side effect of what look like reads.
+Responsiveness comes from bounding each slice in time.
+
+Colorer's `ParseLine` can execute arbitrary grammar code and is the one thing
+that moved off-thread: a single worker goroutine owns the session, the UI only
+queues immutable line snapshots and consumes posted results
+(`colorer_async.go`). One worker, not a pool — the session is stateful and
+line order is its state, so concurrent calls are wrong by construction, and
+one owner gives cancellation a single well-defined home.
 
 ---
 
@@ -313,20 +330,18 @@ margin.
 *Acceptance.* `TestColorer_AttrCacheIsBounded` extended to push past the new
 limit and assert the map stays bounded.
 
-### Item 4 — bound the session on a long forward scroll
+### Item 4 — bound the session on a long forward scroll — superseded by item 9
 
 Re-anchoring resets the session, which is what releases the wasm line vector
 and the parse cache. One case never re-anchors: scrolling straight down, which
 feeds the session forward for as long as the user holds `PgDn`.
 
-*What to do.* Force a re-anchor after `hlColorerParsedMax` lines have been fed
-since the last reset — start with 20 000. `ensureContext` is the place;
-`colorerContextPlan` gains the counter as an argument so the decision stays
-pure and testable.
-
-*Measure first.* Hold `PgDn` from the top of the reference file to the bottom
-and watch RSS. If it does not grow meaningfully, skip this item: the reset
-costs the exactness of every construct opened before it.
+*Resolution.* The forced-re-anchor counter proposed here was never needed:
+item 9's upstream `colorer_forget_before` landed and is wired in as
+`session.ForgetBefore`, driven by `colorerForgetPlan` in the worker — every
+`hlColorerForgetEvery` (1000) lines fed, the session drops everything more
+than `hlColorerKeepBehind` (300) lines behind the parse position. A long
+forward scroll stays bounded without ever paying a reset's loss of context.
 
 ### Item 5 — cheaper editing in a large file
 
@@ -373,14 +388,18 @@ allocation per line for nothing. If a highlighter also offers something like
 and use it. Chroma-side support lives in vtui, so this may become an upstream
 change there.
 
-### Item 9 — colorer4go: trim the session window
+### Item 9 — colorer4go: trim the session window — done
 
 Upstream, in `github.com/unxed/colorer4go`. The wrapper only appends; a
 `colorer_forget_before(lno)` (or a ring buffer in `WasmLineSource`) would let
 the session drop lines the editor will never ask about again, which makes item
-4 unnecessary and removes the only reason a long scroll ever resets. Ask for
-this after items 1-4 have shown exactly which shape is needed. Do **not** ask
-for state snapshots — see section 4.
+4 unnecessary and removes the only reason a long scroll ever resets. Do
+**not** ask for state snapshots — see section 4.
+
+*Resolution.* Delivered as `Session.ForgetBefore`; the worker calls it every
+`hlColorerForgetEvery` lines through `colorerForgetPlan` (see item 4). A
+session that answers `ForgetBefore` with an error keeps the old
+grow-until-reset behaviour for that session only.
 
 ---
 
@@ -438,8 +457,12 @@ loader or the line index, and nothing in this document applies.
 |---|---|---|
 | `hlColorerForward` | 2000 | furthest the session is fed forward instead of re-anchored |
 | `hlColorerContext` | 300 | context lines parsed above a new anchor |
-| `maxCachedAttrLines` | 5 000 000 | attribute cache limit (item 3) |
-| `attrCacheKeepWindow` | 1 000 000 | eviction window (item 3) |
+| `hlColorerBatchLines` | 200 | longest uncoloured run one worker job takes on |
+| `hlColorerBatchBytes` | 256 KB | most line text one batch snapshot copies on the UI thread |
+| `hlColorerKeepBehind` | 300 | lines kept behind the parse position when the session is trimmed |
+| `hlColorerForgetEvery` | 1000 | lines fed between two `ForgetBefore` wasm calls |
+| `maxCachedAttrLines` | 20 000 | attribute cache limit (item 3, done) |
+| `attrCacheKeepWindow` | 5000 | eviction window (item 3, done) |
 
 None of these are settings. Do not add them to `AppConfig` before a
 measurement asks for it.
@@ -459,3 +482,9 @@ measurement asks for it.
   needed; fallback engine handed to the editor.
 - Reported: the tail of the reference file appears and colours immediately with
   both highlighters. Remaining: the blank window on open, item 1.
+- Colorer parsing moved to a worker goroutine owning the session; the UI
+  queues immutable snapshots and consumes posted results (`colorer_async.go`).
+- One worker job per line made the viewport colour visibly line by line: each
+  line cost a full worker→PostTask→redraw round trip, ~40 full render passes
+  per screen. Jobs now batch the whole uncoloured run (`hlColorerBatchLines`),
+  so a screen colours in one round trip and one redraw.
