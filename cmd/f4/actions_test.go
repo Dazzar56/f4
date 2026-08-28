@@ -1157,13 +1157,15 @@ func TestDelete_FocusCustomization(t *testing.T) {
 	fm.Pop()
 }
 
-// TestActionDelete_UsesWarnPalette_Issue379 pins the fix for #379:
-// delete is destructive, so the confirmation dialog must render on the
-// red WarnDialog palette instead of the neutral one.
+// TestActionDelete_UsesWarnPalette_Issue379 pins the fix for #379 and the
+// recoverable-trash distinction from #828: only permanent deletion uses the
+// red WarnDialog palette.
 func TestActionDelete_UsesWarnPalette_Issue379(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
 
 	pf := NewPanelsFrame()
 	defer pf.Close()
@@ -1172,6 +1174,8 @@ func TestActionDelete_UsesWarnPalette_Issue379(t *testing.T) {
 	fsp.entries = []*fileEntry{{VFSItem: vfs.VFSItem{Name: "goner.txt"}, Selected: true}}
 	pf.activeIdx = 0
 
+	AppConfig.ConfirmDelete = true
+	AppConfig.UseTrash = true
 	actionDelete(pf)
 
 	top := fm.GetTopFrame()
@@ -1182,8 +1186,32 @@ func TestActionDelete_UsesWarnPalette_Issue379(t *testing.T) {
 	if !ok {
 		t.Fatalf("Top frame is not a *vtui.Window, got %T", top)
 	}
+	if dlg.IsWarning {
+		t.Error("Recycle Bin confirmation must render on the neutral dialog palette (see #828)")
+	}
+	fm.Pop()
+
+	AppConfig.UseTrash = false
+	actionDelete(pf)
+	top = fm.GetTopFrame()
+	dlg, ok = top.(*vtui.Window)
+	if !ok {
+		t.Fatalf("Top frame is not a *vtui.Window for permanent delete, got %T", top)
+	}
 	if !dlg.IsWarning {
-		t.Error("Delete confirmation must render on the WarnDialog palette (see #379)")
+		t.Error("Permanent delete confirmation must render on the WarnDialog palette (see #379)")
+	}
+	fm.Pop()
+
+	AppConfig.UseTrash = true
+	actionDeletePermanent(pf)
+	top = fm.GetTopFrame()
+	dlg, ok = top.(*vtui.Window)
+	if !ok {
+		t.Fatalf("Top frame is not a *vtui.Window for explicit permanent delete, got %T", top)
+	}
+	if !dlg.IsWarning {
+		t.Error("Explicit permanent delete confirmation must render on the WarnDialog palette")
 	}
 	fm.Pop()
 }

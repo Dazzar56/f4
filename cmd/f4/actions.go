@@ -2659,9 +2659,9 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 	lines := vtui.WrapText(msg, 46)
 
 	dlg := vtui.NewCenteredDialog(50, 8+len(lines), title)
-	// Delete is destructive — render on the red WarnDialog palette
-	// so the confirmation reads as an alarm, not a neutral question.
-	dlg.IsWarning = true
+	// Moving an item to the Recycle Bin is recoverable, so keep that prompt on
+	// the neutral dialog palette. Only an irreversible deletion is an alarm.
+	dlg.IsWarning = disposition == vfs.DeletePermanently
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, (8+len(lines))-4)
 
 	for _, l := range lines {
