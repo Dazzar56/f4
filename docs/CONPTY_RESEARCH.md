@@ -397,11 +397,69 @@ PowerShell formatting is width-aware. The Russian filename appeared as
 mojibake in the transcript under OEM code page 850; that is a separate log
 encoding issue, not a width result.
 
-**D. Make the Terminal Log the answer.** It already holds logical lines, so
-reflow there is free, and it may be all users need from history under
-Windows. The honest minimum, and the fallback if A and C do not pay off.
+**D. Own the console server: build conhost into f4.** The one road that
+attacks the root rather than working around it.
 
-Order to try: C's probe is now a PASS on 10.0.22000.2538; its integration and
-portability still need a prototype and newer-build measurements. Then try A
-for `wsl.exe` (the case where it is nearly free), and decide whether B is
-worth its months.
+Every other option in this file gropes for the wrap flag from outside.
+Nothing gropes for it because it is missing -- it *exists*, and has since the
+first console: `TEXT_BUFFER`'s rows carry `wrapForced`, set when a write ran
+off the right edge, and `TextBuffer::Reflow` already re-wraps a whole buffer
+using it. That is exactly the fact §7 says the stream cannot supply. **It is
+not exported by any public console API** -- not `ReadConsoleOutput`, not
+`GetConsoleScreenBufferInfoEx`, not the VT stream ConPTY emits. Only the
+process that owns the buffer can read it. That is the real reason winpty,
+WezTerm and this project all ended up guessing: everyone is outside the one
+process that knows.
+
+So be that process. Two facts make it plausible rather than a rewrite of
+Windows:
+
+- **conhost is open source.** `microsoft/terminal`, `src/host`, MIT. The
+  buffer, the wrap flag and the reflow are all there, written and debugged by
+  the people who own the format.
+- **Windows already supports substituting the console server.** Since 1809
+  conhost takes `--server <handle>`; ConPTY starts its own conhost exactly
+  that way. The mechanism f4 would use is the one Microsoft uses, not a hack
+  around it.
+
+What f4 would gain: the wrap flag as a fact rather than an inference, and a
+reflow it does not have to invent. What it costs: a C++ component in a Go
+program (cgo), building `src/host` outside its own solution, three
+architectures, and ownership of a console server's correctness and security.
+Comparable in size to B, and strictly better in kind -- B still reads a
+buffer someone else already wrapped.
+
+ReactOS reached the same place from the other side, reimplementing `condrv`
+and the CSRSS side of the protocol. That is the fallback shape if the
+supported route closes, and it is genuinely a rewrite; the `--server` route
+is not.
+
+**The one-evening question to answer before any of this**: does `src/host`
+build standalone, outside the `microsoft/terminal` solution, and does the
+resulting binary serve a console when launched with `--server`? If yes, the
+road is engineering. If no, what remains is the ReactOS-scale fork, and that
+is a different decision.
+
+Note what this does *not* fix, so nobody is surprised later: text that
+arrives already wrapped by someone else -- a remote host over ssh, where the
+far side's pty made the layout decision -- stays wrapped as received. Owning
+the local console server gives f4 the wrap flag for locally produced output.
+Nothing gives it the flag for a layout that was decided on another machine.
+
+**E. Make the Terminal Log the answer.** It already holds logical lines, so
+reflow there is free, and it may be all users need from history under
+Windows. The honest minimum, and what ships today while A through D are
+decided.
+
+Order to try. **A first for `wsl.exe` and PowerShell 7**: there f4 is the
+terminal, the wrap is its own by construction, and the work is nearly free --
+it is the same thing f4's own SSH client already does for remote sessions,
+with a different transport. **Then D's one-evening question**, because if
+`src/host` builds standalone the whole problem changes character: the wrap
+flag stops being a guess. **C is demoted** to a special case inside A --
+measured to work mechanically, but a 4000-column console changes what
+width-aware programs *print*, not just how it is laid out (`ls -C` collapsing
+to one 3658-character line), so it needs mode switching, and mode switching
+is the guessing that §7 closed. **B only if D's route turns out to be shut**;
+it buys winpty-grade behaviour, which is what Microsoft moved away from. **E
+is what ships meanwhile.**
