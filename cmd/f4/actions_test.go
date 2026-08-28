@@ -2650,6 +2650,7 @@ func TestActionAppearanceSettings_LivePreviewRecolorsExistingLabels(t *testing.T
 }
 
 func TestPanelsFrame_RunAdvancedProgressTask(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
 

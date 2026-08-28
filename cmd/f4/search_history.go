@@ -71,9 +71,3 @@ func inputBoxEdit(dlg *vtui.Window) *vtui.Edit {
 	}
 	return nil
 }
-
-// attachInputBoxHistory wires history into an InputBox dialog and returns the
-// field it found, so the caller can commit to it.
-func attachInputBoxHistory(dlg *vtui.Window, historyID string) *vtui.Edit {
-	return attachHistoryUseLast(inputBoxEdit(dlg), historyID)
-}
