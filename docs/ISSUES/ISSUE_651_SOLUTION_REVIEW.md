@@ -88,3 +88,55 @@ updated archive registration/hotkey tests. The remaining startup-mode,
 deterministic drive-menu display, and Command-palette paths are already
 represented by current code and focused tests; the native Windows ANSI run
 also exercised the current menu and exit paths before reporting completion.
+
+## Current Linux follow-up: GUI window mode and Left workspace shortcuts
+
+The reporter's latest retest leaves two actionable observations. The current
+f4 `Left` menu already contains `New workspace` and `Close workspace` with
+`Ctrl+N` and `Ctrl+W`; the missing regression was coverage of those two menu
+fields, not a missing binding in current `upstream/main`. The GUI-mode failure
+is reproducible through the shared vtui X11 backend: it unconditionally writes
+`_NET_WM_STATE_MAXIMIZED_VERT/HORZ` before mapping every new window, so the
+requested `GuiCols`/`GuiRows` are immediately replaced by the monitor-sized
+geometry.
+
+### Three solution passes
+
+#### Pass 1 — scope and compatibility
+
+1. Add an f4-specific persisted `GuiWindowMode` and thread it through every
+   GUI backend. Rejected: it duplicates native-window policy in f4 and would
+   require new API and persistence semantics for each backend.
+2. Stop vtui's unconditional initial X11 maximization and let the existing
+   requested geometry, including f4's saved `GuiCols`/`GuiRows`, determine the
+   first window. Selected: it fixes the common backend without changing f4's
+   configuration format.
+3. Infer maximized mode from the saved size or the current monitor size.
+   Rejected: a large ordinary window is not equivalent to a maximized window,
+   and monitor work areas differ across desktops and scaling modes.
+
+#### Pass 2 — failure modes
+
+With the initial EWMH state request removed, X11 maps the dimensions supplied by
+`RunInGUIWindow`. The existing `ResizeWindow` path still sends EWMH add/remove
+messages when a native resize crosses the initial geometry, so native maximize
+and restore remain available after startup. Wayland and non-X11 backends are
+untouched. The Left-menu entries remain command-routed and keep their current
+physical framework bindings.
+
+#### Pass 3 — regression risk and validation
+
+The f4 test will assert both workspace menu labels expose their `Ctrl+N` and
+`Ctrl+W` hints. The vtui change will be validated by the full vtui test suite,
+an ARM64 f4 build linked against the patched vtui worktree, and a live X11
+window run on Linux aarch64/KDE Wayland through XWayland: the window must start
+at the requested geometry and not advertise the maximized EWMH state. The
+Wayland backend itself currently panics before f4 setup on this machine, so it
+will not be used as evidence for this X11-specific fix.
+
+### Decision
+
+Submit the generic initial-window fix to vtui and keep the disputed Panel
+settings layout out of scope. Do not change f4's already-correct Left-menu
+bindings or invent a second GUI-mode setting until a backend-neutral native
+window-state API exists.
