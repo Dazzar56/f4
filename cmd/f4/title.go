@@ -249,25 +249,31 @@ var copyWindowTitleToClipboard = func(title string) {
 }
 
 func actionCopyWindowTitle() bool {
-	title := currentFrameTitle()
-	if title == "" {
+	identity := currentFrameIdentity()
+	if identity == "" {
 		// Keep a useful value during startup/shutdown, when the frame stack may
 		// briefly be empty. Normal UI operation always has a top frame.
-		title = currentWindowTitle()
+		identity = currentWindowTitle()
 	}
-	copyWindowTitleToClipboard(title)
+	copyWindowTitleToClipboard(identity)
 	return true
 }
 
-// currentFrameTitle returns the identity of the frame currently receiving
-// input. Unlike currentWindowTitle, it intentionally includes modal dialogs
-// and menus: App.CopyWindowTitle is a debugging action for the UI context the
-// user is working in, not for the host terminal/workspace title.
-func currentFrameTitle() string {
+// currentFrameIdentity returns the help topic identity of the frame currently
+// receiving input. Unlike currentWindowTitle, it intentionally includes modal
+// dialogs and menus: App.CopyWindowTitle is a debugging action for the UI
+// context the user is working in, not for the host terminal/workspace title.
+// zoin-bot: prefer the stable help ID because it can be fed directly into the
+// help translator; the visible title remains a compatibility fallback for
+// frames that do not declare one.
+func currentFrameIdentity() string {
 	if vtui.FrameManager == nil {
 		return ""
 	}
 	if frame := vtui.FrameManager.GetTopFrame(); frame != nil {
+		if help := strings.TrimSpace(frame.GetHelp()); help != "" {
+			return help
+		}
 		return strings.TrimSpace(frame.GetTitle())
 	}
 	return ""

@@ -47,12 +47,14 @@ func TestAction_AppCopyWindowTitle(t *testing.T) {
 		t.Fatalf("clipboard = %q, want %q", got, "Desktop")
 	}
 
-	vtui.FrameManager.Push(vtui.NewCenteredDialog(40, 10, " User Menu "))
+	dlg := vtui.NewCenteredDialog(40, 10, " User Menu ")
+	dlg.SetHelp("Help.UserMenu")
+	vtui.FrameManager.Push(dlg)
 	vtui.SetClipboard("")
 	if !RunAction("App.CopyWindowTitle") {
 		t.Fatal("App.CopyWindowTitle did not run for dialog")
 	}
-	if got := waitForWindowTitleClipboard(t, "User Menu"); got != "User Menu" {
-		t.Fatalf("dialog clipboard = %q, want %q", got, "User Menu")
+	if got := waitForWindowTitleClipboard(t, "Help.UserMenu"); got != "Help.UserMenu" {
+		t.Fatalf("dialog clipboard = %q, want %q", got, "Help.UserMenu")
 	}
 }

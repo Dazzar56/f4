@@ -310,9 +310,9 @@ func init() {
 	RegisterAction(Action{
 		Name:        "App.CopyWindowTitle",
 		Area:        "Common",
-		Label:       "Copy Window Title",
+		Label:       "Copy Window Identity",
 		LabelKey:    "Action.App.CopyWindowTitle",
-		Description: "Copy the current f4 window title to the clipboard",
+		Description: "Copy the active f4 frame help identity to the clipboard",
 		DescKey:     "Action.App.CopyWindowTitle.Desc",
 		DefaultKeys: []string{"CtrlAltShiftT"},
 		MenuPath:    "Commands",
