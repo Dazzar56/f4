@@ -26,6 +26,8 @@ type Codepage struct {
 
 var AvailableCodepages []Codepage
 
+const UTF8BOMSize = 3
+
 func init() {
 	AvailableCodepages = []Codepage{
 		{65001, "UTF-8", unicode.UTF8},
@@ -121,7 +123,7 @@ func EncodeBytes(data []byte, cpID int) ([]byte, error) {
 }
 
 func DetectBOM(data []byte) (int, bool) {
-	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+	if HasUTF8BOM(data) {
 		return 65001, true
 	}
 	if len(data) >= 2 {
@@ -133,6 +135,24 @@ func DetectBOM(data []byte) (int, bool) {
 		}
 	}
 	return 65001, false
+}
+
+// HasUTF8BOM reports whether data starts with the UTF-8 byte-order mark.
+// Detection and removal are separate because the marker is useful for
+// choosing the codepage, while it is not part of the text shown to a user.
+func HasUTF8BOM(data []byte) bool {
+	return len(data) >= UTF8BOMSize &&
+		data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF
+}
+
+// StripUTF8BOM returns data without a leading UTF-8 byte-order mark. It keeps
+// the original slice when there is no marker, so callers can use it on hot
+// paths without an allocation.
+func StripUTF8BOM(data []byte) []byte {
+	if !HasUTF8BOM(data) {
+		return data
+	}
+	return data[UTF8BOMSize:]
 }
 
 func DetectEncoding(data []byte, autodetect bool, defaultCP int) int {

@@ -18,7 +18,8 @@ import (
 // are clean and file-backed — which is what lets the editor hold a file larger
 // than the memory it is allowed to keep.
 type MappedFile struct {
-	data []byte
+	data   []byte
+	mapped []byte
 }
 
 // Bytes returns the mapped contents. The result aliases the mapping and must
@@ -41,11 +42,15 @@ func (m *MappedFile) Size() int {
 // Close releases the mapping. Every window handed out by Bytes becomes invalid,
 // so callers must be done reading before this runs.
 func (m *MappedFile) Close() error {
-	if m == nil || m.data == nil {
+	if m == nil || (m.data == nil && m.mapped == nil) {
 		return nil
 	}
-	data := m.data
+	data := m.mapped
+	if data == nil {
+		data = m.data
+	}
 	m.data = nil
+	m.mapped = nil
 	return unmapFileRegion(data)
 }
 
@@ -65,11 +70,19 @@ type fileDescriptor interface {
 // non-local backing has no descriptor to map, and a file too large for the
 // address space cannot be described by one slice.
 func MapEditorFile(v vfs.VFS, f vfs.ReadAtCloser) (*MappedFile, error) {
+	return MapEditorFileWithOffset(v, f, 0)
+}
+
+// MapEditorFileWithOffset maps an already opened local file and exposes it
+// from fileOffset onward. The complete mapping is retained separately so a
+// logical slice that skips a UTF-8 BOM can still be unmapped from its true
+// platform-specific base address.
+func MapEditorFileWithOffset(v vfs.VFS, f vfs.ReadAtCloser, fileOffset int64) (*MappedFile, error) {
 	if f == nil || !isLocalOSVFS(v) {
 		return nil, errNotMappable
 	}
 	size := f.Size()
-	if size <= 0 {
+	if size <= 0 || fileOffset < 0 || fileOffset >= size {
 		return nil, errNotMappable
 	}
 	if int64(int(size)) != size {
@@ -84,7 +97,7 @@ func MapEditorFile(v vfs.VFS, f vfs.ReadAtCloser) (*MappedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &MappedFile{data: data}, nil
+	return &MappedFile{data: data[fileOffset:], mapped: data}, nil
 }
 
 // guardMappedFaults makes a fault on mapped memory recoverable for the calling

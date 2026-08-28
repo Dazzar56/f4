@@ -178,6 +178,27 @@ func TestAsyncBuffer_PartialChunkAtEOF(t *testing.T) {
 		t.Errorf("EOF chunk failed: expected 'Short', got %q", string(data))
 	}
 }
+
+func TestAsyncBuffer_WithOffsetHidesFilePrefix(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	raw := append([]byte{0xEF, 0xBB, 0xBF}, []byte("visible text")...)
+	f := &vfs.MemoryReadAtCloser{Data: raw}
+	buf := NewAsyncBufferWithOffset(context.Background(), f, vfs.UTF8BOMSize)
+	defer buf.Close()
+
+	if got, want := buf.Size(), len("visible text"); got != want {
+		t.Fatalf("logical size = %d, want %d", got, want)
+	}
+	buf.prewarm()
+	data, err := buf.Read(0, len("visible text"))
+	if err != nil {
+		t.Fatalf("Read = %v", err)
+	}
+	if string(data) != "visible text" {
+		t.Fatalf("logical data = %q, want %q", string(data), "visible text")
+	}
+}
+
 func TestAsyncBuffer_ConcurrentAccess(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 

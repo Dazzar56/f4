@@ -970,6 +970,56 @@ func TestViewerView_Codepages_Load(t *testing.T) {
 		t.Errorf("Viewer failed to decode CP866: expected 'Привет', got %q", string(data))
 	}
 }
+
+func TestViewerView_UTF8BOMIsNotDisplayed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bom.txt")
+	text := "first line\nsecond line\n"
+	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, []byte(text)...), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(dir), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vv.Close()
+
+	if vv.backend.dataOffset != vfs.UTF8BOMSize {
+		t.Fatalf("viewer data offset = %d, want %d", vv.backend.dataOffset, vfs.UTF8BOMSize)
+	}
+	if got, want := vv.backend.Size(), int64(len(text)); got != want {
+		t.Fatalf("viewer logical size = %d, want %d", got, want)
+	}
+
+	var data []byte
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatal("timeout waiting for BOM-stripped viewer data")
+		}
+		data, err = vv.backend.ReadAt(0, len(text))
+		if err == nil {
+			break
+		}
+		if err != piecetable.ErrLoading {
+			t.Fatalf("viewer ReadAt = %v", err)
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if string(data) != text {
+		t.Fatalf("viewer text = %q, want %q", string(data), text)
+	}
+	if got, ok := vv.backend.LineStart(context.Background(), 2); !ok || got != int64(len("first line\n")) {
+		t.Fatalf("LineStart(2) = %d, %v; want %d, true", got, ok, len("first line\n"))
+	}
+}
+
 func TestViewerView_Codepages_AutoDetect(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	tmpDir := t.TempDir()

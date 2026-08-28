@@ -12,9 +12,10 @@ import (
 
 // ViewerBackend provides async random access to a file using small cache window.
 type ViewerBackend struct {
-	file     vfs.ReadAtCloser
-	size     int64
-	codepage int
+	file       vfs.ReadAtCloser
+	size       int64
+	codepage   int
+	dataOffset int64 // bytes skipped from the on-disk file (the UTF-8 BOM)
 
 	path    string
 	owner   vfs.VFS
@@ -76,10 +77,15 @@ func (b *ViewerBackend) Size() int64 {
 	// refreshing the size -- jumpToEnd runs Size through RunAsync while Show
 	// is calling it too. Both go through the mutex now.
 	if b.file != nil {
-		newSize := b.file.Size()
+		newSize := b.file.Size() - b.dataOffset
+		if newSize < 0 {
+			newSize = 0
+		}
 		b.mu.Lock()
 		b.size = newSize
+		size := b.size
 		b.mu.Unlock()
+		return size
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -129,7 +135,7 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 		frames := vtui.FrameManager
 		go func() {
 			buf := make([]byte, fetchLen)
-			n, err := b.file.ReadAt(b.ctx, buf, fetchOff)
+			n, err := b.file.ReadAt(b.ctx, buf, b.dataOffset+fetchOff)
 
 			var cached []byte
 			if n > 0 {
@@ -181,8 +187,9 @@ func (b *ViewerBackend) SearchFrom(ctx context.Context, pattern string, off int6
 		return 0, false
 	}
 	for at := range matches {
-		if at >= off {
-			return at, true
+		logicalAt := at - b.dataOffset
+		if logicalAt >= off {
+			return logicalAt, true
 		}
 	}
 	return -1, true
@@ -200,8 +207,9 @@ func (b *ViewerBackend) SearchBefore(ctx context.Context, pattern string, off in
 	}
 	last := int64(-1)
 	for at := range matches {
-		if at < off && at > last {
-			last = at
+		logicalAt := at - b.dataOffset
+		if logicalAt < off && logicalAt > last {
+			last = logicalAt
 		}
 	}
 	return last, true
@@ -223,7 +231,11 @@ func (b *ViewerBackend) LineStart(ctx context.Context, line int64) (int64, bool)
 		idx, err := b.indexer.LineIndex(ctx, b.path, line, 1)
 		if err == nil {
 			if len(idx.Offsets) > 0 {
-				return idx.Offsets[0], true
+				start := idx.Offsets[0] - b.dataOffset
+				if start < 0 {
+					start = 0
+				}
+				return start, true
 			}
 			// The far side counted the file and the line is not in it.
 			if idx.Total >= 0 && line > idx.Total {
@@ -240,7 +252,7 @@ func (b *ViewerBackend) LineStart(ctx context.Context, line int64) (int64, bool)
 		if ctx.Err() != nil {
 			return 0, false
 		}
-		n, err := b.file.ReadAt(ctx, buf, off)
+		n, err := b.file.ReadAt(ctx, buf, b.dataOffset+off)
 		for i := 0; i < n; i++ {
 			if buf[i] != '\n' {
 				continue
@@ -305,7 +317,11 @@ func (b *ViewerBackend) LineStartFromEnd(ctx context.Context, n int64) (int64, b
 	if err != nil || len(idx.Offsets) == 0 {
 		return 0, false
 	}
-	return idx.Offsets[0], true
+	start := idx.Offsets[0] - b.dataOffset
+	if start < 0 {
+		start = 0
+	}
+	return start, true
 }
 func (b *ViewerBackend) FindLineStart(offset int64) int64 {
 	if offset <= 0 {

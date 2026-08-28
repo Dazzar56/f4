@@ -147,6 +147,9 @@ type EditorView struct {
 	// editor was opened. Plugin-generated reports use this for their first
 	// save; normal editors continue to replace the file they opened.
 	createNewTarget bool
+	// utf8BOM records that the source file had a UTF-8 BOM. The marker is
+	// hidden from the logical editor buffer but is preserved when saving.
+	utf8BOM bool
 
 	// Autocomplete state
 	acEnabled    bool
@@ -4812,7 +4815,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// disk, which is only true for a raw UTF-8 load.
 		saved := false
 		if err == nil {
-			if patcher, ok := ev.vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !createNewTarget {
+			if patcher, ok := ev.vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !ev.utf8BOM && !createNewTarget {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
 					perr := patcher.PatchInPlace(ctx.Context, ev.filePath, pieces)
 					if perr == nil {
@@ -4833,7 +4836,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		}
 
 		if !saved && err == nil {
-			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 {
+			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 && !ev.utf8BOM {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
 					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), ev.filePath, tempPath, pieces)
 					if perr == nil {
@@ -4883,9 +4886,14 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		if saved {
 			// The file system already wrote it.
 		} else if ev.Codepage == 65001 {
+			if ev.utf8BOM {
+				if _, errWrite := f.Write([]byte{0xEF, 0xBB, 0xBF}); errWrite != nil {
+					saveErr = errWrite
+				}
+			}
 			curr := 0
 			total := ev.pt.Size()
-			for curr < total {
+			for curr < total && saveErr == nil {
 				if ctx.Err() != nil {
 					saveErr = ctx.Err()
 					break
@@ -5008,19 +5016,28 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		var newMapped *MappedFile
 
 		if err == nil {
+			newUTF8BOM := ev.Codepage == 65001 && ev.utf8BOM
 			if ev.Codepage == 65001 {
 				// Re-map rather than fall back to lazy chunks: a saved file is
 				// as mappable as the one that was opened, and dropping to the
 				// chunk buffer here would quietly cost every later search the
 				// copy that mapping avoids.
 				if ev.mapped != nil && AppConfig.EditorMemoryMap {
-					if m, mapErr := MapEditorFile(ev.vfs, newFile); mapErr == nil {
+					mapOffset := int64(0)
+					if newUTF8BOM {
+						mapOffset = vfs.UTF8BOMSize
+					}
+					if m, mapErr := MapEditorFileWithOffset(ev.vfs, newFile, mapOffset); mapErr == nil {
 						newMapped = m
 						newPt = piecetable.New(m.Bytes())
 					}
 				}
 				if newPt == nil {
-					newBuf = NewAsyncBuffer(ctx.Context, newFile)
+					fileOffset := int64(0)
+					if newUTF8BOM {
+						fileOffset = vfs.UTF8BOMSize
+					}
+					newBuf = NewAsyncBufferWithOffset(ctx.Context, newFile, fileOffset)
 					newPt = piecetable.NewWithBuffer(newBuf)
 				}
 			} else {
@@ -5077,6 +5094,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				}
 				ev.file = newFile
 				ev.asyncBuf = newBuf
+				ev.utf8BOM = ev.Codepage == 65001 && ev.utf8BOM
 				// The old mapping described the file as it was before the
 				// save. Nothing reads through it once the piece table below
 				// points at the new one, and this runs on the UI thread, so
