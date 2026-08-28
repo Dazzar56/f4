@@ -2033,6 +2033,7 @@ func (m *mockSlowVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, err
 }
 
 func TestActionOpenViewer_ProgressTask(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
