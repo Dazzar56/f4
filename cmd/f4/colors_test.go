@@ -320,6 +320,25 @@ func TestColors_GenerateDocumentation(t *testing.T) {
 	}
 	_ = os.WriteFile(targetPath, []byte(sb.String()), 0600)
 }
+
+// TestColors_DocumentationMatchesColorSlots keeps the checked-in generated
+// table aligned with the runtime mapping. A stale row here can make a working
+// farcolors.ini slot look broken to users, especially when two warning slots
+// are adjacent in the list.
+func TestColors_DocumentationMatchesColorSlots(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "COLORS.md"))
+	if err != nil {
+		t.Fatalf("read generated color documentation: %v", err)
+	}
+	content := string(data)
+	for _, slot := range ColorSlots {
+		row := fmt.Sprintf("| `%s` | `%s` |", slot.Canonical, slot.ConstantName)
+		if !strings.Contains(content, row) {
+			t.Errorf("generated color documentation is missing or mis-maps %s", slot.Canonical)
+		}
+	}
+}
+
 func TestColors_ContrastCorrection(t *testing.T) {
 	// Dark grey on black is well below the ΔE2000 floor far2l enforces, so the
 	// foreground has to move. Note the target is ΔE2000, not a WCAG ratio: the
