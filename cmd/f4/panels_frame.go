@@ -2031,6 +2031,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// In Far-style host console with an overlay, route editing keys to CommandLine first
 	if !pf.showPanels && pf.shellMode == ShellModeHost && pf.overlayLines() > 0 {
+		if pf.handleHostConsoleTab(e) {
+			return true
+		}
 		if e.VirtualKeyCode != vtinput.VK_RETURN {
 			if pf.cmdLine.ProcessKey(e) {
 				pf.drawHostConsoleOverlay()

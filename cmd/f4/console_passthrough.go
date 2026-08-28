@@ -341,6 +341,47 @@ func (pf *PanelsFrame) syncAutoCompleteSuppression() {
 	pf.cmdLine.AutoCompleteSuppressed = pf.consoleViewActive() && !consoleOverlayUsesWinAPI()
 }
 
+// handleHostConsoleTab completes a TAB in the f4-owned command line before it
+// can be forwarded to the shell behind a host-console overlay. The normal
+// autocomplete menu is safe on the WinAPI overlay because it has a native
+// renderer. ANSI host consoles cannot repaint a popup over the shell's screen
+// without a readable backing buffer, so they accept the first selectable item
+// directly and redraw only the overlay.
+func (pf *PanelsFrame) handleHostConsoleTab(e *vtinput.InputEvent) bool {
+	if e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode != vtinput.VK_TAB {
+		return false
+	}
+	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed|vtinput.ShiftPressed) != 0 {
+		return false
+	}
+	if pf.cmdLine == nil || pf.cmdLine.IsEmpty() || !AppConfig.CommandLineAutoComplete || vtui.FrameManager == nil {
+		return false
+	}
+
+	if ac, ok := vtui.FrameManager.GetTopFrame().(*vtui.AutoCompleteMenu); ok && ac != nil {
+		if ac.Edit != pf.cmdLine.Edit || !ac.HasMatches() {
+			return false
+		}
+		ac.ProcessKey(e)
+		pf.drawHostConsoleOverlay()
+		return true
+	}
+
+	ac := vtui.NewAutoCompleteMenu(pf.cmdLine.Edit)
+	if !ac.HasMatches() {
+		return false
+	}
+	if consoleOverlayUsesWinAPI() {
+		vtui.FrameManager.Push(ac)
+	} else {
+		// There is no safe ANSI readback for restoring the shell output under a
+		// popup. Complete the same selected item without painting the popup.
+		ac.ProcessKey(e)
+	}
+	pf.drawHostConsoleOverlay()
+	return true
+}
+
 // enterHostConsole switches the physical terminal to the primary screen and activates
 // live passthrough of PTY output directly to the host console.
 func (pf *PanelsFrame) enterHostConsole() {
