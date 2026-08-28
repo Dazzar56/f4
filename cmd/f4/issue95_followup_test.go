@@ -50,8 +50,9 @@ func TestIssue95_HostConsoleTabCompletesBareDirectory(t *testing.T) {
 	}); !handled {
 		t.Fatal("host console should consume Tab for command completion")
 	}
-	if got := pf.cmdLine.Edit.GetText(); got != "cd subdir/" {
-		t.Fatalf("Tab completion text = %q, want %q", got, "cd subdir/")
+	want := "cd subdir" + string(filepath.Separator)
+	if got := pf.cmdLine.Edit.GetText(); got != want {
+		t.Fatalf("Tab completion text = %q, want %q", got, want)
 	}
 	if got := mock.String(); got != beforePTY {
 		t.Fatalf("Tab completion leaked to PTY: before=%q after=%q", beforePTY, got)
