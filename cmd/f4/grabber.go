@@ -66,6 +66,44 @@ func OpenGrabber() {
 	vtui.FrameManager.Redraw()
 }
 
+// handleForcedMouseSelectionEvent turns Shift+left-click into a screen
+// grabber gesture. A plain left-click must keep its normal meaning (including
+// moving a window), while Ctrl/Alt combinations remain available to their
+// existing handlers.
+//
+// The first press is consumed by FrameManager.EventFilter before regular
+// frame dispatch, so the new grabber has to receive that same press after its
+// initial snapshot. Later motion/release events are routed through the normal
+// FrameManager mouse-capture path.
+func handleForcedMouseSelectionEvent(e *vtinput.InputEvent) bool {
+	if e == nil || e.Type != vtinput.MouseEventType || !e.KeyDown ||
+		e.MouseEventFlags&vtinput.MouseMoved != 0 ||
+		e.ButtonState != vtinput.FromLeft1stButtonPressed {
+		return false
+	}
+
+	const modifierMask = vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
+		vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed
+	if e.ControlKeyState&modifierMask != vtinput.ShiftPressed {
+		return false
+	}
+	if vtui.FrameManager == nil || vtui.FrameManager.Screen() == nil {
+		return false
+	}
+	if _, alreadyOpen := vtui.FrameManager.GetTopFrame().(*GrabberFrame); alreadyOpen {
+		return false
+	}
+
+	grabber := NewGrabberFrame()
+	vtui.FrameManager.Push(grabber)
+	// Push only changes the frame stack. Snapshot and handle the press now so
+	// the first drag motion cannot arrive before the selection has an anchor.
+	grabber.Show(vtui.FrameManager.Screen())
+	grabber.ProcessMouse(e)
+	vtui.FrameManager.Redraw()
+	return true
+}
+
 // actionScreenGrab is the context-aware App.ScreenGrab handler. Invoking the
 // action again while the grabber owns the screen has the same toggle semantics
 // as its native Alt+Ins key instead of stacking a second snapshot frame.

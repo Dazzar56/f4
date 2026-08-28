@@ -746,6 +746,9 @@ func SetupUI() {
 		if previousEventFilter != nil && previousEventFilter(e) {
 			return true
 		}
+		if handleForcedMouseSelectionEvent(e) {
+			return true
+		}
 		if handleMenuHistoryEvent(e) {
 			return true
 		}
