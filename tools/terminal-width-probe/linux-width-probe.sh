@@ -40,12 +40,14 @@ run_pty() {
         # script(1) gives the command a PTY. Redirecting script's own stdout
         # only captures the resulting bytes; it does not make the child a
         # pipe, so TIOCGWINSZ still reports $cols to the child.
-        script -qefc "export COLUMNS=$cols LINES=40; stty cols $cols rows 40 2>/dev/null || true; $command" /dev/null > "$capture" 2>&1
+        # Disable pagers: at 80 columns the deliberately long branch listing
+        # can otherwise start less(1) and wait for a key press.
+        script -qefc "export COLUMNS=$cols LINES=40 GIT_PAGER=cat PAGER=cat SYSTEMD_PAGER=cat GIT_TERMINAL_PROMPT=0; stty cols $cols rows 40 2>/dev/null || true; $command" /dev/null > "$capture" 2>&1
         status=$?
         cat "$capture"
     else
         echo 'script(1) is unavailable; running without a synthetic PTY'
-        COLUMNS="$cols" LINES=40 bash -c "$command"
+        COLUMNS="$cols" LINES=40 GIT_PAGER=cat PAGER=cat SYSTEMD_PAGER=cat GIT_TERMINAL_PROMPT=0 bash -c "$command"
         status=$?
     fi
     echo "exit=$status"
