@@ -49,6 +49,7 @@ try {
     Write-Output ("TERM={0}" -f $env:TERM)
     Write-Output ("WT_SESSION={0}" -f $env:WT_SESSION)
     Write-Output ("ConEmuANSI={0}" -f $env:ConEmuANSI)
+    Write-Output ("DIRCMD={0}" -f $env:DIRCMD)
     Write-Output ("COLUMNS={0}" -f $env:COLUMNS)
     Write-Output ("LINES={0}" -f $env:LINES)
     Write-Output ("Console.IsOutputRedirected={0}" -f [Console]::IsOutputRedirected)
@@ -77,6 +78,10 @@ try {
     Run-Cmd 'CONSOLE-MODE' 'mode con'
     Run-Cmd 'CMD-VERSION' 'ver'
 
+    # DIRCMD may silently add /P (or other interactive switches) to every
+    # dir invocation. Record it above, then remove it for deterministic tests.
+    $env:DIRCMD = ''
+
     $git = Get-Command git.exe -ErrorAction SilentlyContinue
     Write-Output ("git-on-windows={0}" -f ([bool]$git))
 
@@ -99,9 +104,9 @@ try {
     Write-Output ("test-directory={0}" -f $testRoot)
     Write-Output ("test-file-count={0}" -f $names.Count)
 
-    Run-Cmd 'DIR-W' ('dir /w "{0}"' -f $testRoot)
-    Run-Cmd 'DIR-D' ('dir /d "{0}"' -f $testRoot)
-    Run-Cmd 'DIR-B' ('dir /b "{0}"' -f $testRoot)
+    Run-Cmd 'DIR-W' ('dir /-p /w "{0}"' -f $testRoot)
+    Run-Cmd 'DIR-D' ('dir /-p /d "{0}"' -f $testRoot)
+    Run-Cmd 'DIR-B' ('dir /-p /b "{0}"' -f $testRoot)
 
     Run-PowerShell 'FORMAT-WIDE' {
         Get-ChildItem -LiteralPath $testRoot | Format-Wide -AutoSize

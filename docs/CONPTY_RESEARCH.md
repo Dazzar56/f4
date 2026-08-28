@@ -349,6 +349,31 @@ build. The first run was a false negative caused by interactive command echo;
 the probe was corrected to run the payload from an `@echo off` temporary batch
 before this PASS.
 
+**C, width-aware command follow-up (2026-08-28).** The Linux companion probe
+was run in `/dev/pts/2`, with an outer size of 153x36, and compared real PTYs
+of 80, 120, and 4000 columns. The result separates two classes that must not
+be conflated. `ls -1` stayed at 142 one-entry-per-line records at every
+width, and `git branch --column=never` stayed at 41 records. Human-oriented
+column modes did react strongly: `ls -C` produced 142 lines at 80 columns,
+71 at 120/153, and **one line of 3658 characters at 4000**; Git's
+`branch --column=always` produced 21, 14/11, and **one line of 1439
+characters**, respectively. The small `git diff --stat` fixture stayed at
+two short lines at all widths, so it did not exercise a width decision.
+
+This makes the practical risk real but bounded: a 4000-column ConPTY does
+not damage ordinary newline-delimited output, but it materially changes
+common human-facing listings and tables. It also disproves using a write to
+the very last cell as the only detector: in this run the width-aware commands
+made decisions based on 4000 without reaching column 4000 (`ls -C` stopped at
+3658 and Git at 1439). The saved log was complete and ended with `END`; the
+earlier apparent hang was a test-runner/pager issue, not a ConPTY result.
+
+The Windows command probe has an independent pagination guard. It records and
+then clears `DIRCMD`, invokes `dir` with `/-p`, and starts PowerShell with
+`-NoProfile -NonInteractive`. Thus a user's persistent `/P` setting cannot
+turn the measurement into a keypress wait. The tested PowerShell formatting
+cmdlets do not request `Out-Host -Paging` and have no pager by default.
+
 **D. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under
 Windows. The honest minimum, and the fallback if A and C do not pay off.
