@@ -342,7 +342,7 @@ decision is therefore written to the debug log under one prefix:
 
 ```sh
 VTUI_DEBUG=1 f4
-grep TTYX ~/.config/f4/debug.log
+grep TTYX ~/.config/f4/Logs/debug.log
 ```
 
 What to look for, in the order it happens:
