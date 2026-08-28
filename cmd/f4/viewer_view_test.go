@@ -540,6 +540,39 @@ func TestViewerView_GetTitle(t *testing.T) {
 	}
 
 }
+
+func TestViewerTitle_FullPathSetting(t *testing.T) {
+	old := AppConfig.DisplayFullPathInTitle
+	t.Cleanup(func() { AppConfig.DisplayFullPathInTitle = old })
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "nested", "doc.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("text"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(tmpDir), path)
+	if err != nil {
+		t.Fatalf("Failed to create NewViewerView: %v", err)
+	}
+	defer vv.Close()
+
+	AppConfig.DisplayFullPathInTitle = false
+	if got, want := vv.topBar.GetLeft(), " doc.txt"; got != want {
+		t.Fatalf("short viewer title = %q, want %q", got, want)
+	}
+
+	AppConfig.DisplayFullPathInTitle = true
+	if got, want := vv.topBar.GetLeft(), " "+path; got != want {
+		t.Fatalf("full viewer title = %q, want %q", got, want)
+	}
+	if got, want := vv.GetWorkspaceTabTitle(), "doc.txt"; got != want {
+		t.Fatalf("full-path viewer workspace tab title = %q, want %q", got, want)
+	}
+}
 func TestLayout_ViewerSearchDialog_Validity(t *testing.T) {
 	vtui.SetDefaultPalette()
 	tmp := filepath.Join(t.TempDir(), "search_layout.txt")

@@ -1404,6 +1404,31 @@ func TestEditorBar_Content(t *testing.T) {
 		t.Errorf("EditorBar did not display correct cursor info (6,12). Found Line:%v, Pos:%v", foundLine, foundPos)
 	}
 }
+
+func TestEditorTitle_FullPathSettingKeepsWorkspaceTabCompact(t *testing.T) {
+	old := AppConfig.DisplayFullPathInTitle
+	t.Cleanup(func() { AppConfig.DisplayFullPathInTitle = old })
+
+	path := filepath.Join(t.TempDir(), "nested", "editor.txt")
+	ev := NewEditorView(piecetable.New([]byte("text")), nil, path)
+	defer ev.Close()
+
+	AppConfig.DisplayFullPathInTitle = false
+	if got, want := ev.GetTopBar().GetLeft(), " editor.txt"; got != want {
+		t.Fatalf("short editor title = %q, want %q", got, want)
+	}
+	if got, want := ev.GetWorkspaceTabTitle(), "editor.txt"; got != want {
+		t.Fatalf("workspace tab title = %q, want %q", got, want)
+	}
+
+	AppConfig.DisplayFullPathInTitle = true
+	if got, want := ev.GetTopBar().GetLeft(), " "+path; got != want {
+		t.Fatalf("full editor title = %q, want %q", got, want)
+	}
+	if got, want := ev.GetWorkspaceTabTitle(), "editor.txt"; got != want {
+		t.Fatalf("full-path workspace tab title = %q, want %q", got, want)
+	}
+}
 func TestEditorView_HandleClose(t *testing.T) {
 	pt := piecetable.New([]byte("test"))
 	ev := NewEditorView(pt, nil, "file.txt")

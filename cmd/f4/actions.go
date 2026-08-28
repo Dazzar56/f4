@@ -4059,7 +4059,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	const width, height = 64, 29
+	const width, height = 64, 30
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -4120,6 +4120,10 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 	editTitle := vtui.NewEdit(0, 0, 30, AppConfig.ConsoleTitleTemplate)
 	lblTitle := vtui.NewLabel(0, 0, Msg("AppearanceSettings.TitleTemplate"), editTitle)
+	chkFullPathTitle := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.DisplayFullPathInTitle"), false)
+	if AppConfig.DisplayFullPathInTitle {
+		chkFullPathTitle.State = 1
+	}
 
 	workspaceTabModes := []string{
 		Msg("AppearanceSettings.WorkspaceTabsAlways"),
@@ -4204,6 +4208,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(editSize)
 	dlg.AddItem(lblTitle)
 	dlg.AddItem(editTitle)
+	dlg.AddItem(chkFullPathTitle)
 	dlg.AddItem(lblWorkspaceTabs)
 	dlg.AddItem(comboWorkspaceTabs)
 	dlg.AddItem(chkWorkspaceTabsOverlay)
@@ -4236,6 +4241,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 
 	vbox.Add(lblTitle, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editTitle, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(chkFullPathTitle, vtui.Margins{}, vtui.AlignLeft)
 
 	rowWorkspaceTabs := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	rowWorkspaceTabs.Add(lblWorkspaceTabs, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -4287,6 +4293,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		fontChanged := AppConfig.GuiUseSystemMonospace != useSystemMonospace || AppConfig.GuiFont != fontValue || fmt.Sprintf("%d", AppConfig.GuiFontSize) != editSize.GetText()
 
 		AppConfig.ConsoleTitleTemplate = editTitle.GetText()
+		AppConfig.DisplayFullPathInTitle = chkFullPathTitle.State == 1
 		AppConfig.GuiUseSystemMonospace = useSystemMonospace
 		AppConfig.GuiFont = fontValue
 		fmt.Sscanf(editSize.GetText(), "%d", &AppConfig.GuiFontSize)

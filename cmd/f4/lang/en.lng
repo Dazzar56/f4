@@ -756,6 +756,7 @@ AppearanceSettings.UseSystemMonospace=Use &system monospace font
 AppearanceSettings.Font=GUI F&ont (Path/Name):
 AppearanceSettings.FontSize=GUI Font Si&ze:
 AppearanceSettings.TitleTemplate=Window &Title Template:
+AppearanceSettings.DisplayFullPathInTitle=Display full path in editor and viewer title
 AppearanceSettings.WorkspaceTabs=Workspace &tabs:
 AppearanceSettings.WorkspaceTabsAlways=Always reserve top row
 AppearanceSettings.WorkspaceTabsMultiple=Show when multiple
