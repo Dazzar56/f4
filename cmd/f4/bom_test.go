@@ -67,6 +67,13 @@ func TestShowEditor_UTF8BOMIsNotDisplayedOrLostOnSave(t *testing.T) {
 				t.Fatalf("editor text = %q, want %q", string(got), text)
 			}
 
+			// SaveToFile replaces the buffers that the background indexer reads.
+			// Stop and join that worker first so the regression test also remains
+			// race-clean when the race shard schedules it during indexing.
+			ev.cancelIndexing()
+			ev.indexWG.Wait()
+			drainPendingTasks()
+
 			ev.modified = true
 			ev.SaveToFile(nil)
 			waitEditorSave(t, ev)
