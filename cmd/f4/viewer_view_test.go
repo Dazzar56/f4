@@ -27,6 +27,29 @@ type tailTrackingFile struct {
 	read []trackedReadRange
 }
 
+type partialHeaderFile struct {
+	data []byte
+}
+
+func (f *partialHeaderFile) Size() int64 { return int64(len(f.data)) }
+func (*partialHeaderFile) Close() error  { return nil }
+func (f *partialHeaderFile) Read(ctx context.Context, p []byte) (int, error) {
+	return f.ReadAt(ctx, p, 0)
+}
+func (f *partialHeaderFile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if off >= int64(len(f.data)) {
+		return 0, io.EOF
+	}
+	n := copy(p, f.data[off:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
 type largeBinaryFile struct {
 	size    int64
 	mu      sync.Mutex
@@ -968,6 +991,63 @@ func TestViewerView_Codepages_AutoDetect(t *testing.T) {
 
 	if vv.Codepage != 65001 {
 		t.Errorf("Expected autodetect to recognize valid UTF-8/ASCII as 65001, got %d", vv.Codepage)
+	}
+}
+
+func TestViewerView_Codepages_RestoresPerFileOverride(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "remembered_cp.txt")
+	raw, err := vfs.EncodeBytes([]byte("Привет, сохранённая кодировка\n"), 866)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldState := GlobalFileState
+	oldAuto, oldDefault := AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage
+	defer func() {
+		GlobalFileState = oldState
+		AppConfig.ViewerAutodetectCodePage = oldAuto
+		AppConfig.ViewerDefaultCodePage = oldDefault
+	}()
+	GlobalFileState = &F4FileStateProvider{Limit: 10, Data: make(map[string]*FileState)}
+	v := vfs.NewOSVFS(tmpDir)
+	GlobalFileState.SaveCodepage(FileStateKey(v, path), 1251)
+	AppConfig.ViewerAutodetectCodePage = true
+	AppConfig.ViewerDefaultCodePage = 65001
+
+	vv, err := NewViewerView(context.Background(), v, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vv.Close()
+	if vv.Codepage != 1251 {
+		t.Fatalf("remembered Viewer codepage = %d, want 1251", vv.Codepage)
+	}
+}
+
+func TestViewerView_Codepages_TrimsPartialHeader(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	raw, err := vfs.EncodeBytes([]byte("Привет, это достаточно длинный русский текст для определения кодировки.\n"+
+		"Вторая строка содержит числа 123 и знаки препинания.\n"), 866)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := &partialHeaderFile{data: raw}
+	base := vfs.NewOSVFS(t.TempDir())
+	vv, err := NewViewerView(context.Background(), &singleFileVFS{VFS: base, file: file}, "partial.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vv.Close()
+	if vv.Codepage != 866 && vv.Codepage != 22222 {
+		t.Fatalf("partial header detected codepage = %d, want CP866 or the equivalent system OEM alias", vv.Codepage)
+	}
+	if vv.HexMode {
+		t.Fatal("partial header was misclassified as binary")
 	}
 }
 

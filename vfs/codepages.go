@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	stdunicode "unicode"
 	"unicode/utf8"
 
+	"github.com/abadojack/whatlanggo"
 	"github.com/unxed/vtui"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -149,37 +151,202 @@ func DetectEncoding(data []byte, autodetect bool, defaultCP int) int {
 	return defaultCP
 }
 
-// detectLegacyCodepage distinguishes the system ANSI and OEM encodings when
-// the input is not UTF-8 and has no BOM. There is no marker in a single-byte
-// codepage stream, so this is deliberately conservative: choose a candidate
-// only when it produces substantially more ordinary text than the other one.
-// An uncertain result falls back to the user's configured default.
+// detectLegacyCodepage looks at every single-byte codepage f4 can decode. A
+// byte stream does not carry its codepage, so this remains deliberately
+// conservative: text quality is the primary signal and language detection is
+// used only to break a close tie. An uncertain result falls back to the
+// user's configured default rather than turning arbitrary binary data into
+// text.
 func detectLegacyCodepage(data []byte) (int, bool) {
 	if len(data) < 8 {
 		return 0, false
 	}
 
-	ansi, ansiErr := DecodeBytes(data, 11111)
-	oem, oemErr := DecodeBytes(data, 22222)
-	if ansiErr != nil || oemErr != nil || string(ansi) == string(oem) {
+	// Keep the system aliases first. When an alias and its explicit codepage
+	// decode to the same text, the alias is the useful result on that system
+	// (and preserves the existing ANSI/OEM behaviour). Explicit codepages are
+	// still tried when the system locale is unrelated to the file.
+	ids := []int{11111, 22222, 1251, 866, 20866, 1252, 437, 850, 852}
+	type candidate struct {
+		id         int
+		text       string
+		score      int
+		confidence float64
+	}
+	candidates := make([]candidate, 0, len(ids))
+	seenText := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		decoded, err := DecodeBytes(data, id)
+		if err != nil {
+			continue
+		}
+		text := string(decoded)
+		if _, seen := seenText[text]; seen {
+			continue
+		}
+		seenText[text] = struct{}{}
+		candidates = append(candidates, candidate{
+			id:    id,
+			text:  text,
+			score: legacyTextScore(decoded),
+		})
+	}
+	if len(candidates) == 0 {
 		return 0, false
 	}
 
-	ansiScore := legacyTextScore(ansi)
-	oemScore := legacyTextScore(oem)
-	if ansiScore == oemScore {
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
+	top := candidates[0]
+	if top.score <= 0 {
 		return 0, false
 	}
-	if ansiScore > oemScore {
-		if ansiScore-oemScore < 8 {
-			return 0, false
+	if len(candidates) == 1 || top.score-candidates[1].score >= 8 {
+		return top.id, true
+	}
+
+	// The common Cyrillic case is a genuine tie: CP1251 and KOI8-R can both
+	// produce equally readable Unicode text. whatlanggo is intentionally not
+	// allowed to overrule a clear text-quality win; it only ranks candidates
+	// whose score is within the same conservative ambiguity window.
+	for i := range candidates {
+		if top.score-candidates[i].score >= 8 {
+			break
 		}
-		return 11111, true
+		candidates[i].confidence = legacyLanguageConfidence(candidates[i].text)
 	}
-	if oemScore-ansiScore < 8 {
-		return 0, false
+	// candidates[0] was copied into top before the tie-breaker scores were
+	// calculated; refresh the copy before comparing it with the other entries.
+	top = candidates[0]
+	best := top
+	for _, c := range candidates[1:] {
+		if top.score-c.score >= 8 {
+			break
+		}
+		if c.confidence > best.confidence {
+			best = c
+		}
 	}
-	return 22222, true
+	if best.id != top.id && best.confidence-top.confidence >= 0.05 {
+		return best.id, true
+	}
+	if best.id == top.id && best.confidence >= 0.05 {
+		return best.id, true
+	}
+	// When the system alias itself is one of the equally readable candidates,
+	// prefer it over an explicit duplicate. This keeps ANSI/OEM detection
+	// stable for the user's locale while still allowing an explicit codepage
+	// to win whenever it is materially more plausible.
+	if top.id == 11111 || top.id == 22222 {
+		return top.id, true
+	}
+	return 0, false
+}
+
+// legacyLanguageConfidence averages detection over words instead of asking
+// whatlanggo to classify one long fragment. A wrong codepage can accidentally
+// form a convincing sequence across an entire fragment; word-level scores are
+// less sensitive to that effect and still provide a useful tie-breaker for
+// Cyrillic encodings. Punctuation and numeric-only fragments are ignored.
+func legacyLanguageConfidence(text string) float64 {
+	text = legacyLanguageSample(text)
+	latin, cyrillic := 0, 0
+	for _, r := range text {
+		switch {
+		case r >= 0x0041 && r <= 0x024F && stdunicode.IsLetter(r):
+			latin++
+		case r >= 0x0400 && r <= 0x052F && stdunicode.IsLetter(r):
+			cyrillic++
+		}
+	}
+	// For Latin text whatlanggo is more reliable on the complete fragment;
+	// short word-level samples tend to lose the accents that distinguish
+	// Windows-1252/CP850/CP852. Cyrillic candidates are scored word by word,
+	// because a full wrong-codepage fragment can look like another real
+	// Cyrillic language.
+	if latin > cyrillic {
+		return whatlanggo.Detect(text).Confidence
+	}
+
+	var total float64
+	words := 0
+	for _, word := range strings.FieldsFunc(text, func(r rune) bool {
+		return stdunicode.IsSpace(r) || stdunicode.IsPunct(r)
+	}) {
+		if words >= 32 {
+			break
+		}
+		if utf8.RuneCountInString(word) < 3 {
+			continue
+		}
+		hasLetter := false
+		for _, r := range word {
+			if stdunicode.IsLetter(r) {
+				hasLetter = true
+				break
+			}
+		}
+		if !hasLetter {
+			continue
+		}
+		total += whatlanggo.Detect(word).Confidence
+		words++
+	}
+	if words == 0 {
+		return 0
+	}
+	confidence := total / float64(words)
+	// The supported Cyrillic codepages are primarily used for Russian text,
+	// and CP1251/KOI8-R can otherwise decode the same bytes into equally
+	// readable-looking Slavic text. Prefer a candidate with common Russian
+	// n-grams, but keep the bonus small enough that it cannot overturn a clear
+	// text-quality result.
+	if whatlanggo.Detect(text).Lang == whatlanggo.Rus {
+		confidence += 0.15
+	}
+	confidence += legacyRussianNgramConfidence(text)
+	return confidence
+}
+
+// This compact set of frequent Russian trigrams is used only as a
+// tie-breaker between equally plausible Cyrillic decodings. It is deliberately
+// not a complete language model: the text-quality score remains authoritative,
+// and short or non-Russian text can still fall back to the configured default.
+var russianLanguageMarkers = []string{
+	"при", "рав", "ств", "ени", "ове", "ани", "сво", "лов", "чел", "ого",
+	"ния", "ест", "аво", "ние", "льн", "ова", "ать", "или", "его",
+	"аци", "лен", "енн", "тво", "сто", "аль", "про", "сти", "пол", "раз",
+	"нос", "она", "тел", "ред", "ель", "общ", "под", "ное", "еск", "ели",
+	"ече", "для", "ово", "льс", "ции", "ной", "ами", "кон", "сть", "пос",
+	"тра", "так", "нал", "дру", "тер", "изн", "соц",
+}
+
+func legacyRussianNgramConfidence(text string) float64 {
+	text = strings.ToLower(text)
+	runeCount := utf8.RuneCountInString(text)
+	if runeCount < 3 {
+		return 0
+	}
+
+	matches := 0
+	for _, marker := range russianLanguageMarkers {
+		matches += strings.Count(text, marker)
+	}
+	return float64(matches) / float64(runeCount-2)
+}
+
+// A 16 KiB header is enough for text scoring but is unnecessarily expensive
+// for a language model. Keep the language tie-breaker bounded and deterministic
+// so opening a large file does not spend noticeable time classifying every
+// word in the whole header.
+func legacyLanguageSample(text string) string {
+	const maxRunes = 4096
+	runes := []rune(text)
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes])
+	}
+	return text
 }
 
 func legacyTextScore(data []byte) int {

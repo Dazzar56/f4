@@ -1184,6 +1184,16 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionEditorSettings(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Settings.Viewer",
+		Area:        "Shell",
+		Label:       "Viewer Settings",
+		LabelKey:    "Menu.ViewerSettings",
+		Description: "Open viewer settings dialog",
+		DescKey:     "Action.Settings.Viewer.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionViewerSettings(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "Settings.Colorer",
 		Area:        "Shell",
 		Label:       "Colorer Settings",
@@ -2281,6 +2291,7 @@ func init() {
 			AppConfig.EditorAutodetectCodePage = false
 			AppConfig.EditorDefaultCodePage = next
 			SaveConfig()
+			saveCodepageOverride(ev.vfs, ev.filePath, next)
 			ev.ReloadWithCodepage(next)
 			showToast(fmt.Sprintf("Codepage: %s", vfs.DisplayCodepageName(next)), time.Second)
 		}),
@@ -2471,6 +2482,7 @@ func init() {
 			AppConfig.ViewerAutodetectCodePage = false
 			AppConfig.ViewerDefaultCodePage = next
 			SaveConfig()
+			saveCodepageOverride(vv.vfs, vv.path, next)
 			vv.ReloadWithCodepage(next)
 			showToast(fmt.Sprintf("Codepage: %s", vfs.DisplayCodepageName(next)), time.Second)
 		}),
@@ -2485,5 +2497,28 @@ func init() {
 		DefaultKeys: []string{"ShiftF8"},
 		MenuPath:    "Options",
 		Handler:     withViewer(func(vv *ViewerView) { vv.showCodepageDialog() }),
+	})
+	// The shell menu is not present while an Editor or Viewer owns the
+	// workspace. Mirror the settings commands into those area menus so the
+	// codepage defaults remain discoverable in the context where they apply.
+	RegisterAction(Action{
+		Name:        "Editor.Settings",
+		Area:        "Editor",
+		Label:       "Editor Settings",
+		LabelKey:    "Menu.EditorSettings",
+		Description: "Open editor settings dialog",
+		DescKey:     "Action.Settings.Editor.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionEditorSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Viewer.Settings",
+		Area:        "Viewer",
+		Label:       "Viewer Settings",
+		LabelKey:    "Menu.ViewerSettings",
+		Description: "Open viewer settings dialog",
+		DescKey:     "Action.Settings.Viewer.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionViewerSettings(pf) }),
 	})
 }

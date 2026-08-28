@@ -68,6 +68,17 @@ func TestF4FileStateProvider_SaveAndRestore(t *testing.T) {
 	if stateV == nil || stateV.QuickViewCodepage != 866 {
 		t.Errorf("Incorrect saved Quick View codepage: %+v", stateV)
 	}
+
+	fs.SaveCodepage("readme.md", 1251)
+	stateV = fs.GetState("readme.md")
+	if stateV == nil || stateV.Codepage != 1251 {
+		t.Errorf("Incorrect saved Editor/Viewer codepage: %+v", stateV)
+	}
+	fs.SaveCodepage("readme.md", 0)
+	stateV = fs.GetState("readme.md")
+	if stateV == nil || stateV.Codepage != 0 {
+		t.Errorf("Codepage override was not cleared: %+v", stateV)
+	}
 }
 
 func TestF4FileStateProvider_AsyncSaveUpdatesMemoryAndDisk(t *testing.T) {

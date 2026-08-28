@@ -7,7 +7,7 @@ import (
 	"github.com/unxed/vtui"
 )
 
-func TestEditorView_PasteConvertsInternalClipboardCodepage(t *testing.T) {
+func TestEditorView_PastePreservesUnicodeAcrossCodepages(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	source := NewEditorView(piecetable.New([]byte("Привет")), nil, "")
