@@ -895,6 +895,25 @@ func TestTerminalView_WindowsConPTY_VisualGravity(t *testing.T) {
 	}
 }
 
+func TestTerminalView_HiddenCursorStaysHiddenWhenFocused(t *testing.T) {
+	tv := NewTerminalView(80, 10)
+	defer tv.Close()
+	tv.SetFocus(true)
+	tv.SetVisible(true)
+	tv.SetCursorVisible(false)
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 10)
+	scr.SetCursorVisible(true)
+	tv.SetPosition(0, 0, 79, 9)
+	tv.Show(scr)
+
+	_, _, visible, _ := scr.GetCursorStateForTesting()
+	if visible {
+		t.Fatal("focused terminal view made a DECTCEM-hidden cursor visible")
+	}
+}
+
 func TestTerminalView_WindowsConPTY_LogIntegrity(t *testing.T) {
 	// Проверяем, что абсолютные прыжки курсора ConPTY не создают
 	// "дырок" или дублей в текстовом логе GetAllLogBytes()
