@@ -494,47 +494,12 @@ func newEditorView(pt *piecetable.PieceTable, v vfs.VFS, path string, useEditorC
 			base := ""
 			if ev.DisplayTitle != "" {
 				base = ev.DisplayTitle
-			} else if ev.vfs != nil {
-				base = ev.vfs.Base(ev.filePath)
 			} else {
-				base = filepath.Base(ev.filePath)
+				base = displayFileTitle(ev.vfs, ev.filePath)
 			}
 			return " " + base
 		},
-		func() string {
-			// While a scan is running the line number on the right is the one
-			// the index knows about, and the file may well have more. Say so
-			// rather than let it read as the whole truth.
-			if ev.colorerIndexing {
-				percent := 0
-				if ev.colorerTotal > 0 {
-					percent = ev.colorerProgress * 100 / ev.colorerTotal
-					if percent > 100 {
-						percent = 100
-					}
-				}
-				return fmt.Sprintf(" %s │ Colorer %d%% (Esc) │ %d,%d     ",
-					vfs.DisplayCodepageName(ev.Codepage), percent, ev.CursorLine+1, ev.CursorPos)
-			}
-			if st := ev.IndexState(); st.Phase == IndexScanning {
-				return fmt.Sprintf(" %s │ %s %d%% (Esc) │ %d,%d     ",
-					vfs.DisplayCodepageName(ev.Codepage), Msg("Editor.Indexing"),
-					st.Percent(), ev.CursorLine+1, ev.CursorPos)
-			}
-			cpName := vfs.DisplayCodepageName(ev.Codepage)
-			if ev.DecodeMode {
-				absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-				modeBits := ev.DisasmMode
-				if modeBits == 0 {
-					modeBits = 64
-				}
-				return fmt.Sprintf(" %s │ Dec:%d │ 0x%08X     ", cpName, modeBits, absPos)
-			} else if ev.HexMode {
-				absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-				return fmt.Sprintf(" %s │ Hex │ 0x%08X     ", cpName, absPos)
-			}
-			return fmt.Sprintf(" %s │ %d,%d     ", cpName, ev.CursorLine+1, ev.CursorPos)
-		},
+		func() string { return ev.editorStatusText() },
 	)
 	ev.topBar.ColorIdx = ColEditorStatus
 	ev.topBar.SetVisible(true)

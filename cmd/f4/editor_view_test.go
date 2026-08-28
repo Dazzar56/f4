@@ -1376,32 +1376,69 @@ func TestEditorView_WordNavigation(t *testing.T) {
 func TestEditorBar_Content(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
-	pt := piecetable.New([]byte("abc"))
+	pt := piecetable.New([]byte("abc\ndef"))
 	ev := NewEditorView(pt, nil, "test.go")
 	defer ev.Close()
 	ev.SetPosition(0, 0, 40, 10)
-	ev.CursorLine = 5
-	ev.CursorPos = 12
+	ev.CursorLine = 1
+	ev.CursorPos = 2
+	ev.modified = true
 
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(41, 11)
 
 	ev.GetTopBar().Show(scr)
 
-	// В статус-баре должно быть "6,12" (Line+1, Pos)
-	foundLine := false
-	foundPos := false
-	for x := 0; x < 40; x++ {
-		if scr.GetCell(x, 0).Char == '6' {
-			foundLine = true
-		}
-		if scr.GetCell(x, 0).Char == '1' && scr.GetCell(x+1, 0).Char == '2' {
-			foundPos = true
-		}
+	got := ev.GetTopBar().GetRight()
+	want := "* UTF-8 │ Ln 2/2 Col 3     "
+	if got != want {
+		t.Errorf("EditorBar status = %q, want %q", got, want)
+	}
+}
+
+func TestEditorBar_PositionFieldKeepsItsWidth(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	ev := NewEditorView(piecetable.New([]byte("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n")), nil, "test.go")
+	defer ev.Close()
+
+	ev.CursorLine = 0
+	first := ev.GetTopBar().GetRight()
+	ev.CursorLine = 9
+	last := ev.GetTopBar().GetRight()
+	if len(first) != len(last) {
+		t.Fatalf("position field moved: first=%q (%d), last=%q (%d)", first, len(first), last, len(last))
+	}
+	if first == last {
+		t.Fatal("position field test did not move the cursor")
+	}
+	if !strings.Contains(first, "Ln  1/11") || !strings.Contains(last, "Ln 10/11") {
+		t.Errorf("status line numbers are not fixed-width: first=%q last=%q", first, last)
+	}
+}
+
+func TestEditorTitle_FullPathSettingKeepsWorkspaceTabCompact(t *testing.T) {
+	old := AppConfig.DisplayFullPathInTitle
+	t.Cleanup(func() { AppConfig.DisplayFullPathInTitle = old })
+
+	path := filepath.Join(t.TempDir(), "nested", "editor.txt")
+	ev := NewEditorView(piecetable.New([]byte("text")), nil, path)
+	defer ev.Close()
+
+	AppConfig.DisplayFullPathInTitle = false
+	if got, want := ev.GetTopBar().GetLeft(), " editor.txt"; got != want {
+		t.Fatalf("short editor title = %q, want %q", got, want)
+	}
+	if got, want := ev.GetWorkspaceTabTitle(), "editor.txt"; got != want {
+		t.Fatalf("workspace tab title = %q, want %q", got, want)
 	}
 
-	if !foundLine || !foundPos {
-		t.Errorf("EditorBar did not display correct cursor info (6,12). Found Line:%v, Pos:%v", foundLine, foundPos)
+	AppConfig.DisplayFullPathInTitle = true
+	if got, want := ev.GetTopBar().GetLeft(), " "+path; got != want {
+		t.Fatalf("full editor title = %q, want %q", got, want)
+	}
+	if got, want := ev.GetWorkspaceTabTitle(), "editor.txt"; got != want {
+		t.Fatalf("full-path workspace tab title = %q, want %q", got, want)
 	}
 }
 func TestEditorView_HandleClose(t *testing.T) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/vtui"
 	"testing"
 )
@@ -141,9 +142,9 @@ func TestTopBar_Truncation(t *testing.T) {
 	tb.Show(scr)
 
 	// Combined length (20 + 5 = 25) exceeds width (20).
-	// Right part ("Right" - 5 chars) should be preserved, and Left part should be truncated with "…".
-	// Left part should become: runewidth.Truncate("VeryLongLeftPartName", 20 - 5 - 1 = 14, "…") -> "VeryLongLeftP…"
-	expectedLeft := "VeryLongLeftP…"
+	// Right part ("Right" - 5 chars) should be preserved, and the left part
+	// should retain both its beginning and its useful suffix.
+	expectedLeft := "VeryL...rtName"
 	for i, r := range expectedLeft {
 		cell := scr.GetCell(i, 0)
 		if cell.Char != testUint64Rune(r) {
@@ -158,5 +159,14 @@ func TestTopBar_Truncation(t *testing.T) {
 		if cell.Char != testUint64Rune(r) {
 			t.Errorf("Expected right char %q at x=%d, got %q", r, rightStart+i, testRune(cell.Char))
 		}
+	}
+}
+
+func TestTopBar_MiddleTruncationHandlesWideText(t *testing.T) {
+	if got, want := truncateTopBarMiddle("/tmp/путь/文件.txt", 12), "/tmp....txt"; got != want {
+		t.Fatalf("truncateTopBarMiddle() = %q, want %q", got, want)
+	}
+	if got, want := runewidth.StringWidth(truncateTopBarMiddle("/tmp/путь/文件.txt", 12)), 11; got != want {
+		t.Fatalf("truncated title width = %d, want %d (without splitting a wide character)", got, want)
 	}
 }

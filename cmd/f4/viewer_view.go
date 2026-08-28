@@ -123,12 +123,7 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	vv.menuBar = vtui.NewMenuBar(nil)
 	vv.topBar = NewTopBar(
 		func() string {
-			base := ""
-			if vv.vfs != nil {
-				base = vv.vfs.Base(vv.path)
-			} else {
-				base = filepath.Base(vv.path)
-			}
+			base := displayFileTitle(vv.vfs, vv.path)
 			return " " + base
 		},
 		func() string {

@@ -53,6 +53,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersOrder
 	AppConfig.ApplyCommandParallelism = 0
 	AppConfig.AutoSaveSettings = false
+	AppConfig.DisplayFullPathInTitle = true
 
 	// 2. Save
 	SaveConfig()
@@ -79,6 +80,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersAlways
 	AppConfig.ApplyCommandParallelism = 1
 	AppConfig.AutoSaveSettings = true
+	AppConfig.DisplayFullPathInTitle = false
 
 	// 4. Load
 	LoadConfig()
@@ -116,6 +118,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if AppConfig.AutoSaveSettings {
 		t.Error("LoadConfig failed to restore disabled AutoSaveSettings")
+	}
+	if !AppConfig.DisplayFullPathInTitle {
+		t.Error("LoadConfig failed to restore DisplayFullPathInTitle")
 	}
 	if !AppConfig.EditorCrosshair {
 		t.Error("LoadConfig failed to restore EditorCrosshair")

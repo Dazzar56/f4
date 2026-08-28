@@ -137,7 +137,7 @@ require (
 	github.com/nwaples/rardecode/v2 v2.2.3 // indirect
 	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/rivo/uniseg v0.2.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 // indirect
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect

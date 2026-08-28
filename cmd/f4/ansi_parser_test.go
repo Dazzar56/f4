@@ -961,6 +961,35 @@ func TestAnsiParser_DECSET_Modes(t *testing.T) {
 	}
 }
 
+func TestAnsiParser_DECTCEMControlsTerminalCursor(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	p := NewAnsiParser(tv, nil)
+
+	if !tv.CursorVisible {
+		t.Fatal("new terminal must start with a visible cursor")
+	}
+	p.Process([]byte("\x1b[?25l"))
+	if tv.CursorVisible {
+		t.Fatal("CSI ? 25 l did not hide the terminal cursor")
+	}
+	p.Process([]byte("\x1b[?25h"))
+	if !tv.CursorVisible {
+		t.Fatal("CSI ? 25 h did not show the terminal cursor")
+	}
+
+	// The parser accepts the non-private spelling as well; it is useful for
+	// applications that emit the mode without the DEC private marker.
+	p.Process([]byte("\x1b[25l"))
+	if tv.CursorVisible {
+		t.Fatal("CSI 25 l did not hide the terminal cursor")
+	}
+	p.Process([]byte("\x1bc"))
+	if !tv.CursorVisible {
+		t.Fatal("RIS did not restore the terminal cursor visibility")
+	}
+}
+
 // recordingPty collects everything written back to it.
 type recordingPty struct {
 	mockPty

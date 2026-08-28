@@ -40,6 +40,10 @@ type TerminalView struct {
 	Height  int
 	CursorX int
 	CursorY int
+	// CursorVisible is the terminal application's DECTCEM state. The host
+	// screen cursor is reset by the frame manager before every paint, so the
+	// terminal view must apply this state whenever it is focused.
+	CursorVisible bool
 
 	// Состояние терминала (сохранение координат)
 	savedX, savedY       int
@@ -199,6 +203,7 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.lastAttr = other.lastAttr
 	tv.Palette = other.Palette
 	tv.CursorX, tv.CursorY = other.CursorX, other.CursorY
+	tv.CursorVisible = other.CursorVisible
 	tv.UseAltScreen = other.UseAltScreen
 	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
 	tv.KittyFlags = other.KittyFlags
@@ -260,6 +265,7 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.ScrollBottom = h - 1
 	tv.CursorX = 0
 	tv.CursorY = h - 1 // Восстановлено выравнивание по нижнему краю для правильного визуала (прилипание к низу)
+	tv.CursorVisible = true
 	tv.lastCharWasCR = true
 	vtui.DebugLog("TERM_VIEW: ResetBuffer to %dx%d. VTE Mirror initialized at bottom (%d)", w, h, tv.CursorY)
 
@@ -691,6 +697,15 @@ func (tv *TerminalView) SetCursor(x, y int) {
 	}
 }
 
+// SetCursorVisible applies DECTCEM (CSI ? 25 h/l) to the terminal state.
+// It is separate from the host ScreenBuf cursor: the latter is reset before
+// every frame and is only updated while this terminal view owns focus.
+func (tv *TerminalView) SetCursorVisible(visible bool) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	tv.CursorVisible = visible
+}
+
 func (tv *TerminalView) SaveCursor() {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
@@ -946,7 +961,7 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		tv.paintSelectionHighlight(scr)
 	}
 
-	if tv.IsVisible() && tv.IsFocused() {
+	if tv.IsVisible() && tv.IsFocused() && tv.CursorVisible {
 		cursorDrawY := tv.Y1 + tv.CursorY + offset
 		if tv.UseAltScreen {
 			cursorDrawY = tv.Y1 + tv.CursorY
@@ -955,6 +970,8 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 			scr.SetCursorPos(tv.X1+tv.CursorX, cursorDrawY)
 			scr.SetCursorVisible(true)
 		}
+	} else if tv.IsVisible() && tv.IsFocused() {
+		scr.SetCursorVisible(false)
 	}
 }
 

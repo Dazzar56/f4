@@ -2364,6 +2364,48 @@ func TestActionAppearanceSettingsSavesSystemMonospace(t *testing.T) {
 	}
 }
 
+func TestActionAppearanceSettingsSavesFullPathInTitle(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldConfig := AppConfig
+	oldPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return filepath.Join(t.TempDir(), "settings.ini") }
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldPath
+	}()
+	AppConfig.DisplayFullPathInTitle = false
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	waitForLoad(t, pf.panels[0].(*FileSystemPanel))
+	waitForLoad(t, pf.panels[1].(*FileSystemPanel))
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var fullPath *vtui.Checkbox
+	for _, child := range top.GetChildren() {
+		checkbox, ok := child.(*vtui.Checkbox)
+		if ok && checkbox.GetText() == Msg("AppearanceSettings.DisplayFullPathInTitle") {
+			fullPath = checkbox
+			break
+		}
+	}
+	if fullPath == nil {
+		t.Fatal("full path in title checkbox not found in Appearance Settings")
+	}
+	if fullPath.State != 0 {
+		t.Fatal("full path in title checkbox must be disabled by default")
+	}
+	fullPath.Toggle()
+	clickDialogButton(t, top, "Ok")
+	if !AppConfig.DisplayFullPathInTitle {
+		t.Fatal("full path in title setting was not saved")
+	}
+}
+
 func TestActionAppearanceSettingsSavesWorkspaceTabRestoration(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()
