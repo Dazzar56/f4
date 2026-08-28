@@ -1173,6 +1173,7 @@ func loadDefaultQuickView(parent context.Context, filesystem vfs.VFS, path strin
 	if looksBinary(decodedBuf) {
 		return quickViewFileResult{raw: append([]byte{}, buf...), codepage: cpID, autoDetect: autoDetect, binary: true, lines: hexDumpLines(buf)}
 	}
+	decodedBuf = vfs.StripUTF8BOM(decodedBuf)
 	return quickViewFileResult{
 		raw:        append([]byte{}, buf...),
 		codepage:   cpID,

@@ -61,10 +61,12 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		detectLen = int(size)
 	}
 	header := make([]byte, detectLen)
-	if _, err := f.ReadAt(ctx, header, 0); err != nil && err != io.EOF {
+	n, err := f.ReadAt(ctx, header, 0)
+	if err != nil && err != io.EOF {
 		_ = f.Close()
 		return nil, fmt.Errorf("read file header: %w", err)
 	}
+	header = header[:n]
 
 	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
 	binary := viewerHeaderLooksBinary(header, cpID)
@@ -73,8 +75,12 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		// handle lets the hex viewer fetch only its small visible windows.
 		cpID = 65001
 	}
+	dataOffset := int64(0)
+	if cpID == 65001 && !binary && vfs.HasUTF8BOM(header) {
+		dataOffset = vfs.UTF8BOMSize
+	}
 
-	backend, err := newViewerBackend(ctx, v, path, f, cpID)
+	backend, err := newViewerBackend(ctx, v, path, f, cpID, dataOffset)
 	if err != nil {
 		_ = f.Close()
 		return nil, err
@@ -791,7 +797,25 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 		// those bytes with a decoded text stream.
 		backendCP = 65001
 	}
-	backend, err := newViewerBackend(context.Background(), vv.vfs, vv.path, f, backendCP)
+	dataOffset := int64(0)
+	if backendCP == 65001 && !vv.HexMode {
+		size := f.Size()
+		detectLen := 16 * 1024
+		if int64(detectLen) > size {
+			detectLen = int(size)
+		}
+		header := make([]byte, detectLen)
+		n, readErr := f.ReadAt(context.Background(), header, 0)
+		if readErr != nil && readErr != io.EOF {
+			_ = f.Close()
+			return
+		}
+		header = header[:n]
+		if !viewerHeaderLooksBinary(header, backendCP) && vfs.HasUTF8BOM(header) {
+			dataOffset = vfs.UTF8BOMSize
+		}
+	}
+	backend, err := newViewerBackend(context.Background(), vv.vfs, vv.path, f, backendCP, dataOffset)
 	if err != nil {
 		_ = f.Close()
 		return
@@ -843,7 +867,7 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 // followed by an F8 switch. Non-UTF-8 files are materialized into the same
 // memory-backed stream that the old viewer used, while UTF-8 keeps the lazy
 // windowed backend for large files and remote VFSes.
-func newViewerBackend(ctx context.Context, owner vfs.VFS, path string, f vfs.ReadAtCloser, cpID int) (*ViewerBackend, error) {
+func newViewerBackend(ctx context.Context, owner vfs.VFS, path string, f vfs.ReadAtCloser, cpID int, dataOffset int64) (*ViewerBackend, error) {
 	if cpID != 65001 {
 		size := f.Size()
 		maxInt := int64(int(^uint(0) >> 1))
@@ -872,14 +896,18 @@ func newViewerBackend(ctx context.Context, owner vfs.VFS, path string, f vfs.Rea
 		}, nil
 	}
 
-	size := f.Size()
+	logicalSize := f.Size() - dataOffset
+	if logicalSize < 0 {
+		logicalSize = 0
+	}
 	bCtx, bCancel := context.WithCancel(context.Background())
 	backend := &ViewerBackend{
 		file:         f,
-		size:         size,
+		size:         logicalSize,
 		path:         path,
 		owner:        owner,
 		codepage:     cpID,
+		dataOffset:   dataOffset,
 		totalLines:   -1,
 		totalForSize: -1,
 		ctx:          bCtx,
@@ -904,7 +932,8 @@ func (vv *ViewerView) ReloadWithAutoDetect() {
 		detectLen = int(size)
 	}
 	header := make([]byte, detectLen)
-	_, _ = f.ReadAt(context.Background(), header, 0)
+	n, _ := f.ReadAt(context.Background(), header, 0)
+	header = header[:n]
 
 	cpID := vfs.DetectEncoding(header, AppConfig.ViewerAutodetectCodePage, AppConfig.ViewerDefaultCodePage)
 	vv.ReloadWithCodepage(cpID)

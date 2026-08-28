@@ -13,10 +13,11 @@ import (
 // AsyncBuffer provides non-blocking access to a file, returning ErrLoading
 // and triggering background fetches when data is missing.
 type AsyncBuffer struct {
-	file      vfs.ReadAtCloser
-	size      int
-	ctx       context.Context
-	cancelCtx context.CancelFunc
+	file       vfs.ReadAtCloser
+	size       int
+	fileOffset int64
+	ctx        context.Context
+	cancelCtx  context.CancelFunc
 
 	mu        sync.Mutex
 	loaded    map[int][]byte // Chunk index -> Data
@@ -25,15 +26,34 @@ type AsyncBuffer struct {
 }
 
 func NewAsyncBuffer(ctx context.Context, f vfs.ReadAtCloser) *AsyncBuffer {
+	return NewAsyncBufferWithOffset(ctx, f, 0)
+}
+
+// NewAsyncBufferWithOffset presents the file from fileOffset onward. This is
+// used for text files whose on-disk UTF-8 BOM is metadata rather than editor
+// content; all buffer offsets remain logical offsets into the displayed text.
+func NewAsyncBufferWithOffset(ctx context.Context, f vfs.ReadAtCloser, fileOffset int64) *AsyncBuffer {
+	if fileOffset < 0 {
+		fileOffset = 0
+	}
+	rawSize := int64(0)
+	if f != nil {
+		rawSize = f.Size()
+	}
+	size := rawSize - fileOffset
+	if size < 0 {
+		size = 0
+	}
 	bCtx, bCancel := context.WithCancel(ctx)
 	return &AsyncBuffer{
-		file:      f,
-		size:      int(f.Size()),
-		ctx:       bCtx,
-		cancelCtx: bCancel,
-		loaded:    make(map[int][]byte),
-		fetching:  make(map[int]bool),
-		chunkSize: 32 * 1024, // 32 KB chunks
+		file:       f,
+		size:       int(size),
+		fileOffset: fileOffset,
+		ctx:        bCtx,
+		cancelCtx:  bCancel,
+		loaded:     make(map[int][]byte),
+		fetching:   make(map[int]bool),
+		chunkSize:  32 * 1024, // 32 KB chunks
 	}
 }
 
@@ -56,7 +76,7 @@ func (b *AsyncBuffer) prewarm() {
 		sz = b.size
 	}
 	data := make([]byte, sz)
-	n, err := b.file.ReadAt(b.ctx, data, 0)
+	n, err := b.file.ReadAt(b.ctx, data, b.fileOffset)
 	if b.ctx.Err() != nil {
 		return
 	}
@@ -128,7 +148,7 @@ func (b *AsyncBuffer) fetchChunk(idx int, frames *vtui.FrameManagerType) {
 	}
 
 	buf := make([]byte, sz)
-	n, err := b.file.ReadAt(b.ctx, buf, off)
+	n, err := b.file.ReadAt(b.ctx, buf, b.fileOffset+off)
 
 	b.mu.Lock()
 	delete(b.fetching, idx)

@@ -375,6 +375,55 @@ func TestViewerSearchOffsetBothDirections(t *testing.T) {
 		t.Fatalf("backward previous offset = %d, want 5", got)
 	}
 }
+
+func TestViewerBackend_UTF8BOMUsesLogicalOffsets(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bom.txt")
+	text := "first\nsecond needle\n"
+	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, []byte(text)...), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	indexed := &indexingVFS{
+		VFS:     vfs.NewOSVFS(dir),
+		offsets: []int64{3, 9},
+		total:   2,
+	}
+	vb, err := NewViewerBackend(context.Background(), indexed, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb.Close()
+	vb.dataOffset = vfs.UTF8BOMSize
+	vb.size = int64(len(text))
+
+	if got := vb.Size(); got != int64(len(text)) {
+		t.Fatalf("logical size = %d, want %d", got, len(text))
+	}
+	if got, ok := vb.LineStart(context.Background(), 2); !ok || got != int64(len("first\n")) {
+		t.Fatalf("LineStart(2) = %d, %v; want %d, true", got, ok, len("first\n"))
+	}
+	if got, ok := vb.LineStartFromEnd(context.Background(), 1); !ok || got != int64(len("first\n")) {
+		t.Fatalf("LineStartFromEnd(1) = %d, %v; want %d, true", got, ok, len("first\n"))
+	}
+
+	searching := &searchingVFS{
+		VFS:     vfs.NewOSVFS(dir),
+		offsets: []int64{16}, // raw offset: BOM (3) + len("first\nsecond ") (13)
+		can:     true,
+	}
+	vb, err = NewViewerBackend(context.Background(), searching, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vb.Close()
+	vb.dataOffset = vfs.UTF8BOMSize
+	vb.size = int64(len(text))
+	if got, ok := vb.SearchFrom(context.Background(), "needle", 0); !ok || got != 13 {
+		t.Fatalf("SearchFrom = %d, %v; want 13, true", got, ok)
+	}
+}
+
 func TestViewerBackendLineStart(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")

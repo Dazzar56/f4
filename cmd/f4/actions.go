@@ -773,6 +773,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	var mapped *MappedFile
 	cpID := AppConfig.EditorDefaultCodePage
 	binary := false
+	dataOffset := int64(0)
 
 	if f != nil {
 		size := f.Size()
@@ -794,6 +795,9 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		if binary {
 			cpID = 65001
 		}
+		if cpID == 65001 && !binary && vfs.HasUTF8BOM(header) {
+			dataOffset = vfs.UTF8BOMSize
+		}
 
 		if cpID == 65001 {
 			// A local file is mapped rather than read: the mapping is one
@@ -803,7 +807,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 			// refused — keeps the lazily fetched chunk buffer.
 			if AppConfig.EditorMemoryMap {
 				var mapErr error
-				mapped, mapErr = MapEditorFile(v, f)
+				mapped, mapErr = MapEditorFileWithOffset(v, f, dataOffset)
 				if mapErr != nil && mapErr != errNotMappable {
 					vtui.DebugLog("EDITOR: memory mapping %s failed, reading lazily instead: %v", path, mapErr)
 				}
@@ -811,7 +815,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 			if mapped != nil {
 				pt = piecetable.New(mapped.Bytes())
 			} else {
-				buf = NewAsyncBuffer(context.Background(), f)
+				buf = NewAsyncBufferWithOffset(context.Background(), f, dataOffset)
 				buf.prewarm()
 				pt = piecetable.NewWithBuffer(buf)
 			}
@@ -840,6 +844,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	}
 	editor.Codepage = cpID
 	editor.binaryFile = binary
+	editor.utf8BOM = cpID == 65001 && dataOffset != 0
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
 		editor.HexMode = true
@@ -1231,11 +1236,15 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	var buf *AsyncBuffer
 	var mapped *MappedFile
 	cpID := vv.Codepage
+	dataOffset := int64(0)
+	if vv.backend != nil {
+		dataOffset = vv.backend.dataOffset
+	}
 
 	if cpID == 65001 {
 		if AppConfig.EditorMemoryMap {
 			var mapErr error
-			mapped, mapErr = MapEditorFile(vv.vfs, f)
+			mapped, mapErr = MapEditorFileWithOffset(vv.vfs, f, dataOffset)
 			if mapErr != nil && mapErr != errNotMappable {
 				vtui.DebugLog("EDITOR: memory mapping %s failed, reading lazily instead: %v", vv.path, mapErr)
 			}
@@ -1243,7 +1252,7 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 		if mapped != nil {
 			pt = piecetable.New(mapped.Bytes())
 		} else {
-			buf = NewAsyncBuffer(ctx, f)
+			buf = NewAsyncBufferWithOffset(ctx, f, dataOffset)
 			buf.prewarm()
 			pt = piecetable.NewWithBuffer(buf)
 		}
@@ -1274,6 +1283,7 @@ func actionSwitchViewerToEditor(vv *ViewerView) {
 	editor.mapped = mapped
 	editor.Codepage = cpID
 	editor.binaryFile = vv.HexMode
+	editor.utf8BOM = cpID == 65001 && vv.backend != nil && vv.backend.dataOffset != 0
 	editor.WordWrap = vv.WrapMode
 	editor.HexMode = vv.HexMode
 	editor.DecodeMode = vv.DecodeMode

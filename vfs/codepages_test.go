@@ -34,6 +34,25 @@ func TestCodepages_Basic(t *testing.T) {
 	}
 }
 
+func TestCodepages_StripUTF8BOM(t *testing.T) {
+	withBOM := []byte{0xEF, 0xBB, 0xBF, 't', 'e', 'x', 't'}
+	if !HasUTF8BOM(withBOM) {
+		t.Fatal("UTF-8 BOM was not detected")
+	}
+	if got := string(StripUTF8BOM(withBOM)); got != "text" {
+		t.Fatalf("stripped text = %q, want %q", got, "text")
+	}
+
+	withoutBOM := []byte("text")
+	if HasUTF8BOM(withoutBOM) {
+		t.Fatal("plain UTF-8 was reported as BOM-marked")
+	}
+	stripped := StripUTF8BOM(withoutBOM)
+	if &stripped[0] != &withoutBOM[0] {
+		t.Fatal("stripping a missing BOM allocated or copied the input")
+	}
+}
+
 func TestCodepages_GetSystemEncoding(t *testing.T) {
 	oem := GetSystemOEMEncoding()
 	ansi := GetSystemANSIEncoding()

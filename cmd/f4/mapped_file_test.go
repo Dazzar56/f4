@@ -56,6 +56,34 @@ func TestMapEditorFile_BacksThePieceTableWithoutCopying(t *testing.T) {
 	}
 }
 
+func TestMapEditorFileWithOffsetKeepsLogicalTextAndReleasesMapping(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bom.txt")
+	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, []byte("text")...), 0644); err != nil {
+		t.Fatal(err)
+	}
+	v := vfs.NewOSVFS(dir)
+	f, err := v.Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	m, err := MapEditorFileWithOffset(v, f, vfs.UTF8BOMSize)
+	if err != nil {
+		t.Fatalf("MapEditorFileWithOffset: %v", err)
+	}
+	if got := string(m.Bytes()); got != "text" {
+		t.Fatalf("mapped logical text = %q, want %q", got, "text")
+	}
+	if got := m.Size(); got != len("text") {
+		t.Fatalf("mapped logical size = %d, want %d", got, len("text"))
+	}
+	if err := m.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
 func TestMapEditorFile_DeclinesWhatItShouldNotMap(t *testing.T) {
 	dir := t.TempDir()
 
