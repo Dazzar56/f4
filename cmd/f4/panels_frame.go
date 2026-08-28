@@ -3669,7 +3669,9 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 
 	done := make(chan struct{})
 	dialogShown := false // accessed only from UI tasks
-	showDialog := func() {
+	uiFrames := vtui.FrameManager
+	var showDialog func()
+	showDialog = func() {
 		if delay > 0 {
 			select {
 			case <-done:
@@ -3677,12 +3679,23 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 			default:
 			}
 		}
+		// A worker may ask for a modal dialog (for example, an archive
+		// password) before this delayed progress screen is due to appear.
+		// Do not put the progress screen on a new active screen while that
+		// prompt is waiting on the old one: it would hide the prompt and leave
+		// the worker blocked forever. Retry after the modal dialog is dismissed.
+		if top := uiFrames.GetTopFrame(); top != nil && top.IsModal() {
+			time.AfterFunc(50*time.Millisecond, func() {
+				uiFrames.PostTask(showDialog)
+			})
+			return
+		}
 		if forked && pf != nil {
 			clone := pf.Clone()
-			vtui.FrameManager.AddScreen(clone)
-			vtui.FrameManager.Push(dlg)
+			uiFrames.AddScreen(clone)
+			uiFrames.Push(dlg)
 		} else {
-			vtui.FrameManager.AddScreenHeadless(dlg)
+			uiFrames.AddScreenHeadless(dlg)
 		}
 		dialogShown = true
 	}
@@ -3692,14 +3705,13 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 		// Read on the goroutine that starts this work, not inside it: the
 		// work outlives the call, and reading the global from it races
 		// anything that reassigns vtui.FrameManager meanwhile.
-		uiFrames := vtui.FrameManager
 		showTimer = time.AfterFunc(delay, func() {
 			uiFrames.PostTask(showDialog)
 		})
 	} else {
 		// Preserve the existing immediate-dialog contract for callers that do
 		// not opt into a delay.
-		vtui.FrameManager.PostTask(showDialog)
+		uiFrames.PostTask(showDialog)
 	}
 
 	ctx := vtui.RunAsync(func(ctx *vtui.TaskContext) {
@@ -3741,6 +3753,8 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker func(ctx context.Context, reporter vfs.TaskReporter) error, onComplete func(err error)) {
 	dlg := NewFileOpProgressDialog(title)
 	var taskCtx *vtui.TaskContext
+	done := make(chan struct{})
+	dialogShown := false // accessed only from UI tasks
 	dlg.btnCancel.OnClick = func() { dlg.SetExitCode(1) }
 	dlg.OnResult = func(code int) {
 		if taskCtx != nil {
@@ -3750,21 +3764,41 @@ func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker
 
 	reporter := newDialogReporter(dlg)
 
-	vtui.FrameManager.PostTask(func() {
+	uiFrames := vtui.FrameManager
+	var showDialog func()
+	showDialog = func() {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		// Keep a password or other modal prompt reachable if the worker posts
+		// it before this progress screen reaches the UI queue.
+		if top := uiFrames.GetTopFrame(); top != nil && top.IsModal() {
+			time.AfterFunc(50*time.Millisecond, func() {
+				uiFrames.PostTask(showDialog)
+			})
+			return
+		}
 		if forked && pf != nil {
 			clone := pf.Clone()
-			vtui.FrameManager.AddScreen(clone)
-			vtui.FrameManager.Push(dlg)
+			uiFrames.AddScreen(clone)
+			uiFrames.Push(dlg)
 		} else {
-			vtui.FrameManager.AddScreenHeadless(dlg)
+			uiFrames.AddScreenHeadless(dlg)
 		}
-	})
+		dialogShown = true
+	}
+	uiFrames.PostTask(showDialog)
 
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		err := worker(ctx.Context, reporter)
+		close(done)
 		ctx.RunOnUI(func() {
 			reporter.Stop()
-			dlg.Close()
+			if dialogShown {
+				dlg.Close()
+			}
 			if onComplete != nil {
 				onComplete(err)
 			}

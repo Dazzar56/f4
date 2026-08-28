@@ -108,7 +108,7 @@ func (v *ArchiveVFS) ensureFSLocked() error {
 	if v.cleanupTimer == nil || v.activePath() == "" {
 		return fmt.Errorf("archive VFS is closed")
 	}
-	reopened, err := archive.OpenFS(v.activePath(), archive.Options{Password: v.password})
+	reopened, err := openArchiveFileSystem(context.Background(), v.activePath(), v.displayName, v.password)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ type archiveFSOpenResult struct {
 func openArchiveFSWithContext(ctx context.Context, localPath, displayName string, backing io.Closer, password string) (archive.FileSystem, bool, error) {
 	result := make(chan archiveFSOpenResult, 1)
 	go func() {
-		fsys, err := archive.OpenFS(localPath, archive.Options{Password: password})
+		fsys, err := openArchiveFileSystem(ctx, localPath, displayName, password)
 		result <- archiveFSOpenResult{fsys: fsys, err: err}
 	}()
 
@@ -1781,7 +1781,7 @@ func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 }
 
 func (v *ArchiveVFS) reloadFS() error {
-	newFS, err := archive.OpenFS(v.activePath(), archive.Options{Password: v.password})
+	newFS, err := openArchiveFileSystem(context.Background(), v.activePath(), v.displayName, v.password)
 	if err != nil {
 		return err
 	}
@@ -2524,7 +2524,9 @@ func (v *ArchiveVFS) openBulkExtractor(ctx context.Context, f vfs.ReadAtCloser, 
 		_ = localF.Close()
 		return nil, nil, err
 	}
-	if passwordFormat, ok := archivePasswordFormat(format, password); ok {
+	if configuredFormat, ok := configureRARArchiveFormat(format, localPath, password); ok {
+		format = configuredFormat
+	} else if passwordFormat, ok := archivePasswordFormat(format, password); ok {
 		format = passwordFormat
 	}
 

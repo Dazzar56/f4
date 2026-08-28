@@ -1973,6 +1973,7 @@ type mockSlowVFS struct {
 	vfs.VFS
 	onOpen    func()
 	openDelay time.Duration
+	openBlock <-chan struct{}
 }
 
 func (m *mockSlowVFS) GetPath() string     { return "/mock" }
@@ -1991,6 +1992,13 @@ func (m *mockSlowVFS) Open(ctx context.Context, p string) (vfs.ReadAtCloser, err
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-timer.C:
+		}
+	}
+	if m.openBlock != nil {
+		select {
+		case <-m.openBlock:
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 	return &vfs.MemoryReadAtCloser{Data: []byte("mock")}, nil
@@ -2083,6 +2091,82 @@ func TestActionOpenViewer_FastTaskDoesNotFlashProgressDialog(t *testing.T) {
 			return
 		default:
 			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestActionOpenViewer_PromptStaysAboveDelayedProgressDialog(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	modalShown := make(chan struct{})
+	releaseOpen := make(chan struct{})
+	var prompt *vtui.Window
+	mv := &mockSlowVFS{
+		openBlock: releaseOpen,
+		onOpen: func() {
+			vtui.FrameManager.PostTask(func() {
+				prompt = vtui.NewCenteredDialog(30, 5, "Archive.PasswordTitle")
+				vtui.FrameManager.Push(prompt)
+				close(modalShown)
+			})
+		},
+	}
+
+	actionOpenViewer(pf, mv, "/mock/file.txt")
+
+	deadline := time.After(openingProgressDelay + 300*time.Millisecond)
+	for prompt == nil {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			t.Fatal("password prompt was not shown")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	select {
+	case <-modalShown:
+	case <-time.After(time.Second):
+		t.Fatal("password prompt was not published")
+	}
+
+	if top := vtui.FrameManager.GetTopFrame(); top != prompt {
+		title := "<nil>"
+		if top != nil {
+			title = top.GetTitle()
+		}
+		t.Fatalf("top frame = %T %q, want the password prompt", top, title)
+	}
+	for _, screen := range vtui.FrameManager.Screens {
+		for _, frame := range screen.Frames {
+			if strings.Contains(frame.GetTitle(), "Opening") {
+				t.Fatalf("delayed progress dialog covered the prompt")
+			}
+		}
+	}
+
+	vtui.FrameManager.Pop()
+	close(releaseOpen)
+	deadline = time.After(time.Second)
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			t.Fatal("viewer open did not complete after dismissing the prompt")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+		if top := vtui.FrameManager.GetTopFrame(); top != nil && strings.Contains(top.GetTitle(), "Opening") {
+			t.Fatal("progress dialog appeared after the prompt was dismissed")
+		}
+		if len(vtui.FrameManager.Screens) > 1 {
+			return
 		}
 	}
 }
