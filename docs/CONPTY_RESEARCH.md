@@ -511,10 +511,46 @@ answers about:
 3. Does the system conhost accept a handle f4 created, launched the way
    ConPTY launches it? If yes, the seat is real and the rest is forwarding.
 
+**D2, first measurement (2026-08-28, Windows 10.0.22000, `condrv.sys`
+6.2.22000.71, `conhost.exe` 6.2.22000.2538).** Two of the three questions
+answered, and the two that matter answered yes.
+
+- **The seat is available unprivileged.** `\Device\ConDrv\Server` was
+  created by an ordinary user process. The obstacle that would have closed
+  D2 before it began is not there.
+- **The system conhost accepted a handle f4 created.** Launched as
+  `conhost.exe --server <our handle> --headless -- cmd.exe`, it took the
+  endpoint and kept running on it. So f4 can hold the seat and hand the work
+  to the real conhost: no C++ console server of its own.
+- **Question 2 failed on a probe bug, not a refusal.** `READ_IO` returned
+  `ERROR_INVALID_FUNCTION` because the probe built its control codes with
+  `FILE_DEVICE_CONSOLE = 0x8000` instead of `0x50`. The arithmetic is
+  checkable against published numbers -- FireEye's 2017 analysis names
+  `0x50000F` and `0x500013` for input-read and output-write, which are
+  functions 3 and 4 under device `0x50` -- so the codes are now
+  `READ_IO = 0x500006`, `SET_SERVER_INFORMATION = 0x50001F`. The probe also
+  did not announce itself as a server first: `SET_SERVER_INFORMATION` hands
+  the driver the event it signals, and without it a read has no meaning.
+  Both are fixed; question 2 is unanswered, not answered no.
+
+**What the run already settles about the shape of D2.** Questions 2 and 3
+cannot both succeed in one process. If conhost serves the endpoint, conhost
+reads the messages; if f4 reads them, conhost is not there to do the work. So
+D2 is not "listen alongside" -- it is a genuine proxy: f4 holds one endpoint
+facing the client, holds a second facing conhost, and forwards messages and
+replies between them, reading what passes. That is more work than watching,
+and it must be written down as such before anyone plans on the cheap version.
+
+**A side note worth keeping.** `condrv.sys` reports file version
+**6.2**.22000.71 -- a Windows 8 era resource, unchanged through Windows 11.
+Weak evidence, but it points the same way as the interface history above:
+this driver is not being rewritten.
+
 Run it on as many builds as can be found -- 10, 11 21H2/23H2/24H2/25H2,
 Server. Three matching reports across a decade of builds is a far better
 answer about stability than any amount of reasoning, and three differing
-ones close the direction cheaply.
+ones close the direction cheaply. The next run needs to answer question 2:
+whether a message arrives, and what its bytes look like.
 
 **E. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under

@@ -41,17 +41,19 @@ import (
 )
 
 var (
-	ntdll                  = syscall.NewLazyDLL("ntdll.dll")
-	kernel32               = syscall.NewLazyDLL("kernel32.dll")
-	version                = syscall.NewLazyDLL("version.dll")
-	procNtCreateFile       = ntdll.NewProc("NtCreateFile")
-	procRtlInitUnicodeStr  = ntdll.NewProc("RtlInitUnicodeString")
-	procRtlGetVersion      = ntdll.NewProc("RtlGetVersion")
-	procDeviceIoControl    = kernel32.NewProc("DeviceIoControl")
-	procCreateFileW        = kernel32.NewProc("CreateFileW")
-	procGetFileVersionInfo = version.NewProc("GetFileVersionInfoW")
-	procVerQueryValue      = version.NewProc("VerQueryValueW")
-	procGetFileVersionSize = version.NewProc("GetFileVersionInfoSizeW")
+	ntdll                   = syscall.NewLazyDLL("ntdll.dll")
+	kernel32                = syscall.NewLazyDLL("kernel32.dll")
+	version                 = syscall.NewLazyDLL("version.dll")
+	procNtCreateFile        = ntdll.NewProc("NtCreateFile")
+	procRtlInitUnicodeStr   = ntdll.NewProc("RtlInitUnicodeString")
+	procRtlGetVersion       = ntdll.NewProc("RtlGetVersion")
+	procDeviceIoControl     = kernel32.NewProc("DeviceIoControl")
+	procCreateFileW         = kernel32.NewProc("CreateFileW")
+	procGetFileVersionInfo  = version.NewProc("GetFileVersionInfoW")
+	procVerQueryValue       = version.NewProc("VerQueryValueW")
+	procGetFileVersionSize  = version.NewProc("GetFileVersionInfoSizeW")
+	procCreateEventW        = kernel32.NewProc("CreateEventW")
+	procWaitForSingleObject = kernel32.NewProc("WaitForSingleObject")
 )
 
 type unicodeString struct {
@@ -89,17 +91,33 @@ type osVersionInfoEx struct {
 }
 
 // The ConDrv control codes, from microsoft/terminal dep/Console/condrv.h
-// (MIT). FILE_DEVICE_CONSOLE is 0x8000.
+// (MIT). FILE_DEVICE_CONSOLE is 0x50 -- the first run of this probe used
+// 0x8000 and every call came back "Incorrect function", which was the probe
+// being wrong, not the driver refusing. The arithmetic is checkable against
+// published numbers: FireEye's 2017 analysis names 0x50000F and 0x500013 for
+// the input-read and output-write codes, and those are exactly functions 3
+// and 4 with METHOD_NEITHER under device 0x50.
 func ctlCode(function, method uint32) uint32 {
-	return 0x8000<<16 | function<<2 | method
+	return 0x50<<16 | function<<2 | method
 }
 
-var (
-	ioctlReadIO     = ctlCode(1, 2) // METHOD_OUT_DIRECT
-	ioctlSetServer  = ctlCode(7, 3) // METHOD_NEITHER
-	ioctlGetSrvPID  = ctlCode(8, 3)
-	ioctlSetSrvInfo = ctlCode(7, 3)
+const (
+	methodOutDirect = 2
+	methodNeither   = 3
 )
+
+var (
+	ioctlReadIO     = ctlCode(1, methodOutDirect) // 0x500006
+	ioctlSetSrvInfo = ctlCode(7, methodNeither)   // 0x50001F
+	ioctlGetSrvPID  = ctlCode(8, methodNeither)   // 0x500023
+)
+
+// serverInformation is CD_IO_SERVER_INFORMATION: the event the driver
+// signals when a message is waiting. The server must hand this over before
+// it may read, which is the other half of what the first run got wrong.
+type serverInformation struct {
+	InputAvailableEvent uintptr
+}
 
 var out *os.File
 
@@ -212,45 +230,109 @@ func reportServerEndpoint() uintptr {
 	return handle
 }
 
-// reportMessages answers question 2: does the driver deliver API messages,
-// and what do they look like? The layout is undocumented, so the bytes are
-// recorded rather than interpreted.
+// reportMessages answers question 2: does the driver deliver API messages?
+//
+// The order matters and the first run did not follow it. A server must
+// announce itself with SET_SERVER_INFORMATION, handing the driver an event
+// to signal, before READ_IO means anything. This does that, then waits on
+// the event rather than blocking in the ioctl, so a machine with no client
+// attached gives a clean "nothing yet" instead of a hang.
 func reportMessages(server uintptr) {
 	say("--- Question 2: does the driver deliver API messages? ---\n")
 	say("A message is what a client's console call arrives as: which client,\n")
 	say("which API, and its payload. That payload is the application's intent\n")
 	say("before any wrapping -- the fact every approach so far had to guess.\n")
+	say("control codes: READ_IO=0x%06X SET_SERVER_INFORMATION=0x%06X GET_SERVER_PID=0x%06X\n",
+		ioctlReadIO, ioctlSetSrvInfo, ioctlGetSrvPID)
 
-	// A generously sized buffer: the message header plus room for payload.
-	buf := make([]byte, 4096)
-	var returned uint32
-	done := make(chan bool, 1)
-	go func() {
-		r, _, err := procDeviceIoControl.Call(server, uintptr(ioctlReadIO),
-			0, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
-			uintptr(unsafe.Pointer(&returned)), 0)
-		if r == 0 {
-			say("READ_IO returned an error: %v\n", err)
-			done <- false
-			return
-		}
-		done <- true
-	}()
-
-	select {
-	case ok := <-done:
-		if ok {
-			say("RESULT: a message arrived, %d bytes.\n", returned)
-			say("first 64 bytes: % x\n", buf[:min(64, int(returned))])
-			say("(record this: the layout is undocumented -- microsoft/terminal#10463 --\n")
-			say(" so the only evidence it is stable is the same bytes on another build.)\n")
-		}
-	case <-time.After(3 * time.Second):
-		say("RESULT: no message within 3s, which is expected with no client\n")
-		say("        attached: READ_IO blocks until one calls a console API.\n")
-		say("        The call did not fail, so the endpoint is live.\n")
+	ev, err := createEvent()
+	if err != nil {
+		say("RESULT: could not create the signalling event: %v\n\n", err)
+		return
 	}
-	say("\n")
+	defer syscall.CloseHandle(syscall.Handle(ev))
+
+	info := serverInformation{InputAvailableEvent: ev}
+	var returned uint32
+	r, _, err := procDeviceIoControl.Call(server, uintptr(ioctlSetSrvInfo),
+		uintptr(unsafe.Pointer(&info)), unsafe.Sizeof(info), 0, 0,
+		uintptr(unsafe.Pointer(&returned)), 0)
+	if r == 0 {
+		say("SET_SERVER_INFORMATION failed: %v\n", err)
+		say("VERDICT: we hold the endpoint but may not act as its server. That\n")
+		say("         closes the proxy shape of D2 on this build; record it.\n\n")
+		return
+	}
+	say("SET_SERVER_INFORMATION: accepted -- the driver took our event, so we\n")
+	say("are this endpoint's server.\n")
+
+	// A client has to exist before anything is waiting. Attach one to *our*
+	// server: a console process launched so that it connects here.
+	client, cleanup := launchClient(server)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	say("client launch: %s\n", client)
+
+	const waitObject0 = 0
+	w, _, _ := procWaitForSingleObject.Call(ev, 3000)
+	if w != waitObject0 {
+		say("RESULT: no message within 3s (wait returned 0x%X).\n", w)
+		say("        With a client attached this would mean the driver routes\n")
+		say("        its calls elsewhere; with none, it is simply quiet.\n\n")
+		return
+	}
+
+	buf := make([]byte, 4096)
+	r, _, err = procDeviceIoControl.Call(server, uintptr(ioctlReadIO),
+		0, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
+		uintptr(unsafe.Pointer(&returned)), 0)
+	if r == 0 {
+		say("RESULT: the event fired but READ_IO failed: %v\n\n", err)
+		return
+	}
+	say("RESULT: a message arrived, %d bytes.\n", returned)
+	n := int(returned)
+	if n > 64 {
+		n = 64
+	}
+	say("first %d bytes: % x\n", n, buf[:n])
+	say("(record these: the layout is undocumented -- microsoft/terminal#10463 --\n")
+	say(" so the only evidence it is stable is the same shape on another build.)\n\n")
+}
+
+// launchClient starts a console program attached to our server endpoint, so
+// that question 2 has something to observe. A client connects through
+// \Device\ConDrv\Connect, which the driver associates with the server that
+// owns the console -- inheriting our handle is what makes that us.
+func launchClient(server uintptr) (string, func()) {
+	var si syscall.StartupInfo
+	var pi syscall.ProcessInformation
+	si.Cb = uint32(unsafe.Sizeof(si))
+	argv, err := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe`)
+	if err != nil {
+		return "could not build a command line", nil
+	}
+	// CREATE_NEW_CONSOLE would give it a console of its own, which is the
+	// opposite of what is wanted; the client must land on our endpoint.
+	err = syscall.CreateProcess(nil, argv, nil, nil, true, 0, nil, nil, &si, &pi)
+	if err != nil {
+		return fmt.Sprintf("failed: %v", err), nil
+	}
+	return "cmd.exe started", func() {
+		syscall.TerminateProcess(pi.Process, 0)
+		syscall.CloseHandle(pi.Thread)
+		syscall.CloseHandle(pi.Process)
+	}
+}
+
+// createEvent makes the auto-reset event the driver signals.
+func createEvent() (uintptr, error) {
+	h, _, err := procCreateEventW.Call(0, 0, 0, 0)
+	if h == 0 {
+		return 0, err
+	}
+	return h, nil
 }
 
 // reportConhostAcceptance answers question 3: does the real conhost take a
@@ -263,6 +345,11 @@ func reportConhostAcceptance(server uintptr) {
 	say("hand the work to the real conhost, watching the messages go past --\n")
 	say("direction D2, with no C++ in the build and no console server of our own\n")
 	say("to get right.\n")
+	say("Note: this and question 2 cannot both succeed in one run. If conhost\n")
+	say("serves the endpoint, conhost reads the messages, not us. A real proxy\n")
+	say("therefore needs two endpoints -- ours facing the client, a second one\n")
+	say("facing conhost -- and this question only asks whether the seat is\n")
+	say("genuinely ours to hand over.\n")
 
 	sys := os.Getenv("SystemRoot")
 	if sys == "" {
@@ -358,6 +445,5 @@ func fileVersion(path string) string {
 }
 
 var _ = procCreateFileW
-var _ = ioctlSetServer
 var _ = ioctlGetSrvPID
 var _ = ioctlSetSrvInfo
