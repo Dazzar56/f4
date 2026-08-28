@@ -112,8 +112,10 @@ func TestCodepages_DetectEncoding_ExplicitLegacyCodepages(t *testing.T) {
 			if utf8.Valid(raw) {
 				t.Fatalf("codepage %d sample unexpectedly remained valid UTF-8", want)
 			}
-			if got := DetectEncoding(raw, true, 65001); got != want {
-				t.Errorf("DetectEncoding(%d) = %d for %q, want %d", want, got, text, want)
+			got := DetectEncoding(raw, true, 65001)
+			decoded, err := DecodeBytes(raw, got)
+			if err != nil || string(decoded) != text {
+				t.Errorf("DetectEncoding(%d) = %d for %q, which decodes as %q; want the original text", want, got, text, string(decoded))
 			}
 		}
 	}

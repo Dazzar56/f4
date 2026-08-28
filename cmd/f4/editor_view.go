@@ -41,16 +41,6 @@ var (
 )
 var GlobalLastClipboardWasRectangular bool
 
-// The terminal clipboard carries Unicode text but not the codepage that was
-// active when an editor copied it. Remember the last in-app copy so a paste
-// into another editor can round-trip through the source and destination
-// codepages instead of silently treating the Unicode string as already
-// encoded for the destination.
-var (
-	internalClipboardText string
-	internalClipboardCP   int
-)
-
 // EditorView is a text editor component.
 type EditorView struct {
 	vtui.BaseFrame
@@ -5367,8 +5357,6 @@ func (ev *EditorView) CopySelection() {
 
 		text := strings.Join(lines, "\n")
 		vtui.SetClipboard(text)
-		internalClipboardText = text
-		internalClipboardCP = ev.Codepage
 		return
 	}
 
@@ -5379,8 +5367,6 @@ func (ev *EditorView) CopySelection() {
 		if data != nil {
 			text := string(data)
 			vtui.SetClipboard(text)
-			internalClipboardText = text
-			internalClipboardCP = ev.Codepage
 			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
 		}
 	}
@@ -5468,15 +5454,6 @@ func (ev *EditorView) PasteRectangular(text string, targetCol int) {
 }
 
 func (ev *EditorView) PasteText(text string) {
-	if text == internalClipboardText && internalClipboardCP != 0 && internalClipboardCP != ev.Codepage {
-		rawData, err := vfs.EncodeBytes([]byte(text), internalClipboardCP)
-		if err == nil {
-			if decoded, decodeErr := vfs.DecodeBytes(rawData, ev.Codepage); decodeErr == nil {
-				text = string(decoded)
-			}
-		}
-	}
-
 	if GlobalLastClipboardWasRectangular {
 		targetCol := ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
 		ev.PasteRectangular(text, targetCol)
