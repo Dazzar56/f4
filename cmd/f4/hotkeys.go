@@ -340,6 +340,23 @@ func NativeShortcutsForAction(area string, action Action) []string {
 	return shortcuts
 }
 
+// MenuShortcutsForAction combines configurable and framework-owned shortcuts
+// for a menu item. Native shortcuts deliberately do not live in
+// HotkeyManager.Defaults, because the focused frame must get first chance to
+// consume them; menu presentation still needs to advertise them.
+func MenuShortcutsForAction(area, actionName string) string {
+	var groups [][]string
+	if GlobalHotkeysMgr != nil {
+		if key := GlobalHotkeysMgr.GetKeyForAction(area, actionName); key != "" {
+			groups = append(groups, []string{FormatKeyForUI(key)})
+		}
+	}
+	if action, ok := GetAction(actionName); ok {
+		groups = append(groups, NativeShortcutsForAction(area, action))
+	}
+	return strings.Join(mergeCommandPaletteShortcuts(groups...), ", ")
+}
+
 // nativeShortcutOwnedByCurrentContext filters framework fallbacks that never
 // reach the advertised action in the active frame. This is separate from
 // HotkeyManager overrides: these keys are consumed directly by the frame
@@ -348,7 +365,7 @@ func nativeShortcutOwnedByCurrentContext(actionName, key string) bool {
 	if vtui.FrameManager == nil {
 		return false
 	}
-	top := vtui.FrameManager.GetTopFrame()
+	top := nativeShortcutContextFrame()
 	if top == nil {
 		return false
 	}
@@ -398,6 +415,24 @@ func nativeShortcutOwnedByCurrentContext(actionName, key string) bool {
 		return true
 	}
 	return false
+}
+
+// nativeShortcutContextFrame returns the frame whose input context is being
+// described by a menu. A VMenu is temporarily placed above its owner while it
+// is painted, but it must not make the owner's native shortcuts disappear
+// from the menu labels themselves.
+func nativeShortcutContextFrame() vtui.Frame {
+	top := vtui.FrameManager.GetTopFrame()
+	if top == nil || top.GetType() != vtui.TypeMenu {
+		return top
+	}
+	frames := vtui.FrameManager.GetActiveFrames(vtui.FrameManager.ActiveIdx)
+	for i := len(frames) - 1; i >= 0; i-- {
+		if frames[i] != nil && frames[i].GetType() != vtui.TypeMenu {
+			return frames[i]
+		}
+	}
+	return nil
 }
 
 func nativeShortcutConditionTrue(area, condition string) bool {

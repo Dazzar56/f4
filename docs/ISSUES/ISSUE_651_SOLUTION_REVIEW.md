@@ -140,3 +140,30 @@ Submit the generic initial-window fix to vtui and keep the disputed Panel
 settings layout out of scope. Do not change f4's already-correct Left-menu
 bindings or invent a second GUI-mode setting until a backend-neutral native
 window-state API exists.
+
+## Follow-up: the refreshed Left menu erased native workspace shortcuts
+
+The reporter's next retest identified a real regression in the previous
+workspace-menu coverage. `leftMenu` initially supplied `Ctrl+N` and `Ctrl+W`,
+but `GetMenuBar` rebuilt the menu and then replaced those values with the
+empty result of `HotkeyManager.GetKeyForAction`. The two shortcuts are
+framework-owned `NativeKeys`, not configurable defaults, so the displayed
+keys disappeared even though the actions still worked.
+
+### Three solution passes
+
+1. Keep the literal `Ctrl+N`/`Ctrl+W` values in the side menu. Rejected: the
+   dynamic refresh still erases them and it would ignore user overrides,
+   terminal ownership, queue vetoes, and future native actions.
+2. Install native workspace keys as ordinary hotkey defaults. Rejected: the
+   focused frame must receive these keys before the framework fallback, and
+   turning them into configurable defaults changes dispatch precedence.
+3. Resolve menu shortcuts through the action registry, merging the active
+   configurable binding with `NativeShortcutsForAction`. Selected: it keeps
+   dispatch ownership unchanged while making every menu refresh truthful and
+   respecting explicit unbinds or context-specific ownership.
+
+The follow-up regression covers the actual `GetMenuBar` refresh path for both
+Left-menu workspace entries and verifies that an explicit `Ctrl+N=None`
+override is reflected. The disputed Panel settings layout remains out of
+scope.
