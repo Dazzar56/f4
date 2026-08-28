@@ -1544,21 +1544,101 @@ func actionViewerSearch(vv *ViewerView) {
 }
 
 func actionViewerSearchDirection(vv *ViewerView, reverse bool) {
-	var searchEdit *vtui.Edit
-	dlg := vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", vv.lastSearch, func(pattern string) {
+	dlgW, dlgH := 66, 15
+	dlg := vtui.NewCenteredDialog(dlgW, dlgH, Msg("Viewer.SearchTitle"))
+	dlg.ShowClose = true
+
+	lblPrompt := vtui.NewLabel(0, 0, Msg("Search.Prompt"), nil)
+	editPattern := vtui.NewEdit(0, 0, 40, vv.lastSearch)
+	attachHistoryUseLast(editPattern, searchTextHistoryID)
+	editPattern.SelectAll()
+	lblPrompt.FocusLink = editPattern
+	dlg.SetFocusedItem(editPattern)
+
+	chkCase := vtui.NewCheckbox(0, 0, Msg("Search.CaseSensitive"), false)
+	if vv.lastSearchCase {
+		chkCase.State = 1
+	}
+	chkWholeWord := vtui.NewCheckbox(0, 0, Msg("Search.WholeWords"), false)
+	if vv.lastSearchWholeWord {
+		chkWholeWord.State = 1
+	}
+	chkReverse := vtui.NewCheckbox(0, 0, Msg("Search.Reverse"), false)
+	if vv.lastSearchReverse || reverse {
+		chkReverse.State = 1
+	}
+	chkRegexp := vtui.NewCheckbox(0, 0, Msg("Search.Regex"), false)
+	if vv.lastSearchRegexp {
+		chkRegexp.State = 1
+	}
+
+	btnFind := vtui.NewButton(0, 0, Msg("Search.BtnFind"))
+	btnFind.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	dlg.AddItem(lblPrompt)
+	dlg.AddItem(editPattern)
+	dlg.AddItem(chkCase)
+	dlg.AddItem(chkWholeWord)
+	dlg.AddItem(chkReverse)
+	dlg.AddItem(chkRegexp)
+	dlg.AddItem(btnFind)
+	dlg.AddItem(btnCancel)
+
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, dlgW-4, dlgH-4)
+	vbox.Add(lblPrompt, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(editPattern, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	col1 := vtui.NewVBoxLayout(0, 0, (dlgW-4)/2, 5)
+	col1.Add(chkCase, vtui.Margins{}, vtui.AlignLeft)
+	col1.Add(chkWholeWord, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	col1.Add(chkReverse, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	col2 := vtui.NewVBoxLayout(0, 0, (dlgW-4)/2, 5)
+	col2.Add(chkRegexp, vtui.Margins{}, vtui.AlignLeft)
+
+	rowChecks := vtui.NewHBoxLayout(0, 0, dlgW-4, 5)
+	rowChecks.Add(col1, vtui.Margins{}, vtui.AlignFill)
+	rowChecks.Add(col2, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowChecks, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	hbox := vtui.NewHBoxLayout(0, 0, dlgW-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnFind, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	btnFind.OnClick = func() {
+		pattern := editPattern.GetText()
 		if pattern == "" {
 			return
 		}
-		commitHistory(searchEdit, pattern)
-		if pattern != vv.lastSearch {
+		caseSensitive := chkCase.State == 1
+		wholeWord := chkWholeWord.State == 1
+		searchReverse := chkReverse.State == 1
+		useRegexp := chkRegexp.State == 1
+		optionsChanged := pattern != vv.lastSearch ||
+			caseSensitive != vv.lastSearchCase ||
+			searchReverse != vv.lastSearchReverse ||
+			useRegexp != vv.lastSearchRegexp ||
+			wholeWord != vv.lastSearchWholeWord
+		if optionsChanged {
 			vv.lastSearchFound = false
 		}
+		commitHistory(editPattern, pattern)
 		vv.lastSearch = pattern
-		runViewerSearch(vv, pattern, reverse)
-	})
-	// The dialog only runs the callback above once the user submits it, which
-	// cannot happen before this assignment returns.
-	searchEdit = attachInputBoxHistory(dlg, searchTextHistoryID)
+		vv.lastSearchCase = caseSensitive
+		vv.lastSearchReverse = searchReverse
+		vv.lastSearchRegexp = useRegexp
+		vv.lastSearchWholeWord = wholeWord
+		dlg.Close()
+		runViewerSearch(vv, pattern, searchReverse)
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+
+	vtui.FrameManager.Push(dlg)
 }
 
 func actionViewerSearchAgain(vv *ViewerView, reverse bool) {
@@ -1582,20 +1662,34 @@ func runViewerSearch(vv *ViewerView, pattern string, reverse bool) {
 					start = vv.lastSearchOffset
 				}
 			}
-			foundOffset := viewerSearchOffset(ctx.Context, vv.backend, pattern, start, reverse, func(percent int) {
+			foundOffset, matchLen, searchErr := viewerSearchMatch(ctx.Context, vv.backend, pattern, start, viewerSearchOptions{
+				caseSensitive: vv.lastSearchCase,
+				reverse:       reverse,
+				regexp:        vv.lastSearchRegexp,
+				wholeWord:     vv.lastSearchWholeWord,
+			}, func(percent int) {
 				ctx.RunOnUI(func() { dlg.SetProgress(percent) })
 			})
 
 			ctx.RunOnUI(func() {
 				canceled := ctx.Err() != nil
 				dlg.Close()
-				if canceled {
+				if canceled || searchErr == context.Canceled {
+					return
+				}
+				if searchErr != nil {
+					if vv.lastSearchRegexp {
+						vtui.ShowMessage(" Error ", fmt.Sprintf("Invalid regular expression:\n%v", searchErr), []string{"&Ok"})
+					} else {
+						vtui.ShowMessage(" Error ", "Failed to read file buffer.", []string{"&Ok"})
+					}
 					return
 				}
 				if foundOffset != -1 {
 					vv.TopOffset = vv.backend.FindLineStart(foundOffset)
 					vv.lastSearchOffset = foundOffset
 					vv.lastSearchTopOffset = vv.TopOffset
+					vv.lastSearchMatchLen = int64(matchLen)
 					vv.lastSearchFound = true
 					vtui.FrameManager.Redraw()
 				} else {
@@ -1607,12 +1701,28 @@ func runViewerSearch(vv *ViewerView, pattern string, reverse bool) {
 }
 
 func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern string, start int64, reverse bool, progress func(int)) int64 {
+	offset, _, _ := viewerSearchMatch(ctx, backend, pattern, start, viewerSearchOptions{reverse: reverse}, progress)
+	return offset
+}
+
+type viewerSearchOptions struct {
+	caseSensitive bool
+	reverse       bool
+	regexp        bool
+	wholeWord     bool
+}
+
+// viewerSearchMatch returns the byte offset and byte length of the next match.
+// Literal searches retain the viewer's streaming behavior; regex and
+// whole-word searches use one snapshot so matches crossing read boundaries
+// have the same semantics as editor search.
+func viewerSearchMatch(ctx context.Context, backend *ViewerBackend, pattern string, start int64, options viewerSearchOptions, progress func(int)) (int64, int, error) {
 	if backend == nil || pattern == "" {
-		return -1
+		return -1, 0, nil
 	}
 	fileSize := backend.Size()
 	if fileSize <= 0 {
-		return -1
+		return -1, 0, nil
 	}
 	if start < 0 {
 		start = 0
@@ -1620,6 +1730,19 @@ func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern str
 	if start > fileSize {
 		start = fileSize
 	}
+
+	if options.regexp || options.wholeWord {
+		data, err := readViewerSearchData(ctx, backend, progress)
+		if err != nil {
+			return -1, 0, err
+		}
+		if int64(len(data)) < start {
+			start = int64(len(data))
+		}
+		found, matchLen, err := findMatch(data, pattern, options.caseSensitive, options.reverse, options.regexp, options.wholeWord, false, int(start))
+		return int64(found), matchLen, err
+	}
+
 	patternLower := strings.ToLower(pattern)
 	chunkSize := int64(256 * 1024)
 	if int64(len(patternLower)) > chunkSize {
@@ -1627,14 +1750,16 @@ func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern str
 	}
 	overlap := int64(len(patternLower) - 1)
 
-	if reverse {
-		if at, searched := backend.SearchBefore(ctx, pattern, start); searched {
-			return at
+	if options.reverse {
+		if !options.caseSensitive {
+			if at, searched := backend.SearchBefore(ctx, pattern, start); searched {
+				return at, len(pattern), nil
+			}
 		}
 		end := start
 		for end > 0 {
 			if ctx.Err() != nil {
-				return -1
+				return -1, 0, ctx.Err()
 			}
 			begin := end - chunkSize
 			if begin < 0 {
@@ -1649,26 +1774,30 @@ func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern str
 				continue
 			}
 			if err != nil || len(data) == 0 {
-				return -1
+				return -1, 0, nil
 			}
-			if idx := strings.LastIndex(strings.ToLower(string(data)), patternLower); idx >= 0 {
-				return begin + int64(idx)
+			if idx, matchLen, matchErr := findMatch(data, pattern, options.caseSensitive, true, false, false, false, len(data)); matchErr != nil {
+				return -1, 0, matchErr
+			} else if idx >= 0 {
+				return begin + int64(idx), matchLen, nil
 			}
 			if begin == 0 {
 				break
 			}
 			end = begin + overlap
 		}
-		return -1
+		return -1, 0, nil
 	}
 
-	if at, searched := backend.SearchFrom(ctx, pattern, start); searched {
-		return at
+	if !options.caseSensitive {
+		if at, searched := backend.SearchFrom(ctx, pattern, start); searched {
+			return at, len(pattern), nil
+		}
 	}
 	current := start
 	for current < fileSize {
 		if ctx.Err() != nil {
-			return -1
+			return -1, 0, ctx.Err()
 		}
 		if progress != nil {
 			progress(int((current * 100) / fileSize))
@@ -1681,8 +1810,10 @@ func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern str
 		if err != nil || len(data) == 0 {
 			break
 		}
-		if idx := strings.Index(strings.ToLower(string(data)), patternLower); idx >= 0 {
-			return current + int64(idx)
+		if idx, matchLen, matchErr := findMatch(data, pattern, options.caseSensitive, false, false, false, false, 0); matchErr != nil {
+			return -1, 0, matchErr
+		} else if idx >= 0 {
+			return current + int64(idx), matchLen, nil
 		}
 		advance := int64(len(data)) - overlap
 		if advance < 1 {
@@ -1690,7 +1821,47 @@ func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern str
 		}
 		current += advance
 	}
-	return -1
+	return -1, 0, nil
+}
+
+// readViewerSearchData materializes the decoded viewer stream for searches
+// whose match rules can span arbitrary read boundaries. ViewerBackend still
+// fetches it in bounded windows, so remote VFSes remain cancelable and do not
+// allocate one request per file chunk.
+func readViewerSearchData(ctx context.Context, backend *ViewerBackend, progress func(int)) ([]byte, error) {
+	fileSize := backend.Size()
+	capacity := 0
+	if fileSize <= int64(int(^uint(0)>>1)) {
+		capacity = int(fileSize)
+	}
+	data := make([]byte, 0, capacity)
+	const chunkSize = int64(256 * 1024)
+	for current := int64(0); current < fileSize; {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		length := chunkSize
+		if remaining := fileSize - current; remaining < length {
+			length = remaining
+		}
+		chunk, err := backend.ReadAt(current, int(length))
+		if err == piecetable.ErrLoading {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		if len(chunk) == 0 {
+			break
+		}
+		data = append(data, chunk...)
+		current += int64(len(chunk))
+		if progress != nil {
+			progress(int((current * 100) / fileSize))
+		}
+	}
+	return data, nil
 }
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {

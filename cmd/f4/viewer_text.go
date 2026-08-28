@@ -162,3 +162,36 @@ func viewerTextCells(text string, attr uint64, tabSize, maxWidth int) ([]vtui.Ch
 	}
 	return cells, offsets
 }
+
+// applyViewerSearchAttr changes every cell whose source grapheme intersects
+// the byte range of the current search result. Search offsets are byte
+// offsets, while a rendered cell can represent a multi-byte grapheme (and a
+// wide grapheme can occupy two cells), so matching cells through cluster
+// boundaries keeps highlighting correct for UTF-8 and reordered bidi text.
+func applyViewerSearchAttr(cells []vtui.CharInfo, text string, cellByteOffsets []int, matchStart, matchEnd int, attr uint64) {
+	if matchStart < 0 {
+		matchStart = 0
+	}
+	if matchEnd > len(text) {
+		matchEnd = len(text)
+	}
+	if matchStart >= matchEnd {
+		return
+	}
+
+	clusterEnds := make(map[int]int)
+	for _, cluster := range textlayout.VisualClustersInVisualOrder(text) {
+		if cluster.End > clusterEnds[cluster.Start] {
+			clusterEnds[cluster.Start] = cluster.End
+		}
+	}
+	for i, start := range cellByteOffsets {
+		if i >= len(cells) {
+			break
+		}
+		end, ok := clusterEnds[start]
+		if ok && start < matchEnd && end > matchStart {
+			cells[i].Attributes = attr
+		}
+	}
+}

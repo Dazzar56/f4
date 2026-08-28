@@ -207,6 +207,35 @@ func TestViewerSearchDialog_AttachesHistory(t *testing.T) {
 	}
 }
 
+func TestViewerSearchDialog_OffersEditorSearchOptions(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+	useStubHistory(t)
+
+	actionViewerSearchDirection(&ViewerView{}, false)
+	dlg := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	defer vtui.FrameManager.Pop()
+	vtui.AssertLayout(t, dlg)
+
+	want := map[string]bool{
+		Msg("Search.CaseSensitive"): true,
+		Msg("Search.WholeWords"):    true,
+		Msg("Search.Reverse"):       true,
+		Msg("Search.Regex"):         true,
+	}
+	got := make(map[string]bool)
+	for _, child := range dlg.GetChildren() {
+		if checkbox, ok := child.(*vtui.Checkbox); ok {
+			got[checkbox.GetText()] = true
+		}
+	}
+	for label := range want {
+		if !got[label] {
+			t.Errorf("viewer search dialog does not offer %q; got %v", label, got)
+		}
+	}
+}
+
 func TestSelectGroupDialog_UsesMaskHistory(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	SetDefaultF4Palette()

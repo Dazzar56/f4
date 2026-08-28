@@ -77,6 +77,45 @@ func TestViewer_UsesDedicatedScrollbarPaletteSlot(t *testing.T) {
 	}
 }
 
+func TestViewerRenderHighlightsCurrentSearchResult(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+
+	data := []byte("needle before needle after")
+	backend := &ViewerBackend{
+		file:      &vfs.MemoryReadAtCloser{Data: data},
+		size:      int64(len(data)),
+		cacheData: data,
+	}
+	defer func() { _ = backend.Close() }()
+
+	vv := &ViewerView{
+		backend:          backend,
+		WrapMode:         false,
+		lastSearch:       "needle",
+		lastSearchOffset: 0,
+		lastSearchFound:  true,
+	}
+	vv.SetPosition(0, 0, 79, 3)
+	vv.SetVisible(true)
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 4)
+	vv.DisplayObject(scr)
+
+	for x := 0; x < len("needle"); x++ {
+		if got := scr.GetCell(x, 1).Attributes; got != vtui.Palette[ColViewerSelectedText] {
+			t.Fatalf("matched cell %d has attributes %016x, want %016x", x, got, vtui.Palette[ColViewerSelectedText])
+		}
+	}
+	second := strings.LastIndex(string(data), "needle")
+	for x := second; x < second+len("needle"); x++ {
+		if got := scr.GetCell(x, 1).Attributes; got != vtui.Palette[ColViewerText] {
+			t.Fatalf("unselected match cell %d has attributes %016x, want base %016x", x, got, vtui.Palette[ColViewerText])
+		}
+	}
+}
+
 func (f *largeBinaryFile) Size() int64 { return f.size }
 func (*largeBinaryFile) Close() error  { return nil }
 func (f *largeBinaryFile) Read(ctx context.Context, p []byte) (int, error) {

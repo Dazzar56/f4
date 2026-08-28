@@ -41,6 +41,7 @@ const (
 	ColCommandLineSelectedText
 
 	ColViewerText
+	ColViewerSelectedText
 	ColViewerStatus
 	ColViewerArrows
 	ColViewerScrollbar
@@ -114,6 +115,7 @@ func SetDefaultF4Palette() {
 
 	// Viewer (Match far2l: LightGray on Black)
 	vtui.Palette[ColViewerText] = vtui.SetIndexBoth(0, 7, 0)
+	vtui.Palette[ColViewerSelectedText] = vtui.SetIndexBoth(0, 0, 11)
 	vtui.Palette[ColViewerStatus] = vtui.SetIndexBoth(0, 0, 7)
 	vtui.Palette[ColViewerArrows] = vtui.SetIndexBoth(0, 14, 0)
 	vtui.Palette[ColViewerScrollbar] = vtui.SetIndexBoth(0, 8, 0)
@@ -238,6 +240,7 @@ var ColorSlots = []ColorSlot{
 
 	// Viewer Group
 	{Canonical: "Viewer.Text", Index: ColViewerText, Group: "Viewer", ConstantName: "ColViewerText"},
+	{Canonical: "Viewer.Text.Selected", Index: ColViewerSelectedText, Group: "Viewer", ConstantName: "ColViewerSelectedText"},
 	{Canonical: "Viewer.Status", Index: ColViewerStatus, Group: "Viewer", ConstantName: "ColViewerStatus"},
 	{Canonical: "Viewer.Arrows", Index: ColViewerArrows, Group: "Viewer", ConstantName: "ColViewerArrows"},
 	{Canonical: "Viewer.Scrollbar", Index: ColViewerScrollbar, Group: "Viewer", ConstantName: "ColViewerScrollbar"},
