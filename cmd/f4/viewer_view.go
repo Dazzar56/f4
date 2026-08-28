@@ -42,6 +42,11 @@ type ViewerView struct {
 	lastSearchOffset    int64
 	lastSearchTopOffset int64
 	lastSearchFound     bool
+	lastSearchMatchLen  int64
+	lastSearchCase      bool
+	lastSearchReverse   bool
+	lastSearchRegexp    bool
+	lastSearchWholeWord bool
 
 	scrollBar *vtui.ScrollBar
 
@@ -442,7 +447,13 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, width)
 		if vv.lastSearchFound && vv.lastSearch != "" {
 			matchStart := vv.lastSearchOffset
-			matchEnd := matchStart + int64(len(vv.lastSearch))
+			matchLen := vv.lastSearchMatchLen
+			// Keep manually constructed ViewerViews and old sessions safe: a
+			// literal match used to derive its end from the pattern itself.
+			if matchLen <= 0 {
+				matchLen = int64(len(vv.lastSearch))
+			}
+			matchEnd := matchStart + matchLen
 			rowStart := currOffset
 			rowEnd := rowStart + int64(row.textLen)
 			if matchStart < rowEnd && matchEnd > rowStart {

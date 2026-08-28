@@ -433,6 +433,59 @@ func TestViewerBackend_UTF8BOMUsesLogicalOffsets(t *testing.T) {
 	}
 }
 
+func TestViewerSearchMatchOptions(t *testing.T) {
+	data := []byte("Needles needle NEEDLE42 needle")
+	vb := &ViewerBackend{
+		file:      &vfs.MemoryReadAtCloser{Data: data},
+		size:      int64(len(data)),
+		cacheOff:  0,
+		cacheData: data,
+	}
+	defer func() { _ = vb.Close() }()
+
+	cases := []struct {
+		name       string
+		pattern    string
+		start      int64
+		options    viewerSearchOptions
+		wantOffset int64
+		wantLength int
+	}{
+		{name: "case insensitive", pattern: "needle", wantOffset: 0, wantLength: len("needle")},
+		{name: "case sensitive", pattern: "needle", options: viewerSearchOptions{caseSensitive: true}, wantOffset: 8, wantLength: len("needle")},
+		{name: "whole word", pattern: "needle", options: viewerSearchOptions{wholeWord: true}, wantOffset: 8, wantLength: len("needle")},
+		{name: "regex length", pattern: `needle\d+`, options: viewerSearchOptions{regexp: true}, wantOffset: 15, wantLength: len("NEEDLE42")},
+		{name: "reverse", pattern: "needle", start: int64(len(data)), options: viewerSearchOptions{reverse: true, caseSensitive: true}, wantOffset: 24, wantLength: len("needle")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotOffset, gotLength, err := viewerSearchMatch(context.Background(), vb, tc.pattern, tc.start, tc.options, nil)
+			if err != nil {
+				t.Fatalf("viewerSearchMatch: %v", err)
+			}
+			if gotOffset != tc.wantOffset || gotLength != tc.wantLength {
+				t.Fatalf("viewerSearchMatch = (%d, %d), want (%d, %d)", gotOffset, gotLength, tc.wantOffset, tc.wantLength)
+			}
+		})
+	}
+}
+
+func TestViewerSearchMatchRejectsInvalidRegexp(t *testing.T) {
+	data := []byte("text")
+	vb := &ViewerBackend{
+		file:      &vfs.MemoryReadAtCloser{Data: data},
+		size:      int64(len(data)),
+		cacheOff:  0,
+		cacheData: data,
+	}
+	defer func() { _ = vb.Close() }()
+
+	if _, _, err := viewerSearchMatch(context.Background(), vb, "[", 0, viewerSearchOptions{regexp: true}, nil); err == nil {
+		t.Fatal("invalid regular expression was accepted")
+	}
+}
+
 func TestViewerBackendLineStart(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "test.txt")

@@ -87,7 +87,7 @@ func TestViewerRenderHighlightsCurrentSearchResult(t *testing.T) {
 		size:      int64(len(data)),
 		cacheData: data,
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	vv := &ViewerView{
 		backend:          backend,
