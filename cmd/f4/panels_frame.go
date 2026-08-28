@@ -1876,6 +1876,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 
+	// A keyboard action starts a new terminal interaction. Clear the old
+	// mouse highlight before forwarding the key to a shell or terminal app;
+	// otherwise it remains painted until another mouse click.
+	if !pf.showPanels && e.Type == vtinput.KeyEventType && e.KeyDown && pf.termView.HasSelection() {
+		pf.termView.ClearSelection()
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.Redraw()
+		}
+	}
+
 	// Workspace switching is global and must remain reachable while a child
 	// process owns the terminal. Returning false lets FrameManager handle both
 	// directions instead of forwarding the key to an AltScreen application or

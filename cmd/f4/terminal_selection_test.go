@@ -127,6 +127,70 @@ func TestTerminalSelection_ClearAndEmpty(t *testing.T) {
 	}
 }
 
+func TestTerminalSelection_ClearedWhenScreenLifecycleChanges(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(*TerminalView)
+	}{
+		{
+			name: "full erase",
+			change: func(tv *TerminalView) {
+				tv.EraseDisplay(2, DefaultTermAttr)
+			},
+		},
+		{
+			name: "reset",
+			change: func(tv *TerminalView) {
+				tv.ResetBuffer(20, 6)
+			},
+		},
+		{
+			name: "resize",
+			change: func(tv *TerminalView) {
+				tv.Resize(21, 7)
+			},
+		},
+		{
+			name: "move",
+			change: func(tv *TerminalView) {
+				tv.SetPosition(1, 0, 20, 5)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tv := newSelectableTV(20, 6)
+			defer tv.Close()
+			tv.StartSelection(1, 1, false)
+			tv.ExtendSelection(4, 1)
+
+			test.change(tv)
+			if tv.HasSelection() {
+				t.Fatalf("selection survived %s", test.name)
+			}
+		})
+	}
+
+	t.Run("alternate screen", func(t *testing.T) {
+		tv := newSelectableTV(20, 6)
+		defer tv.Close()
+		tv.StartSelection(1, 1, false)
+		tv.ExtendSelection(4, 1)
+		tv.SetAltScreen(true)
+		if tv.HasSelection() {
+			t.Fatal("selection survived entering the alternate screen")
+		}
+
+		tv.StartSelection(1, 1, false)
+		tv.ExtendSelection(4, 1)
+		tv.SetAltScreen(false)
+		if tv.HasSelection() {
+			t.Fatal("selection survived returning to the primary screen")
+		}
+	})
+}
+
 func TestTerminalSelection_HighlightInvertsCells(t *testing.T) {
 	tv := newSelectableTV(20, 6)
 	defer tv.Close()
@@ -264,6 +328,22 @@ func TestPanelsFrame_TerminalMouseSelect_Drag(t *testing.T) {
 	}
 	if got := tv.ExtractSelection(); got != "llo w" {
 		t.Errorf("post-release extract: got %q, want %q", got, "llo w")
+	}
+}
+
+func TestPanelsFrame_TerminalMouseSelect_KeyDownClearsHighlight(t *testing.T) {
+	pf, _ := panelsFrameWithMouseSelect(t)
+	tv := pf.termView
+	tv.StartSelection(2, 0, false)
+	tv.ExtendSelection(6, 0)
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:    vtinput.KeyEventType,
+		KeyDown: true,
+		Char:    'x',
+	})
+	if tv.HasSelection() {
+		t.Fatal("a key-down should clear the terminal mouse highlight")
 	}
 }
 
