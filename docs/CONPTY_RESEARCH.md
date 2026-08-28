@@ -579,6 +579,32 @@ endpoint f4 created. The remaining question is the one that decides the
 direction: do the messages arrive, and do they carry what §8 claims they do
 -- the application's intent, before anything wraps it.
 
+**D2, third measurement (2026-08-28).** The endpoint's child objects --
+`\Reference`, `\Input`, `\Output` -- all opened with `STATUS_SUCCESS`, so
+the endpoint is a genuine console with real I/O objects, and conhost again
+accepted a fresh (unclaimed) endpoint. But `GET_SERVER_PID` reported **no
+client attached**: `cmd.exe` took the probe's own console, not ours.
+
+The reason is worth recording, because it raises D2's price. A console client
+does not pick its console from its standard handles. It attaches during
+startup inside `kernelbase`, using the console handle in its inherited
+`RTL_USER_PROCESS_PARAMETERS` -- which an ordinary `CreateProcess` fills with
+*the parent's* console. Handing a child our `\Input` and `\Output` therefore
+cannot redirect it. Windows itself does this from the kernel: `AllocConsole`
+asks ConDrv to create the server process (the `0x500037` ioctl in the public
+analyses). So being the server is not enough; f4 must also be able to *place*
+clients on its endpoint, which is a chunk of what `AllocConsole` does.
+
+The probe now tries every known route in a single run rather than one per
+trip: standard handles (the failed baseline, kept so a report shows it
+failing next to the others), the documented
+`PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` attribute, and having the probe attach
+to the endpoint itself via `\Connect` so that a plain `CreateProcess` passes
+that console down. It also captures a reference ConPTY session -- the bytes,
+and what `mode con` reports as the width inside it -- so that whichever route
+lands, the next step has something to compare console-API text against
+without another measurement.
+
 Run it on as many builds as can be found -- 10, 11 21H2/23H2/24H2/25H2,
 Server. Three matching reports across a decade of builds is a far better
 answer about stability than any amount of reasoning, and three differing

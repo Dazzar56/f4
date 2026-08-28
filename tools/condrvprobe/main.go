@@ -41,19 +41,25 @@ import (
 )
 
 var (
-	ntdll                   = syscall.NewLazyDLL("ntdll.dll")
-	kernel32                = syscall.NewLazyDLL("kernel32.dll")
-	version                 = syscall.NewLazyDLL("version.dll")
-	procNtCreateFile        = ntdll.NewProc("NtCreateFile")
-	procRtlInitUnicodeStr   = ntdll.NewProc("RtlInitUnicodeString")
-	procRtlGetVersion       = ntdll.NewProc("RtlGetVersion")
-	procDeviceIoControl     = kernel32.NewProc("DeviceIoControl")
-	procCreateFileW         = kernel32.NewProc("CreateFileW")
-	procGetFileVersionInfo  = version.NewProc("GetFileVersionInfoW")
-	procVerQueryValue       = version.NewProc("VerQueryValueW")
-	procGetFileVersionSize  = version.NewProc("GetFileVersionInfoSizeW")
-	procCreateEventW        = kernel32.NewProc("CreateEventW")
-	procWaitForSingleObject = kernel32.NewProc("WaitForSingleObject")
+	ntdll                                 = syscall.NewLazyDLL("ntdll.dll")
+	kernel32                              = syscall.NewLazyDLL("kernel32.dll")
+	version                               = syscall.NewLazyDLL("version.dll")
+	procNtCreateFile                      = ntdll.NewProc("NtCreateFile")
+	procRtlInitUnicodeStr                 = ntdll.NewProc("RtlInitUnicodeString")
+	procRtlGetVersion                     = ntdll.NewProc("RtlGetVersion")
+	procDeviceIoControl                   = kernel32.NewProc("DeviceIoControl")
+	procCreateFileW                       = kernel32.NewProc("CreateFileW")
+	procGetFileVersionInfo                = version.NewProc("GetFileVersionInfoW")
+	procVerQueryValue                     = version.NewProc("VerQueryValueW")
+	procGetFileVersionSize                = version.NewProc("GetFileVersionInfoSizeW")
+	procCreateEventW                      = kernel32.NewProc("CreateEventW")
+	procWaitForSingleObject               = kernel32.NewProc("WaitForSingleObject")
+	procCreatePseudoConsole               = kernel32.NewProc("CreatePseudoConsole")
+	procClosePseudoConsole                = kernel32.NewProc("ClosePseudoConsole")
+	procFreeConsole                       = kernel32.NewProc("FreeConsole")
+	procAllocConsole                      = kernel32.NewProc("AllocConsole")
+	procInitializeProcThreadAttributeList = kernel32.NewProc("InitializeProcThreadAttributeList")
+	procUpdateProcThreadAttribute         = kernel32.NewProc("UpdateProcThreadAttribute")
 )
 
 type unicodeString struct {
@@ -259,13 +265,21 @@ func reportServerEndpointQuiet() uintptr {
 	return handle
 }
 
-// reportMessages answers question 2: does the driver deliver API messages?
+// reportMessages answers question 2, and does it by trying **every** way a
+// client can be put on our endpoint in one run, rather than one per trip to
+// the machine. Each strategy reports what it did, whether the driver saw a
+// client (GET_SERVER_PID), and whether a message arrived.
 //
-// The order matters and the first run did not follow it. A server must
-// announce itself with SET_SERVER_INFORMATION, handing the driver an event
-// to signal, before READ_IO means anything. This does that, then waits on
-// the event rather than blocking in the ioctl, so a machine with no client
-// attached gives a clean "nothing yet" instead of a hang.
+// Why several: a console client does not choose its console from its
+// standard handles. It attaches during startup in kernelbase, using the
+// console handle inherited in its process parameters, which an ordinary
+// CreateProcess fills in with *the parent's* console. Handing it our
+// \Input and \Output is therefore not enough -- the previous run proved
+// that, with all three child objects opening cleanly and no client
+// attaching. The ways to actually redirect it are: the documented
+// pseudoconsole attribute; inheriting our console by having the probe
+// itself attach to the endpoint first; and asking the driver to create the
+// process, which is how Windows starts conhost.
 func reportMessages(server uintptr) {
 	say("--- Question 2: does the driver deliver API messages? ---\n")
 	say("A message is what a client's console call arrives as: which client,\n")
@@ -288,72 +302,127 @@ func reportMessages(server uintptr) {
 		uintptr(unsafe.Pointer(&returned)), 0)
 	if r == 0 {
 		say("SET_SERVER_INFORMATION failed: %v\n", err)
-		say("VERDICT: we hold the endpoint but may not act as its server. That\n")
-		say("         closes the proxy shape of D2 on this build; record it.\n\n")
+		say("VERDICT: we hold the endpoint but may not act as its server.\n\n")
 		return
 	}
-	say("SET_SERVER_INFORMATION: accepted -- the driver took our event, so we\n")
-	say("are this endpoint's server.\n")
+	say("SET_SERVER_INFORMATION: accepted -- we are this endpoint's server.\n")
 
-	// A client has to exist before anything is waiting. Attach one to *our*
-	// server: a console process launched so that it connects here.
-	client, cleanup := launchClient(server)
-	if cleanup != nil {
-		defer cleanup()
-	}
-	say("client launch: %s\n", client)
-
-	// Did anything actually attach? The driver knows, and will say.
-	var pid uint32
-	r, _, _ = procDeviceIoControl.Call(server, uintptr(ioctlGetSrvPID),
-		0, 0, uintptr(unsafe.Pointer(&pid)), unsafe.Sizeof(pid),
-		uintptr(unsafe.Pointer(&returned)), 0)
-	if r != 0 {
-		say("GET_SERVER_PID: %d -- a client is attached to this endpoint.\n", pid)
-	} else {
-		say("GET_SERVER_PID: no client attached to this endpoint.\n")
-	}
-
-	const waitObject0 = 0
-	w, _, _ := procWaitForSingleObject.Call(ev, 3000)
-	if w != waitObject0 {
-		say("RESULT: no message within 3s (wait returned 0x%X).\n", w)
-		say("        With a client attached this would mean the driver routes\n")
-		say("        its calls elsewhere; with none, it is simply quiet.\n\n")
+	ref, in, out2, ok := openChildObjects(server)
+	if !ok {
+		say("VERDICT: the endpoint has no usable child objects; nothing can attach.\n\n")
 		return
 	}
+	defer closeAll(ref, in, out2)
 
-	buf := make([]byte, 4096)
-	r, _, err = procDeviceIoControl.Call(server, uintptr(ioctlReadIO),
-		0, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
-		uintptr(unsafe.Pointer(&returned)), 0)
-	if r == 0 {
-		say("RESULT: the event fired but READ_IO failed: %v\n\n", err)
-		return
+	for _, strat := range []struct {
+		name string
+		run  func(server, in, out2 uintptr) (string, func())
+	}{
+		{"A: standard handles only (what the last run did)", attachByStdHandles},
+		{"B: PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE", attachByPseudoConsoleAttribute},
+		{"C: probe attaches first, child inherits the console", attachByInheritingOurConsole},
+	} {
+		say("\nstrategy %s\n", strat.name)
+		what, cleanup := strat.run(server, in, out2)
+		say("  launch: %s\n", what)
+		if cleanup != nil {
+			// Give the client a moment to start and call something.
+			attached, pid := clientAttached(server)
+			if attached {
+				say("  GET_SERVER_PID: %d -- ATTACHED to our endpoint\n", pid)
+			} else {
+				say("  GET_SERVER_PID: nothing attached here\n")
+			}
+			readOneMessage(server, ev)
+			cleanup()
+		}
 	}
-	say("RESULT: a message arrived, %d bytes.\n", returned)
-	n := int(returned)
-	if n > 64 {
-		n = 64
-	}
-	say("first %d bytes: % x\n", n, buf[:n])
-	say("(record these: the layout is undocumented -- microsoft/terminal#10463 --\n")
-	say(" so the only evidence it is stable is the same shape on another build.)\n\n")
+	say("\n")
+	reportReferenceSession()
 }
 
-// launchClient starts a console program on *our* endpoint, the way conhost
-// does, and reports every step so a failure names itself.
-//
-// The previous run used a plain CreateProcess, which gives the child the
-// parent's console -- so cmd.exe went to the probe's own console and nothing
-// arrived here. A client lands on a particular server only if it is handed
-// that server's console handles, and those are opened as child objects of
-// the server handle: \Reference keeps the console alive, \Connect is the
-// client's attachment, and \Input and \Output become its standard handles.
-// Their names come from conhost's own startup path; each open is reported
-// with its NTSTATUS, because which one fails is the finding.
-func launchClient(server uintptr) (string, func()) {
-	open := func(name string, access uint32, disposition uint32) (uintptr, uintptr) {
+// reportReferenceSession records what the *working* path produces, so that
+// whichever strategy above lands, the next step has something to compare
+// against without another trip to the machine: a real ConPTY session, its
+// first bytes, and the console geometry cmd.exe sees inside it.
+func reportReferenceSession() {
+	say("--- Reference: what a normal ConPTY session looks like ---\n")
+	say("Not a question, a baseline. If f4 ever reads console API messages, the\n")
+	say("text in them must reconstruct exactly this.\n")
+
+	var rIn, wIn, rOut, wOut syscall.Handle
+	if err := syscall.CreatePipe(&rIn, &wIn, nil, 0); err != nil {
+		say("CreatePipe failed: %v\n\n", err)
+		return
+	}
+	if err := syscall.CreatePipe(&rOut, &wOut, nil, 0); err != nil {
+		say("CreatePipe failed: %v\n\n", err)
+		return
+	}
+	var hpc uintptr
+	size := uint32(30)<<16 | uint32(120)
+	hr, _, _ := procCreatePseudoConsole.Call(uintptr(size), uintptr(rIn), uintptr(wOut), 0,
+		uintptr(unsafe.Pointer(&hpc)))
+	if hr != 0 {
+		say("CreatePseudoConsole failed: 0x%08X\n\n", uint32(hr))
+		return
+	}
+	defer procClosePseudoConsole.Call(hpc)
+
+	var listSize uintptr
+	procInitializeProcThreadAttributeList.Call(0, 1, 0, uintptr(unsafe.Pointer(&listSize)))
+	attrs := make([]byte, listSize)
+	procInitializeProcThreadAttributeList.Call(uintptr(unsafe.Pointer(&attrs[0])), 1, 0,
+		uintptr(unsafe.Pointer(&listSize)))
+	procUpdateProcThreadAttribute.Call(uintptr(unsafe.Pointer(&attrs[0])), 0,
+		0x00020016, hpc, unsafe.Sizeof(hpc), 0, 0)
+
+	type startupInfoEx struct {
+		StartupInfo syscall.StartupInfo
+		AttrList    uintptr
+	}
+	var six startupInfoEx
+	six.StartupInfo.Cb = uint32(unsafe.Sizeof(six))
+	six.AttrList = uintptr(unsafe.Pointer(&attrs[0]))
+	var pi syscall.ProcessInformation
+	// A command whose output says what the console inside the pty believes
+	// its width to be: the number every wrap decision is made against.
+	argv, _ := syscall.UTF16PtrFromString(`cmd.exe /c mode con & echo condrvprobe-ref`)
+	if err := syscall.CreateProcess(nil, argv, nil, nil, false, 0x00080000, nil, nil,
+		&six.StartupInfo, &pi); err != nil {
+		say("CreateProcess failed: %v\n\n", err)
+		return
+	}
+	defer killer(pi)()
+	syscall.CloseHandle(wOut)
+
+	buf := make([]byte, 8192)
+	total := 0
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && total < len(buf) {
+		var n uint32
+		if err := syscall.ReadFile(rOut, buf[total:], &n, nil); err != nil || n == 0 {
+			break
+		}
+		total += int(n)
+	}
+	say("read %d bytes from the pty\n", total)
+	if total > 0 {
+		show := total
+		if show > 400 {
+			show = 400
+		}
+		say("first %d bytes, quoted: %q\n", show, string(buf[:show]))
+	}
+	closeAll(uintptr(rIn), uintptr(wIn), uintptr(rOut))
+	say("\n")
+}
+
+// openChildObjects creates the console objects that live under a server
+// endpoint. All three opened cleanly on 10.0.22000, so the endpoint is a
+// real console; what remains is making a client choose it.
+func openChildObjects(server uintptr) (ref, in, out uintptr, ok bool) {
+	open := func(name string) (uintptr, uintptr) {
 		var us unicodeString
 		p, _ := syscall.UTF16PtrFromString(name)
 		procRtlInitUnicodeStr.Call(uintptr(unsafe.Pointer(&us)), uintptr(unsafe.Pointer(p)))
@@ -362,64 +431,183 @@ func launchClient(server uintptr) (string, func()) {
 		var h uintptr
 		var iosb ioStatusBlock
 		st, _, _ := procNtCreateFile.Call(
-			uintptr(unsafe.Pointer(&h)),
-			uintptr(access)|0x00100000, // | SYNCHRONIZE
-			uintptr(unsafe.Pointer(&oa)),
-			uintptr(unsafe.Pointer(&iosb)),
-			0, 0, 3 /* share RW */, uintptr(disposition), 0x20 /* synchronous */, 0, 0)
+			uintptr(unsafe.Pointer(&h)), 0x80000000|0x40000000|0x00100000,
+			uintptr(unsafe.Pointer(&oa)), uintptr(unsafe.Pointer(&iosb)),
+			0, 0, 3, 2 /* FILE_CREATE */, 0x20, 0, 0)
 		return h, st
 	}
-
-	const (
-		fileCreate    = 2
-		fileOpen      = 1
-		genericRead   = 0x80000000
-		genericWrite  = 0x40000000
-		genericAll    = 0x10000000
-		fileReadData  = 0x0001
-		fileWriteData = 0x0002
-	)
-
-	ref, st := open(`\Reference`, genericRead|genericWrite, fileCreate)
+	var st uintptr
+	ref, st = open(`\Reference`)
 	say("  open \\Reference: NTSTATUS 0x%08X\n", uint32(st))
-	if ref == 0 {
-		return "no reference handle; the console cannot be kept alive", nil
-	}
+	in, st = open(`\Input`)
+	say("  open \\Input:     NTSTATUS 0x%08X\n", uint32(st))
+	out, st = open(`\Output`)
+	say("  open \\Output:    NTSTATUS 0x%08X\n", uint32(st))
+	return ref, in, out, ref != 0 && in != 0 && out != 0
+}
 
-	in, stIn := open(`\Input`, genericRead|genericWrite, fileCreate)
-	say("  open \\Input:     NTSTATUS 0x%08X\n", uint32(stIn))
-	out2, stOut := open(`\Output`, genericRead|genericWrite, fileCreate)
-	say("  open \\Output:    NTSTATUS 0x%08X\n", uint32(stOut))
-	if in == 0 || out2 == 0 {
-		syscall.CloseHandle(syscall.Handle(ref))
-		return "no client handles; nothing can attach here", nil
+func closeAll(hs ...uintptr) {
+	for _, h := range hs {
+		if h != 0 {
+			syscall.CloseHandle(syscall.Handle(h))
+		}
 	}
+}
 
+// attachByStdHandles is the strategy that already failed, kept so one report
+// shows it failing beside the others rather than by memory.
+func attachByStdHandles(server, in, out uintptr) (string, func()) {
 	var si syscall.StartupInfo
 	var pi syscall.ProcessInformation
 	si.Cb = uint32(unsafe.Sizeof(si))
 	si.Flags = syscall.STARTF_USESTDHANDLES
-	si.StdInput = syscall.Handle(in)
-	si.StdOutput = syscall.Handle(out2)
-	si.StdErr = syscall.Handle(out2)
-	argv, _ := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe`)
-	// No CREATE_NEW_CONSOLE and no DETACHED_PROCESS: the child must take the
-	// console its handles belong to, which is ours.
-	err := syscall.CreateProcess(nil, argv, nil, nil, true, 0, nil, nil, &si, &pi)
-	if err != nil {
-		syscall.CloseHandle(syscall.Handle(ref))
-		syscall.CloseHandle(syscall.Handle(in))
-		syscall.CloseHandle(syscall.Handle(out2))
+	si.StdInput, si.StdOutput, si.StdErr = syscall.Handle(in), syscall.Handle(out), syscall.Handle(out)
+	argv, _ := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe-A`)
+	if err := syscall.CreateProcess(nil, argv, nil, nil, true, 0, nil, nil, &si, &pi); err != nil {
 		return fmt.Sprintf("CreateProcess failed: %v", err), nil
 	}
-	return "cmd.exe started on our endpoint", func() {
+	return "started", killer(pi)
+}
+
+// attachByPseudoConsoleAttribute uses the documented ConPTY attribute, which
+// is precisely "this is your console". It needs a pseudoconsole, so the probe
+// makes one with CreatePseudoConsole -- note this is *not* our endpoint, so a
+// success here proves the mechanism works, not that it can be pointed at an
+// endpoint we own. That is the next question if this is the one that lands.
+func attachByPseudoConsoleAttribute(server, in, out uintptr) (string, func()) {
+	var hpc uintptr
+	var rIn, wIn, rOut, wOut syscall.Handle
+	if err := syscall.CreatePipe(&rIn, &wIn, nil, 0); err != nil {
+		return fmt.Sprintf("CreatePipe failed: %v", err), nil
+	}
+	if err := syscall.CreatePipe(&rOut, &wOut, nil, 0); err != nil {
+		return fmt.Sprintf("CreatePipe failed: %v", err), nil
+	}
+	size := uint32(30)<<16 | uint32(120)
+	hr, _, _ := procCreatePseudoConsole.Call(uintptr(size), uintptr(rIn), uintptr(wOut), 0,
+		uintptr(unsafe.Pointer(&hpc)))
+	if hr != 0 {
+		return fmt.Sprintf("CreatePseudoConsole failed: 0x%08X", uint32(hr)), nil
+	}
+
+	var size2 uintptr
+	procInitializeProcThreadAttributeList.Call(0, 1, 0, uintptr(unsafe.Pointer(&size2)))
+	attrs := make([]byte, size2)
+	procInitializeProcThreadAttributeList.Call(uintptr(unsafe.Pointer(&attrs[0])), 1, 0,
+		uintptr(unsafe.Pointer(&size2)))
+	const procThreadAttributePseudoConsole = 0x00020016
+	procUpdateProcThreadAttribute.Call(uintptr(unsafe.Pointer(&attrs[0])), 0,
+		procThreadAttributePseudoConsole, hpc, unsafe.Sizeof(hpc), 0, 0)
+
+	type startupInfoEx struct {
+		StartupInfo syscall.StartupInfo
+		AttrList    uintptr
+	}
+	var six startupInfoEx
+	six.StartupInfo.Cb = uint32(unsafe.Sizeof(six))
+	six.AttrList = uintptr(unsafe.Pointer(&attrs[0]))
+	var pi syscall.ProcessInformation
+	argv, _ := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe-B`)
+	const extendedStartupInfoPresent = 0x00080000
+	err := syscall.CreateProcess(nil, argv, nil, nil, false,
+		extendedStartupInfoPresent, nil, nil, &six.StartupInfo, &pi)
+	if err != nil {
+		return fmt.Sprintf("CreateProcess failed: %v", err), nil
+	}
+	return "started under a pseudoconsole (mechanism check)", func() {
+		killer(pi)()
+		procClosePseudoConsole.Call(hpc)
+		closeAll(uintptr(rIn), uintptr(wIn), uintptr(rOut), uintptr(wOut))
+	}
+}
+
+// attachByInheritingOurConsole makes the probe itself a client of the
+// endpoint first, so an ordinary CreateProcess passes *that* console down.
+// If this works it is the cheapest route by far -- and it is how a terminal
+// would do it anyway, since f4 wants the console for itself.
+func attachByInheritingOurConsole(server, in, out uintptr) (string, func()) {
+	// Detach from whatever console we have, then attach to the endpoint's.
+	procFreeConsole.Call()
+	// The client side of an endpoint is \Connect; opening it is what
+	// AllocConsole does under the covers.
+	var us unicodeString
+	p, _ := syscall.UTF16PtrFromString(`\Connect`)
+	procRtlInitUnicodeStr.Call(uintptr(unsafe.Pointer(&us)), uintptr(unsafe.Pointer(p)))
+	oa := objectAttributes{RootDirectory: server, ObjectName: &us, Attributes: 0x00000002}
+	oa.Length = uint32(unsafe.Sizeof(oa))
+	var conn uintptr
+	var iosb ioStatusBlock
+	st, _, _ := procNtCreateFile.Call(
+		uintptr(unsafe.Pointer(&conn)), 0x80000000|0x40000000|0x00100000,
+		uintptr(unsafe.Pointer(&oa)), uintptr(unsafe.Pointer(&iosb)),
+		0, 0, 3, 2, 0x20, 0, 0)
+	say("  open \\Connect: NTSTATUS 0x%08X\n", uint32(st))
+
+	var si syscall.StartupInfo
+	var pi syscall.ProcessInformation
+	si.Cb = uint32(unsafe.Sizeof(si))
+	argv, _ := syscall.UTF16PtrFromString(`cmd.exe /c echo condrvprobe-C`)
+	err := syscall.CreateProcess(nil, argv, nil, nil, true, 0, nil, nil, &si, &pi)
+	if err != nil {
+		return fmt.Sprintf("CreateProcess failed: %v", err), nil
+	}
+	return "started after the probe attached to the endpoint", func() {
+		killer(pi)()
+		closeAll(conn)
+		// Put a console back so the report can still be printed.
+		procAllocConsole.Call()
+	}
+}
+
+func killer(pi syscall.ProcessInformation) func() {
+	return func() {
 		syscall.TerminateProcess(pi.Process, 0)
 		syscall.CloseHandle(pi.Thread)
 		syscall.CloseHandle(pi.Process)
-		syscall.CloseHandle(syscall.Handle(in))
-		syscall.CloseHandle(syscall.Handle(out2))
-		syscall.CloseHandle(syscall.Handle(ref))
 	}
+}
+
+// clientAttached asks the driver whether anything is on this endpoint. It
+// retries briefly: a process takes a moment to reach its console attach.
+func clientAttached(server uintptr) (bool, uint32) {
+	var pid, returned uint32
+	for i := 0; i < 20; i++ {
+		r, _, _ := procDeviceIoControl.Call(server, uintptr(ioctlGetSrvPID),
+			0, 0, uintptr(unsafe.Pointer(&pid)), unsafe.Sizeof(pid),
+			uintptr(unsafe.Pointer(&returned)), 0)
+		if r != 0 && pid != 0 {
+			return true, pid
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false, 0
+}
+
+// readOneMessage waits briefly for a message and records its bytes. The
+// layout is undocumented (microsoft/terminal#10463), so the bytes are
+// recorded rather than interpreted: only the same shape on another build is
+// evidence that it is stable.
+func readOneMessage(server, ev uintptr) {
+	w, _, _ := procWaitForSingleObject.Call(ev, 1500)
+	if w != 0 {
+		say("  message: none within 1.5s (wait 0x%X)\n", w)
+		return
+	}
+	buf := make([]byte, 4096)
+	var returned uint32
+	r, _, err := procDeviceIoControl.Call(server, uintptr(ioctlReadIO),
+		0, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
+		uintptr(unsafe.Pointer(&returned)), 0)
+	if r == 0 {
+		say("  message: the event fired but READ_IO failed: %v\n", err)
+		return
+	}
+	n := int(returned)
+	say("  MESSAGE ARRIVED, %d bytes\n", n)
+	if n > 96 {
+		n = 96
+	}
+	say("  first %d bytes: % x\n", n, buf[:n])
 }
 
 // createEvent makes the auto-reset event the driver signals.
