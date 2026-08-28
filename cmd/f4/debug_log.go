@@ -7,7 +7,7 @@ import (
 )
 
 func f4DebugLogPath(configDir string) string {
-	return filepath.Join(configDir, "Logs", "debug.log")
+	return filepath.Join(configDir, "logs", "debug.log")
 }
 
 // configureF4DebugLogPath keeps zoin-bot's default diagnostics inside the

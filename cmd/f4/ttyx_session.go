@@ -13,7 +13,7 @@ package main
 // none of it can be seen from outside and all of it can fail for reasons that
 // depend on the window manager, the terminal and how f4 was started:
 //
-//	VTUI_DEBUG=1 f4 2>/dev/null; grep TTYX ~/.config/f4/Logs/debug.log
+//	VTUI_DEBUG=1 f4 2>/dev/null; grep TTYX ~/.config/f4/logs/debug.log
 
 import (
 	"sync"

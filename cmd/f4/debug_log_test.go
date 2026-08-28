@@ -8,7 +8,7 @@ import (
 
 func TestF4DebugLogPath(t *testing.T) {
 	configDir := filepath.Join("tmp", "f4", "Profile")
-	want := filepath.Join(configDir, "Logs", "debug.log")
+	want := filepath.Join(configDir, "logs", "debug.log")
 	if got := f4DebugLogPath(configDir); got != want {
 		t.Fatalf("debug log path = %q, want %q", got, want)
 	}
@@ -42,8 +42,8 @@ func TestConfigureF4DebugLogPath_PreservesExplicitValue(t *testing.T) {
 			if got := os.Getenv("VTUI_DEBUG"); got != value {
 				t.Fatalf("VTUI_DEBUG = %q, want explicit value %q", got, value)
 			}
-			if _, err := os.Stat(filepath.Join(configDir, "Logs")); !os.IsNotExist(err) {
-				t.Fatalf("preserving explicit VTUI_DEBUG created profile Logs directory: %v", err)
+			if _, err := os.Stat(filepath.Join(configDir, "logs")); !os.IsNotExist(err) {
+				t.Fatalf("preserving explicit VTUI_DEBUG created profile logs directory: %v", err)
 			}
 		})
 	}

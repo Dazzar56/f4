@@ -344,7 +344,7 @@ The following switches may be used in the command line:
  --attached             Force run in Attached-mode
  --client [clientPath]
  --cpuprofile [cpuprofile]
- --debug                Log to profile Logs/debug.log (equivalent to --log=1)
+ --debug                Log to profile logs/debug.log (equivalent to --log=1)
  --dump-screen-after N  Auto-run Debug.ScreenDump N seconds after startup
                          (bypasses hotkeys entirely -- useful under Wine
                          tty mode, where complex combos like CtrlAltP can
@@ -360,7 +360,7 @@ The following switches may be used in the command line:
                          "auto" ignores the configured default for this run
  --input [InputMode]    Defines the preferred vtinput parser method;
                          [InputMode] values: "", "ansi", "ConPTY"
- --log [logfile]        If =1 or =true uses profile Logs/debug.log,
+ --log [logfile]        If =1 or =true uses profile logs/debug.log,
                          otherwise logfile
  --new-plugin [pluginName]
  --server [serverPath]
