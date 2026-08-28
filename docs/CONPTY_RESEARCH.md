@@ -446,6 +446,76 @@ far side's pty made the layout decision -- stays wrapped as received. Owning
 the local console server gives f4 the wrap flag for locally produced output.
 Nothing gives it the flag for a layout that was decided on another machine.
 
+**D2. Proxy the console server instead of replacing it.** D says own the
+server; this says stand in front of it. The seat is the same handle --
+`\Device\ConDrv\Server` -- but f4 need not implement a console: it can hold
+the endpoint, forward the traffic to the real conhost, and read what goes
+past. **No C++ in the build, no console server of our own to get right.**
+
+What goes past is better than what D would read, not worse. The wrap flag
+is conhost's *conclusion*; the messages carry the application's *intent* --
+"client 4 called `WriteConsoleW` with these 185 characters" -- and the
+buffer width at that moment is known. One logical line over two rows is then
+a fact, not an inference. Everything the project has tried so far looked at
+the screen *after* the decision: the `ESC[K` hint read a rendered frame
+backwards, a scraper (B) reads a buffer someone already wrapped, and the
+oracle provoked a second frame to compare. Here the decision has not
+happened yet.
+
+It also supplies the detector that measurement C could not build: the
+messages include `GetConsoleScreenBufferInfo`, so f4 sees *when a program
+asks for the width* -- exactly the width-aware programs (`ls -C`, Git's
+column mode, PowerShell's `Format-Table`) that made C unworkable, and which
+could not be recognised by watching for a write to the last column.
+
+**How stable is what this depends on?** Asked concretely, because "they
+might change it" is not a risk assessment.
+
+- The console *architecture* has changed three times in thirty years:
+  CSRSS-hosted (NT 3.1 through XP), conhost over ALPC (Windows 7, 2009),
+  and conhost over the `condrv.sys` driver (Windows 8.1, 2013). That is
+  roughly once a decade, at the granularity of a Windows release family, not
+  a monthly update.
+- Within the ConDrv era it has been stable for **thirteen years**. The IOCTL
+  set FireEye documented from a Windows 10 driver in 2017 is the same set
+  named in `dep/Console/condrv.h` in `microsoft/terminal` today:
+  `READ_IO`, `COMPLETE_IO`, `READ_INPUT`, `WRITE_OUTPUT`, `ISSUE_USER_IO`,
+  `DISCONNECT_PIPE`, `SET_SERVER_INFORMATION`, `GET_SERVER_PID`.
+- `conhost --server <handle>` has existed since 1809 (2018) and is how
+  ConPTY starts conhost to this day. Microsoft depends on it in shipping
+  code, which is the strongest guarantee available for something
+  undocumented.
+- The headers are **in the open-source repository**, vendored under
+  `dep/Console` (`condrv.h`, `conmsgl1.h`, `conmsgl2.h`, `conmsgl3.h`), MIT.
+  They are not *documented* -- microsoft/terminal#10463 asked for that in
+  2021 and it is still open -- but they are published and they are what the
+  shipping conhost is built against.
+
+So the honest reading: the interface is undocumented but not volatile. The
+risk is not a change every release; it is that when a change does come, no
+compatibility promise applies and nothing announces it. That is a real risk
+and it is bounded by one thing -- a proxy that fails should fall back to
+plain ConPTY, not break the terminal.
+
+**The measurement, and the probe that takes it.** `tools/condrvprobe` (a
+Windows binary, no admin, changes nothing) answers three questions and
+records the build, `condrv.sys` version and `conhost.exe` version they are
+answers about:
+
+1. Can an ordinary program create `\Device\ConDrv\Server`? If not, D2 is
+   closed before it starts.
+2. Does the driver deliver API messages, and what are their first bytes? The
+   layout is undocumented, so the bytes are *recorded* rather than
+   interpreted -- the only evidence of stability is the same bytes on
+   another build.
+3. Does the system conhost accept a handle f4 created, launched the way
+   ConPTY launches it? If yes, the seat is real and the rest is forwarding.
+
+Run it on as many builds as can be found -- 10, 11 21H2/23H2/24H2/25H2,
+Server. Three matching reports across a decade of builds is a far better
+answer about stability than any amount of reasoning, and three differing
+ones close the direction cheaply.
+
 **E. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under
 Windows. The honest minimum, and what ships today while A through D are
@@ -454,9 +524,11 @@ decided.
 Order to try. **A first for `wsl.exe` and PowerShell 7**: there f4 is the
 terminal, the wrap is its own by construction, and the work is nearly free --
 it is the same thing f4's own SSH client already does for remote sessions,
-with a different transport. **Then D's one-evening question**, because if
-`src/host` builds standalone the whole problem changes character: the wrap
-flag stops being a guess. **C is demoted** to a special case inside A --
+with a different transport. **Then D2's probe run**, because it is the cheapest question with the
+largest consequence: if f4 can hold the server endpoint and let the real
+conhost do the work, the wrap stops being a guess and no C++ enters the
+build. **D itself only if D2's seat turns out to be unavailable** -- it buys
+the same fact at the price of a C++ console server. **C is demoted** to a special case inside A --
 measured to work mechanically, but a 4000-column console changes what
 width-aware programs *print*, not just how it is laid out (`ls -C` collapsing
 to one 3658-character line), so it needs mode switching, and mode switching
