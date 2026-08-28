@@ -104,9 +104,31 @@ try {
     Write-Output ("test-directory={0}" -f $testRoot)
     Write-Output ("test-file-count={0}" -f $names.Count)
 
-    Run-Cmd 'DIR-W' ('dir /-p /w "{0}"' -f $testRoot)
-    Run-Cmd 'DIR-D' ('dir /-p /d "{0}"' -f $testRoot)
-    Run-Cmd 'DIR-B' ('dir /-p /b "{0}"' -f $testRoot)
+    # Native dir can stop at a screenful even when DIRCMD is empty and /-p is
+    # present. Keep its fixture small enough for the current window; the full
+    # fixture remains below for non-paginating PowerShell formatters.
+    $dirRoot = Join-Path $testRoot 'dir-fixture'
+    New-Item -ItemType Directory -Path $dirRoot -Force | Out-Null
+    $dirNames = @(
+        $names[0], $names[1], $names[2], $names[3],
+        $names[120], $names[121], $names[122], $names[123],
+        $names[$names.Count - 2], $names[$names.Count - 1]
+    )
+    $dirCount = $dirNames.Count
+    try {
+        $dirCount = [Math]::Min($dirCount, [Math]::Max(1, [int]$raw.WindowSize.Height - 18))
+    } catch {
+        # Keep the default small fixture if the host does not expose RawUI.
+    }
+    foreach ($name in ($dirNames | Select-Object -First $dirCount)) {
+        New-Item -ItemType File -Path (Join-Path $dirRoot $name) -Force | Out-Null
+    }
+    Write-Output ("dir-test-directory={0}" -f $dirRoot)
+    Write-Output ("dir-test-file-count={0}" -f $dirCount)
+
+    Run-Cmd 'DIR-W' ('dir /-p /w "{0}"' -f $dirRoot)
+    Run-Cmd 'DIR-D' ('dir /-p /d "{0}"' -f $dirRoot)
+    Run-Cmd 'DIR-B' ('dir /-p /b "{0}"' -f $dirRoot)
 
     Run-PowerShell 'FORMAT-WIDE' {
         Get-ChildItem -LiteralPath $testRoot | Format-Wide -AutoSize

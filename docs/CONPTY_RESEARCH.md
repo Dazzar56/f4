@@ -368,11 +368,34 @@ made decisions based on 4000 without reaching column 4000 (`ls -C` stopped at
 3658 and Git at 1439). The saved log was complete and ended with `END`; the
 earlier apparent hang was a test-runner/pager issue, not a ConPTY result.
 
-The Windows command probe has an independent pagination guard. It records and
-then clears `DIRCMD`, invokes `dir` with `/-p`, and starts PowerShell with
-`-NoProfile -NonInteractive`. Thus a user's persistent `/P` setting cannot
-turn the measurement into a keypress wait. The tested PowerShell formatting
-cmdlets do not request `Out-Host -Paging` and have no pager by default.
+The Windows command probe records and then clears `DIRCMD`, invokes `dir` with
+`/-p`, and starts PowerShell with `-NoProfile -NonInteractive`. The follow-up
+run below showed that this is not sufficient to make a large native `dir`
+listing non-interactive, so the probe also bounds its native fixture. The
+tested PowerShell formatting cmdlets do not request `Out-Host -Paging` and
+have no pager by default.
+
+**C, Windows command follow-up (2026-08-28).** The Windows run was on Windows
+11 Pro `10.0.22000.2538`, PowerShell `5.1.22000.2538`, with an unredirected
+`120x30` window and a `120x9001` screen buffer. `TERM`, `COLUMNS`, and
+`LINES` were empty, and Git was not installed. The log therefore confirms a
+real Windows console run, but does not identify the outer host as ConPTY;
+that distinction still needs a run from inside f4.
+
+The 142-entry fixture exposed a second harness problem. `dir /w`, `dir /d`,
+and `dir /b` all emitted repeated `Press any key to continue . . .` prompts at
+screen boundaries, even though the recorded `DIRCMD` was empty and the probe
+used `/-p`. They eventually returned zero, but they were not safe as
+unattended measurements. The Windows probe now keeps the 142-entry fixture
+for PowerShell and uses a separate, height-bounded `dir` fixture (10 entries
+in this 30-row run), so the native commands complete without a keypress wait.
+
+PowerShell's `Format-Wide`, `Format-Table`, `Get-Process | Format-Table`, and
+default `Out-String` all completed without paging. The table output did
+truncate the long `FullName` column to the available width, confirming that
+PowerShell formatting is width-aware. The Russian filename appeared as
+mojibake in the transcript under OEM code page 850; that is a separate log
+encoding issue, not a width result.
 
 **D. Make the Terminal Log the answer.** It already holds logical lines, so
 reflow there is free, and it may be all users need from history under
