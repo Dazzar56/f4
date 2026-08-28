@@ -208,6 +208,10 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 	tv.ScrollTop, tv.ScrollBottom = other.ScrollTop, other.ScrollBottom
 	tv.KittyFlags = other.KittyFlags
 	tv.KittyFlagsStack = append([]int(nil), other.KittyFlagsStack...)
+	// Selection coordinates belong to the old viewport and are not part of
+	// the cloned terminal state. Keeping them would paint a stale highlight
+	// over the clone's first screen.
+	tv.selActive = false
 	// The PTY is an ownership handle, not terminal display state. A cloned
 	// PanelsFrame starts its own shell asynchronously; copying this field would
 	// briefly route input from the clone into the source workspace until that
@@ -228,6 +232,10 @@ func (tv *TerminalView) CloneStateFrom(other *TerminalView) {
 func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
+
+	// RIS replaces both terminal screens, so any screen-coordinate selection
+	// from before the reset is no longer meaningful.
+	tv.selActive = false
 
 	// Инициализация PieceTable (только один раз)
 	if tv.pt == nil {
@@ -753,6 +761,11 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 	if tv.Muted {
 		return
 	}
+	if mode == 2 {
+		// ED 2 replaces the visible screen. Do not keep painting the old
+		// screen-coordinate selection over the newly cleared contents.
+		tv.selActive = false
+	}
 
 	if (mode == 2 || mode == 3) && !tv.UseAltScreen {
 		// Сохраняем экран в историю перед очисткой (игнорируя пустоту снизу)
@@ -847,6 +860,9 @@ func (tv *TerminalView) SetAltScreen(enable bool) {
 	if tv.UseAltScreen == enable {
 		return
 	}
+	// The alternate and primary screens have independent contents and can
+	// have different geometry, so a selection cannot safely cross the switch.
+	tv.selActive = false
 	if enable {
 		tv.savedX, tv.savedY = tv.CursorX, tv.CursorY
 		tv.CursorX, tv.CursorY = 0, 0
@@ -973,6 +989,19 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	} else if tv.IsVisible() && tv.IsFocused() {
 		scr.SetCursorVisible(false)
 	}
+}
+
+// SetPosition keeps a mouse selection tied to the viewport it came from.
+// ResizeConsole changes the terminal's position before it knows whether the
+// dimensions also changed, so clearing only from Resize would leave a stale
+// highlight when panels are hidden or restored at the same size.
+func (tv *TerminalView) SetPosition(x1, y1, x2, y2 int) {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	if tv.X1 != x1 || tv.Y1 != y1 || tv.X2 != x2 || tv.Y2 != y2 {
+		tv.selActive = false
+	}
+	tv.ScreenObject.SetPosition(x1, y1, x2, y2)
 }
 
 // selectionScreenRect returns the normalised screen-coordinate
@@ -1397,6 +1426,10 @@ func (tv *TerminalView) Resize(w, h int) {
 
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
+
+	// Resizing changes the mapping between screen coordinates and grid cells;
+	// retaining the old selection is what lets it spill into a new layout.
+	tv.selActive = false
 
 	tv.engine.SetWidth(w)
 
