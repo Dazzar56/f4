@@ -803,6 +803,47 @@ func TestEditorView_HexModeToggleAndTyping(t *testing.T) {
 	}
 }
 
+// TestEditorView_HexMode_KeyBarClickDispatchesConfiguredAction guards the
+// injected-event path used by vtui.KeyBar.ProcessMouse. Real key presses pass
+// through MacroMgr.Filter, but a key-bar click calls EditorView.ProcessKey
+// directly; Hex mode must still honor a user binding such as F9 -> Hex Mode.
+func TestEditorView_HexMode_KeyBarClickDispatchesConfiguredAction(t *testing.T) {
+	oldHotkeys := GlobalHotkeysMgr
+	oldMacro := MacroMgr
+	GlobalHotkeysMgr = NewHotkeyManager("")
+	MacroMgr = &MacroManager{}
+	t.Cleanup(func() {
+		GlobalHotkeysMgr = oldHotkeys
+		MacroMgr = oldMacro
+	})
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	ev := NewEditorView(piecetable.New([]byte("abc")), nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+	vtui.FrameManager.Push(ev)
+
+	if !RunAction("Editor.HexMode") {
+		t.Fatal("failed to enter Hex mode")
+	}
+	GlobalHotkeysMgr.Bind("Editor", "F9", "Editor.HexMode")
+	if labels := ev.GetKeyLabels(); labels.Normal[8] != "Hex Mode" {
+		t.Fatalf("F9 key-bar label = %q, want Hex Mode", labels.Normal[8])
+	}
+
+	// This is the exact key event synthesized for an F9 key-bar click.
+	if !ev.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_F9,
+	}) {
+		t.Fatal("injected F9 key-bar event was not handled")
+	}
+	if ev.HexMode || !ev.DecodeMode {
+		t.Fatalf("injected F9 did not run Editor.HexMode: hex=%v decode=%v", ev.HexMode, ev.DecodeMode)
+	}
+}
+
 func TestEditorView_WideCharBackspace(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
 	pt := piecetable.New([]byte("A世"))
