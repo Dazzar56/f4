@@ -380,7 +380,7 @@ func TestViewerBackend_UTF8BOMUsesLogicalOffsets(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bom.txt")
 	text := "first\nsecond needle\n"
-	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, []byte(text)...), 0644); err != nil {
+	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, []byte(text)...), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -393,7 +393,12 @@ func TestViewerBackend_UTF8BOMUsesLogicalOffsets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
+	indexedBackend := vb
+	defer func() {
+		if err := indexedBackend.Close(); err != nil {
+			t.Errorf("close viewer backend: %v", err)
+		}
+	}()
 	vb.dataOffset = vfs.UTF8BOMSize
 	vb.size = int64(len(text))
 
@@ -412,14 +417,18 @@ func TestViewerBackend_UTF8BOMUsesLogicalOffsets(t *testing.T) {
 		offsets: []int64{16}, // raw offset: BOM (3) + len("first\nsecond ") (13)
 		can:     true,
 	}
-	vb, err = NewViewerBackend(context.Background(), searching, path)
+	searchBackend, err := NewViewerBackend(context.Background(), searching, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vb.Close()
-	vb.dataOffset = vfs.UTF8BOMSize
-	vb.size = int64(len(text))
-	if got, ok := vb.SearchFrom(context.Background(), "needle", 0); !ok || got != 13 {
+	defer func() {
+		if err := searchBackend.Close(); err != nil {
+			t.Errorf("close viewer backend: %v", err)
+		}
+	}()
+	searchBackend.dataOffset = vfs.UTF8BOMSize
+	searchBackend.size = int64(len(text))
+	if got, ok := searchBackend.SearchFrom(context.Background(), "needle", 0); !ok || got != 13 {
 		t.Fatalf("SearchFrom = %d, %v; want 13, true", got, ok)
 	}
 }
